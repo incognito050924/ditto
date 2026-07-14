@@ -1,6 +1,6 @@
+import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, test } from 'bun:test';
 import {
   type IntentChainArtifacts,
   acceptanceTestable,
@@ -8,16 +8,21 @@ import {
   completionGate,
   convergenceGate,
   directionForkGate,
+  intentDriftGate,
   interfaceBaselineDriftGate,
   interviewReadinessGate,
-  intentDriftGate,
   knowledgeUpdateGate,
   landGate,
   nonPassTerminationGate,
   passCloseResidualBlockers,
 } from '~/core/gates';
-import { MINIMAL_LAUNCH_MESSAGE, REANCHOR_PROMPT, renderProgressSummary } from '~/core/prism/engine';
+import {
+  MINIMAL_LAUNCH_MESSAGE,
+  REANCHOR_PROMPT,
+  renderProgressSummary,
+} from '~/core/prism/engine';
 import { findUnexplainedIdentifiers } from '~/core/question-context';
+import { type SemanticNudgeInput, semanticScanNudge } from '~/hooks/semantic-nudge';
 import {
   acgReviewForcesContinuation,
   assuranceSnapshotForcesContinuation,
@@ -30,7 +35,6 @@ import {
   riskRecordForcesContinuation,
   semanticForcesContinuation,
 } from '~/hooks/stop';
-import { type SemanticNudgeInput, semanticScanNudge } from '~/hooks/semantic-nudge';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { Convergence } from '~/schemas/convergence';
 import type { PrismIssueMap } from '~/schemas/prism';
@@ -96,8 +100,16 @@ const residualCompletion = {
 
 /** intent→work-item→autopilot→completion chain rigged to fire every drift hop (H1/H2/H3). */
 const driftAll = {
-  intent: { goal: 'G', source_request: 'SR-i', acceptance_criteria: [{ id: 'ac-1' }, { id: 'ac-2' }] },
-  workItem: { goal: 'G2', source_request: 'SR-w', acceptance_criteria: [{ id: 'ac-1' }, { id: 'ac-3' }] },
+  intent: {
+    goal: 'G',
+    source_request: 'SR-i',
+    acceptance_criteria: [{ id: 'ac-1' }, { id: 'ac-2' }],
+  },
+  workItem: {
+    goal: 'G2',
+    source_request: 'SR-w',
+    acceptance_criteria: [{ id: 'ac-1' }, { id: 'ac-3' }],
+  },
   graph: { root_goal: 'G3', nodes: [{ acceptance_refs: ['ac-1', 'ac-4'] }] },
   completion: { final_verdict: 'partial', acceptance: [{ criterion_id: 'ac-1' }] },
 } as unknown as IntentChainArtifacts;
@@ -310,7 +322,11 @@ describe('COMPLETENESS-BACKSTOP — stable operative tokens survive the rewrite'
 // ═════════════════════════════════════════════════════════════════════════════
 describe('COMPLETENESS-BACKSTOP — clean user faces stay leak-0', () => {
   test('prism launch/reanchor/progress surfaces leak no unexplained identifier', () => {
-    const surfaces = [MINIMAL_LAUNCH_MESSAGE, REANCHOR_PROMPT, ...renderProgressSummary(progressPrism)];
+    const surfaces = [
+      MINIMAL_LAUNCH_MESSAGE,
+      REANCHOR_PROMPT,
+      ...renderProgressSummary(progressPrism),
+    ];
     for (const s of surfaces) expect(findUnexplainedIdentifiers(s)).toEqual([]);
   });
 });
@@ -386,7 +402,9 @@ describe('SURFACE-COMPLETENESS — the six residual gate/Stop reasons are Korean
     expect(HANGUL.test(vagueR)).toBe(true);
     expect(vagueR).toContain('vague'); // anchor (gates.test.ts /vague/)
     expect(vagueR).toContain('모호');
-    const obsR = acceptanceTestable({ statement: '비밀번호 기능을 더 좋게 만든다' }).reasons.join('\n');
+    const obsR = acceptanceTestable({ statement: '비밀번호 기능을 더 좋게 만든다' }).reasons.join(
+      '\n',
+    );
     expect(HANGUL.test(obsR)).toBe(true);
     expect(obsR).toContain('observable'); // anchor (gates.test.ts /observable/)
     expect(obsR).toContain('완료 조건');
@@ -595,27 +613,62 @@ describe('SURFACE-COMPLETE (BLOCK G) — every user-read Stop/gate builder emits
   // it reads as Korean (Hangul present).
   const cases: Array<[string, () => string]> = [
     ['interviewReadinessGate', () => interviewReadinessGate(gReadiness).reasons.join('\n')],
-    ['acceptanceTestable', () => acceptanceTestable({ statement: 'makes it robust' }).reasons.join('\n')],
+    [
+      'acceptanceTestable',
+      () => acceptanceTestable({ statement: 'makes it robust' }).reasons.join('\n'),
+    ],
     ['convergenceGate', () => convergenceGate(nonArgmaxConvergence).reasons.join('\n')],
     ['completionGate', () => completionGate(gCompItem, gCompletion).reasons.join('\n')],
     ['completionEvidenceGate', () => completionEvidenceGate(gEvidence).reasons.join('\n')],
     ['nonPassTerminationGate', () => nonPassTerminationGate(parkedCompletion).reasons.join('\n')],
-    ['intentDriftGate', () => [...intentDriftGate(driftAll).reasons, ...intentDriftGate(driftAll).advisories].join('\n')],
-    ['passCloseResidualBlockers', () => passCloseResidualBlockers(residualCompletion, []).join('\n')],
+    [
+      'intentDriftGate',
+      () =>
+        [...intentDriftGate(driftAll).reasons, ...intentDriftGate(driftAll).advisories].join('\n'),
+    ],
+    [
+      'passCloseResidualBlockers',
+      () => passCloseResidualBlockers(residualCompletion, []).join('\n'),
+    ],
     ['landGate', () => landGate('done', 'pass', ['src/x.ts']).reasons.join('\n')],
-    ['knowledgeUpdateGate', () => knowledgeUpdateGate({ adr_worthy_decision: true, new_agreed_term: true, repeated_pattern: true }, { decisions: 0, glossary_terms: 0, patterns: 0, learnings: 0 }).reasons.join('\n')],
+    [
+      'knowledgeUpdateGate',
+      () =>
+        knowledgeUpdateGate(
+          { adr_worthy_decision: true, new_agreed_term: true, repeated_pattern: true },
+          { decisions: 0, glossary_terms: 0, patterns: 0, learnings: 0 },
+        ).reasons.join('\n'),
+    ],
     ['directionForkGate', () => directionForkGate(forkMissing).reasons.join('\n')],
-    ['interfaceBaselineDriftGate', () => interfaceBaselineDriftGate(['a.ts'], ['b.ts']).reasons.join('\n')],
+    [
+      'interfaceBaselineDriftGate',
+      () => interfaceBaselineDriftGate(['a.ts'], ['b.ts']).reasons.join('\n'),
+    ],
     ['semanticForcesContinuation', () => semanticForcesContinuation(semChanges).join('\n')],
     ['autopilotBypassForcesContinuation', () => bypassArgs().join('\n')],
     ['acgReviewForcesContinuation', () => acgReviewForcesContinuation(gReview).join('\n')],
-    ['assuranceSnapshotForcesContinuation', () => assuranceSnapshotForcesContinuation(gAssurance).join('\n')],
+    [
+      'assuranceSnapshotForcesContinuation',
+      () => assuranceSnapshotForcesContinuation(gAssurance).join('\n'),
+    ],
     ['impactForcesContinuation', () => impactForcesContinuation(gImpact).join('\n')],
-    ['residualResolvabilityForcesContinuation', () => residualResolvabilityForcesContinuation(residualCompletion, wiNoAcs).join('\n')],
-    ['riskRecordForcesContinuation', () => riskRecordForcesContinuation(gRiskCompletion, wiNoAcs).join('\n')],
-    ['decisionConflictForcesContinuation', () => decisionConflictForcesContinuation(gConflict).reasons.join('\n')],
+    [
+      'residualResolvabilityForcesContinuation',
+      () => residualResolvabilityForcesContinuation(residualCompletion, wiNoAcs).join('\n'),
+    ],
+    [
+      'riskRecordForcesContinuation',
+      () => riskRecordForcesContinuation(gRiskCompletion, wiNoAcs).join('\n'),
+    ],
+    [
+      'decisionConflictForcesContinuation',
+      () => decisionConflictForcesContinuation(gConflict).reasons.join('\n'),
+    ],
     ['dialecticForcesContinuation', () => dialecticForcesContinuation(gDialectic).join('\n')],
-    ['knowledgeForcesContinuation', () => knowledgeForcesContinuation(gKnowledgeGraph, gKnowledgeCarrier).join('\n')],
+    [
+      'knowledgeForcesContinuation',
+      () => knowledgeForcesContinuation(gKnowledgeGraph, gKnowledgeCarrier).join('\n'),
+    ],
     ['semanticScanNudge(observe)', () => semanticScanNudge(nudgeObserve) ?? ''],
     ['semanticScanNudge(detect)', () => semanticScanNudge(nudgeDetect) ?? ''],
   ];
@@ -634,7 +687,9 @@ describe('SURFACE-COMPLETE (BLOCK G) — every user-read Stop/gate builder emits
   // English-only phrase must be GONE and its Korean replacement PRESENT.
   test('G-inline: the three formerly-English stop.ts stderr strings are Koreanized', () => {
     // runnable-node continuation reason (stop.ts ~919); "not complete yet" negation kept.
-    expect(stopSrc).not.toContain('autopilot has runnable node(s); the work item is not complete yet');
+    expect(stopSrc).not.toContain(
+      'autopilot has runnable node(s); the work item is not complete yet',
+    );
     expect(stopSrc).toContain('아직 완료되지 않음');
     // direction-fork-incomplete prefix (stop.ts ~875); `direction fork` anchor kept.
     expect(stopSrc).not.toContain('direction fork incomplete —');

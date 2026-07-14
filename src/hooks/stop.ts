@@ -129,7 +129,9 @@ export function dialecticForcesContinuation(d: Dialectic, repoRoot?: string): st
     const admissible = obj.maps_to.trim().length > 0 && ADMISSIBLE_SEVERITIES.has(obj.severity);
     const idResolved = obj.id !== undefined && resolved.has(obj.id);
     if (admissible && !resolved.has(obj.claim) && !idResolved) {
-      reasons.push(`심의(dialectic) ${d.review_id}: 유효한(admissible) 반론이 미해결 — ${obj.claim}`);
+      reasons.push(
+        `심의(dialectic) ${d.review_id}: 유효한(admissible) 반론이 미해결 — ${obj.claim}`,
+      );
     }
     // ac-4 clause 2: backward-finding anchor existence. Additive to (not a
     // replacement for) the resolution check above — an admissible objection
@@ -379,14 +381,10 @@ export function semanticForcesContinuation(sem: AcgSemanticCompatibility): strin
     const v = change.verdict;
     const where = `${change.before} → ${change.after}`;
     if (v.semantic_safe === 'unverified') {
-      return [
-        `semantic: 의미 호환성 미검증 (${where}) — 검증하거나 의도된 변경으로 선언하라`,
-      ];
+      return [`semantic: 의미 호환성 미검증 (${where}) — 검증하거나 의도된 변경으로 선언하라`];
     }
     if (v.semantic_safe === 'no' && v.intended_breaking !== true) {
-      return [
-        `semantic: 의도치 않은 의미 파손 (${where}) — 원래 의미: ${change.old_meaning}`,
-      ];
+      return [`semantic: 의도치 않은 의미 파손 (${where}) — 원래 의미: ${change.old_meaning}`];
     }
     return [];
   });
@@ -496,7 +494,9 @@ export function decisionConflictForcesContinuation(carrier: DecisionConflictCarr
     `${d.conflict.adr_id} (${d.conflict.kind}/${d.conflict.level}) → ${d.route}: ${d.conflict.basis}`;
   const blocks = (d: ConflictDisposition) => d.route === 'block' || d.route === 'ask_user';
   return {
-    reasons: dispositions.filter(blocks).map((d) => `의사결정 충돌(decision conflict) — ${line(d)}`),
+    reasons: dispositions
+      .filter(blocks)
+      .map((d) => `의사결정 충돌(decision conflict) — ${line(d)}`),
     advisories: dispositions
       .filter((d) => !blocks(d))
       .map(

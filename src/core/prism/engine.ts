@@ -247,7 +247,8 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
   if (criticalNodes.length === 0) {
     return {
       terminated: false,
-      reason: '꼭 정해야 할 핵심 항목이 아직 없어요 — 핵심 항목이 하나도 없으면 착수 알림은 뜨지 않아요',
+      reason:
+        '꼭 정해야 할 핵심 항목이 아직 없어요 — 핵심 항목이 하나도 없으면 착수 알림은 뜨지 않아요',
     };
   }
   const unresolved = criticalNodes.filter(
@@ -261,7 +262,8 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
   }
   return {
     terminated: true,
-    reason: '핵심 항목을 모두 정리했어요 (덜 중요한 항목은 남아 있을 수 있고, 그건 사용자가 판단해요)',
+    reason:
+      '핵심 항목을 모두 정리했어요 (덜 중요한 항목은 남아 있을 수 있고, 그건 사용자가 판단해요)',
   };
 }
 

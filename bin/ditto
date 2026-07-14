@@ -5,31 +5,49 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// node_modules/consola/dist/chunks/prompt.mjs
+// ../../../../node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -785,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// node_modules/smol-toml/dist/error.js
+// ../../../../node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -857,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// node_modules/smol-toml/dist/util.js
+// ../../../../node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -973,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/date.js
+// ../../../../node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1095,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/primitive.js
+// ../../../../node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1273,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/extract.js
+// ../../../../node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1374,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/struct.js
+// ../../../../node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1558,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// node_modules/smol-toml/dist/parse.js
+// ../../../../node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1705,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/stringify.js
+// ../../../../node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1736,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/index.js
+// ../../../../node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1771,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// node_modules/yaml/dist/nodes/identity.js
+// ../../../../node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1825,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// node_modules/yaml/dist/visit.js
+// ../../../../node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1980,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// node_modules/yaml/dist/doc/directives.js
+// ../../../../node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2132,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// node_modules/yaml/dist/doc/anchors.js
+// ../../../../node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2194,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// node_modules/yaml/dist/doc/applyReviver.js
+// ../../../../node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2241,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// node_modules/yaml/dist/nodes/toJS.js
+// ../../../../node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2268,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// node_modules/yaml/dist/nodes/Node.js
+// ../../../../node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2305,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// node_modules/yaml/dist/nodes/Alias.js
+// ../../../../node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2415,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// node_modules/yaml/dist/nodes/Scalar.js
+// ../../../../node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2443,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// node_modules/yaml/dist/doc/createNode.js
+// ../../../../node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2515,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// node_modules/yaml/dist/nodes/Collection.js
+// ../../../../node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2630,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// node_modules/yaml/dist/stringify/stringifyComment.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2647,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// node_modules/yaml/dist/stringify/foldFlowLines.js
+// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2784,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// node_modules/yaml/dist/stringify/stringifyString.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3082,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// node_modules/yaml/dist/stringify/stringify.js
+// ../../../../node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3203,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/stringify/stringifyPair.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3339,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// node_modules/yaml/dist/log.js
+// ../../../../node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3358,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3415,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// node_modules/yaml/dist/nodes/addPairToJSMap.js
+// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3476,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// node_modules/yaml/dist/nodes/Pair.js
+// ../../../../node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3514,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// node_modules/yaml/dist/stringify/stringifyCollection.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3666,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// node_modules/yaml/dist/nodes/YAMLMap.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3793,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// node_modules/yaml/dist/schema/common/map.js
+// ../../../../node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3812,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// node_modules/yaml/dist/nodes/YAMLSeq.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3905,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// node_modules/yaml/dist/schema/common/seq.js
+// ../../../../node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3924,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// node_modules/yaml/dist/schema/common/string.js
+// ../../../../node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3940,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// node_modules/yaml/dist/schema/common/null.js
+// ../../../../node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3955,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// node_modules/yaml/dist/schema/core/bool.js
+// ../../../../node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3976,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// node_modules/yaml/dist/stringify/stringifyNumber.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4000,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// node_modules/yaml/dist/schema/core/float.js
+// ../../../../node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4043,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/core/int.js
+// ../../../../node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4085,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/core/schema.js
+// ../../../../node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4110,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/json/schema.js
+// ../../../../node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4174,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4229,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4304,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4376,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4405,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/float.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4451,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/int.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4527,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/set.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4610,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4692,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4733,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/tags.js
+// ../../../../node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4824,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// node_modules/yaml/dist/schema/Schema.js
+// ../../../../node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4854,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// node_modules/yaml/dist/stringify/stringifyDocument.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4934,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// node_modules/yaml/dist/doc/Document.js
+// ../../../../node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5169,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// node_modules/yaml/dist/errors.js
+// ../../../../node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5234,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// node_modules/yaml/dist/compose/resolve-props.js
+// ../../../../node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5364,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// node_modules/yaml/dist/compose/util-contains-newline.js
+// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5404,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// node_modules/yaml/dist/compose/util-flow-indent-check.js
+// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5419,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// node_modules/yaml/dist/compose/util-map-includes.js
+// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5432,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-map.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5539,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-seq.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5587,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// node_modules/yaml/dist/compose/resolve-end.js
+// ../../../../node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5627,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-collection.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5818,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// node_modules/yaml/dist/compose/compose-collection.js
+// ../../../../node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5880,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6073,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6290,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// node_modules/yaml/dist/compose/compose-scalar.js
+// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6368,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6395,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// node_modules/yaml/dist/compose/compose-node.js
+// ../../../../node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6498,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// node_modules/yaml/dist/compose/compose-doc.js
+// ../../../../node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6538,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// node_modules/yaml/dist/compose/composer.js
+// ../../../../node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6729,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// node_modules/yaml/dist/parse/cst-scalar.js
+// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6919,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// node_modules/yaml/dist/parse/cst-stringify.js
+// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6977,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/parse/cst-visit.js
+// ../../../../node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7036,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// node_modules/yaml/dist/parse/cst.js
+// ../../../../node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7137,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// node_modules/yaml/dist/parse/lexer.js
+// ../../../../node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7734,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// node_modules/yaml/dist/parse/line-counter.js
+// ../../../../node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7762,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// node_modules/yaml/dist/parse/parser.js
+// ../../../../node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8618,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// node_modules/yaml/dist/public-api.js
+// ../../../../node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8712,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/index.js
+// ../../../../node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8829,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../../node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8960,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// node_modules/zod/v3/ZodError.js
+// ../../../../node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9081,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// node_modules/zod/v3/locales/en.js
+// ../../../../node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9188,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// node_modules/zod/v3/errors.js
+// ../../../../node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9201,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../../node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9306,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// node_modules/zod/v3/helpers/typeAliases.js
+// ../../../../node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../../node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9318,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// node_modules/zod/v3/types.js
+// ../../../../node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12669,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// node_modules/zod/v3/external.js
+// ../../../../node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12789,7 +12807,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// node_modules/zod/index.js
+// ../../../../node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -15695,7 +15713,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// node_modules/sisteransi/src/index.js
+// ../../../../node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15753,7 +15771,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// node_modules/consola/dist/core.mjs
+// ../../../../node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -16149,7 +16167,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -16226,10 +16244,10 @@ ${indent}`);
   }
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -16442,7 +16460,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16725,7 +16743,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// node_modules/citty/dist/index.mjs
+// ../../../../node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -23765,6 +23783,7 @@ init_ditto_paths();
 // src/core/gh-client.ts
 import { execFileSync as execFileSync3 } from "child_process";
 var DEFAULT_GH_TIMEOUT_MS = 30000;
+var PROJECT_ITEM_LIST_LIMIT = 1000;
 var defaultGhExec = (args, timeoutMs) => {
   try {
     const stdout3 = execFileSync3("gh", args, {
@@ -23880,7 +23899,17 @@ function createGhClient(exec = defaultGhExec, timeoutMs = DEFAULT_GH_TIMEOUT_MS)
       edit.optionId
     ], timeoutMs)),
     projectFieldList: (owner, projectNumber) => runJson(exec, ["project", "field-list", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
-    projectItemList: (owner, projectNumber) => runJson(exec, ["project", "item-list", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
+    projectItemList: (owner, projectNumber) => runJson(exec, [
+      "project",
+      "item-list",
+      String(projectNumber),
+      "--owner",
+      owner,
+      "--format",
+      "json",
+      "--limit",
+      String(PROJECT_ITEM_LIST_LIMIT)
+    ], timeoutMs),
     projectView: (owner, projectNumber) => runJson(exec, ["project", "view", String(projectNumber), "--owner", owner, "--format", "json"], timeoutMs),
     apiGraphql: (query, fields) => {
       const args = ["api", "graphql", "-f", `query=${query}`];
@@ -27578,10 +27607,23 @@ async function recordResultCore(repoRoot, input) {
     const discoveredDefects = input.payload.discovered_defects ?? [];
     if (discoveredDefects.length > 0) {
       const now = input.now ?? new Date;
+      const materialize = input.materializeDefect ?? materializeDiscoveredDefect;
       const driveEligible = discoveredDefects.filter((d2) => classifyDiscoveredDefect(d2) === "drive");
       const backlogOnly = discoveredDefects.filter((d2) => classifyDiscoveredDefect(d2) !== "drive");
       for (const d2 of backlogOnly) {
-        const materializedWi = await materializeDiscoveredDefect(repoRoot, input.workItemId, d2.item, now);
+        let materializedWi;
+        try {
+          materializedWi = await materialize(repoRoot, input.workItemId, d2.item, now);
+        } catch (err) {
+          await aps.appendDecision(input.workItemId, {
+            ts: now.toISOString(),
+            node_id: node2.id,
+            decision: "surface",
+            resolvability: "discovered_defect",
+            reason: `discovered defect (backlog-only) could NOT be materialized into its own back-linked work item \u2014 WorkItemStore.create failed (${err instanceof Error ? err.message : String(err)}); disclosed as a materialization FAILURE so it is not silently dropped (wi_260714f4p): ${d2.item}`
+          });
+          continue;
+        }
         await aps.appendDecision(input.workItemId, {
           ts: now.toISOString(),
           node_id: node2.id,
@@ -27590,11 +27632,37 @@ async function recordResultCore(repoRoot, input) {
           reason: `discovered defect materialized to backlog ONLY \u2014 not a reproduced current-harm bug (conservative, ac-2), so persisted into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven: ${d2.item}`
         });
       }
+      const groundingByDefect = new Map;
+      const materializedDriveEligible = [];
+      for (const d2 of driveEligible) {
+        try {
+          groundingByDefect.set(d2, await materialize(repoRoot, input.workItemId, d2.item, now));
+          materializedDriveEligible.push(d2);
+        } catch (err) {
+          await aps.appendDecision(input.workItemId, {
+            ts: now.toISOString(),
+            node_id: node2.id,
+            decision: "surface",
+            resolvability: "discovered_defect",
+            reason: `reproduced real-behavior defect could NOT be materialized into its own back-linked work item \u2014 WorkItemStore.create failed (${err instanceof Error ? err.message : String(err)}); disclosed as a materialization FAILURE so it is not silently dropped (wi_260714f4p): ${d2.item}`
+          });
+        }
+      }
       const conditionBDefect = driveEligible.find((d2) => defectFixRequiresConditionB(d2.condition_b ?? []));
       if (conditionBDefect) {
         const handoffReason = "condition_b_required";
         const reason = isFailHandoffReason(handoffReason) ? `condition-b required \u2014 fixing the discovered defect needs a security/system/project/feature-design ADVERSE decision; fail-closed handoff instead of auto-drive (ac-4/ac-7): ${conditionBDefect.item}` : `discovered defect fix \u2014 non-fail reason, continuing: ${conditionBDefect.item}`;
         if (isFailHandoffReason(handoffReason)) {
+          for (const d2 of materializedDriveEligible) {
+            const materializedWi = groundingByDefect.get(d2);
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node2.id,
+              decision: "surface",
+              resolvability: "discovered_defect",
+              reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven \u2014 the run is fail-closed on a condition-b handoff, so this defect is materialize-only pending the user's ADVERSE-decision (wi_260714pjs): ${d2.item}`
+            });
+          }
           await aps.updateNode(input.workItemId, node2.id, (n2) => ({
             ...n2,
             status: nodeTransition(n2.status, "block")
@@ -27622,10 +27690,6 @@ async function recordResultCore(repoRoot, input) {
         }
       }
       if (driveEligible.length > 0) {
-        const groundingByDefect = new Map;
-        for (const d2 of driveEligible) {
-          groundingByDefect.set(d2, await materializeDiscoveredDefect(repoRoot, input.workItemId, d2.item, now));
-        }
         const outcome2 = await applyAutoResolveSplice({
           aps,
           workItemId: input.workItemId,
@@ -27638,15 +27702,24 @@ async function recordResultCore(repoRoot, input) {
           allowedAcceptanceIds,
           ...input.payload.blocked_by_tool ? { blockedByOptionalTool: input.payload.blocked_by_tool } : {}
         });
-        if (outcome2.status === "passed" && outcome2.promoted_node_ids.length > 0) {
-          for (const d2 of driveEligible) {
-            const materializedWi = groundingByDefect.get(d2);
+        const driven = outcome2.status === "passed" && outcome2.promoted_node_ids.length > 0;
+        for (const [i2, d2] of materializedDriveEligible.entries()) {
+          const materializedWi = groundingByDefect.get(d2);
+          if (driven && i2 === 0) {
             await aps.appendDecision(input.workItemId, {
               ts: now.toISOString(),
               node_id: node2.id,
               decision: "defect_chain_driven",
               resolvability: "discovered_defect",
               reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) and chain-driven to done in the SAME run via a same-graph forward splice \u2014 shares the originating run's loop_rounds budget, its fix lands as its OWN commit/node (never merged into the origin diff, ac-3): ${d2.item}`
+            });
+          } else {
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node2.id,
+              decision: "surface",
+              resolvability: "discovered_defect",
+              reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven this run \u2014 a single defect_fix splice drives ONE fix round, not per-defect (honest disclosure, wi_260714mfx): ${d2.item}`
             });
           }
         }
@@ -42311,12 +42384,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// node_modules/fast-string-truncated-width/dist/utils.js
+// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -42335,7 +42408,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// node_modules/fast-string-truncated-width/dist/index.js
+// ../../../../node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -42434,7 +42507,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// node_modules/fast-string-width/dist/index.js
+// ../../../../node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -42445,7 +42518,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// node_modules/fast-wrap-ansi/lib/main.js
+// ../../../../node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -42657,7 +42730,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -43449,7 +43522,7 @@ class a3 extends V2 {
   }
 }
 
-// node_modules/@clack/prompts/dist/index.mjs
+// ../../../../node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -49438,14 +49511,10 @@ function semanticForcesContinuation(sem) {
     const v2 = change.verdict;
     const where = `${change.before} \u2192 ${change.after}`;
     if (v2.semantic_safe === "unverified") {
-      return [
-        `semantic: \uC758\uBBF8 \uD638\uD658\uC131 \uBBF8\uAC80\uC99D (${where}) \u2014 \uAC80\uC99D\uD558\uAC70\uB098 \uC758\uB3C4\uB41C \uBCC0\uACBD\uC73C\uB85C \uC120\uC5B8\uD558\uB77C`
-      ];
+      return [`semantic: \uC758\uBBF8 \uD638\uD658\uC131 \uBBF8\uAC80\uC99D (${where}) \u2014 \uAC80\uC99D\uD558\uAC70\uB098 \uC758\uB3C4\uB41C \uBCC0\uACBD\uC73C\uB85C \uC120\uC5B8\uD558\uB77C`];
     }
     if (v2.semantic_safe === "no" && v2.intended_breaking !== true) {
-      return [
-        `semantic: \uC758\uB3C4\uCE58 \uC54A\uC740 \uC758\uBBF8 \uD30C\uC190 (${where}) \u2014 \uC6D0\uB798 \uC758\uBBF8: ${change.old_meaning}`
-      ];
+      return [`semantic: \uC758\uB3C4\uCE58 \uC54A\uC740 \uC758\uBBF8 \uD30C\uC190 (${where}) \u2014 \uC6D0\uB798 \uC758\uBBF8: ${change.old_meaning}`];
     }
     return [];
   });
@@ -58147,4 +58216,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=13d4dd88fe4010cd23ba3e1d3fb5434d0cc5025422e40176aa16022264c63638
+//# ditto-src-stamp=c99e3cf646be146c861d1a363bc36dadad08a724eb5a258f3f08a1d9aaf901c5

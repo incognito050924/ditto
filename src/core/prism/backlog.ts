@@ -167,7 +167,9 @@ export function proposeBacklogSplit(
   if (doc.summary.trim().length === 0)
     reasons.push('설계 문서가 아직 확정되지 않았어요: 요약이 비어 있어요');
   if (doc.acceptanceCriteria.length === 0)
-    reasons.push('설계 문서가 아직 확정되지 않았어요: 완료 조건이 없어요 — 내용이 빈 상태로는 나눌 수 없어요');
+    reasons.push(
+      '설계 문서가 아직 확정되지 않았어요: 완료 조건이 없어요 — 내용이 빈 상태로는 나눌 수 없어요',
+    );
 
   const itemCheck = validateSplitItems(items);
   if (!itemCheck.ok) reasons.push(...itemCheck.reasons);

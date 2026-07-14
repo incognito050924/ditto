@@ -625,7 +625,9 @@ const checkQuestionCmd = defineCommand({
     } else if (verdict.ok) {
       writeHuman('check-question: ok (presentation contract satisfied)');
     } else {
-      writeError('check-question: 거절됨 — 맥락(왜 묻는지·무엇을 정하는지)이 부족한 질문입니다. 이대로 사용자에게 묻지 마세요:');
+      writeError(
+        'check-question: 거절됨 — 맥락(왜 묻는지·무엇을 정하는지)이 부족한 질문입니다. 이대로 사용자에게 묻지 마세요:',
+      );
       for (const v of verdict.violations) {
         writeError(`  - ${v.field}: ${v.reason}`);
       }
@@ -1204,7 +1206,9 @@ const finalizeFromDocCmd = defineCommand({
         userConfirmation: { confirmed: true, statement: args.statement },
       });
       if (result.status === 'compile_rejected') {
-        writeError('설계 문서를 의도(intent)로 변환하지 못했습니다 — 변환 입력이 되는 섹션을 고친 뒤 다시 실행하세요:');
+        writeError(
+          '설계 문서를 의도(intent)로 변환하지 못했습니다 — 변환 입력이 되는 섹션을 고친 뒤 다시 실행하세요:',
+        );
         for (const r of result.reasons) writeError(`  - ${r}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;

@@ -381,7 +381,9 @@ const prismDivergeCommand = defineCommand({
       } else {
         writeHuman(`판정: ${verdict.reason}`);
         if (decision)
-          writeHuman(`기록으로 남겼어요(Record 계층 — 커밋되어 함께 공유되는 결정 기록): ${decision.kind}`);
+          writeHuman(
+            `기록으로 남겼어요(Record 계층 — 커밋되어 함께 공유되는 결정 기록): ${decision.kind}`,
+          );
       }
       // A flagged meaningless divergence is a STOP+escalate, never a green continue.
       if (verdict.diverged) process.exit(RUNTIME_ERROR_EXIT);

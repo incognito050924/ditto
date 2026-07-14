@@ -196,7 +196,8 @@ export function validateQuestionContext(
   if (isBlank(candidate.recommended_answer)) {
     violations.push({
       field: 'recommended_answer',
-      reason: '사용자에게 묻기 전에 추천 답(에이전트가 권하는 기본 선택지)을 쉬운 말로 함께 제시해야 해요',
+      reason:
+        '사용자에게 묻기 전에 추천 답(에이전트가 권하는 기본 선택지)을 쉬운 말로 함께 제시해야 해요',
     });
   }
   if (isBlank(candidate.why_matters)) {
