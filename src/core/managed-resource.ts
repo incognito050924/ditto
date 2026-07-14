@@ -68,11 +68,15 @@ function locateManagedSpan(content: string): BlockBounds | null | 'corrupted' {
 /** Build the managed block text for `managedBody`, sourced from `source` (default AGENTS.md). */
 export function buildManagedBlock(managedBody: string, source = 'AGENTS.md'): string {
   const body = normalizeInstructionText(managedBody);
-  const sha256 = normalizedSha256(managedBody);
   // Guarantee exactly one newline between the body and the end marker so
   // MANAGED_END always sits on its own line, even when the body lacks a
   // trailing newline.
   const bodyWithBreak = body.endsWith('\n') ? body : `${body}\n`;
+  // Stamp the sha over the body actually EMBEDDED (post-break). The reader
+  // recomputes actualSha256 over the bytes captured between the markers — which
+  // include this forced break — so hashing the pre-break body would make the
+  // marker sha disagree with the reader for any body lacking a trailing newline.
+  const sha256 = normalizedSha256(bodyWithBreak);
   return `<!-- ditto:managed:start source=${source} sha256=${sha256} -->\n${bodyWithBreak}${MANAGED_END}`;
 }
 

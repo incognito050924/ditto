@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -34610,19 +34592,130 @@ async function checkInstructionsForAdapters(adapters, repoRoot) {
   };
 }
 
-// src/core/bridge-sync.ts
-function managedBlock(sourceContent, sha2562) {
-  const body = normalizeInstructionText(sourceContent);
-  return `<!-- ditto:managed:start source=AGENTS.md sha256=${sha2562} -->
-${body}${MANAGED_END}`;
+// src/core/managed-resource.ts
+init_fs();
+import { copyFile } from "fs/promises";
+var START_RE_G = /<!--\s*ditto:managed:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}\s*-->/g;
+var END_RE_G = /<!--\s*ditto:managed:end\s*-->/g;
+function locateBlock(content) {
+  const starts = [...content.matchAll(START_RE_G)];
+  const ends = [...content.matchAll(END_RE_G)];
+  if (starts.length === 0 && ends.length === 0)
+    return null;
+  if (starts.length !== 1 || ends.length !== 1)
+    return "corrupted";
+  const startMatch = starts[0];
+  const endMatch = ends[0];
+  if (startMatch?.index === undefined || endMatch?.index === undefined)
+    return "corrupted";
+  if (endMatch.index < startMatch.index)
+    return "corrupted";
+  return { start: startMatch.index, end: endMatch.index + endMatch[0].length };
 }
+function locateManagedSpan(content) {
+  const starts = [...content.matchAll(START_RE_G)];
+  const ends = [...content.matchAll(END_RE_G)];
+  if (starts.length === 0 && ends.length === 0)
+    return null;
+  if (starts.length !== ends.length)
+    return "corrupted";
+  const firstStart = starts[0];
+  const lastEnd = ends[ends.length - 1];
+  if (firstStart?.index === undefined || lastEnd?.index === undefined)
+    return "corrupted";
+  if ((ends[0]?.index ?? -1) < firstStart.index)
+    return "corrupted";
+  const lastStart = starts[starts.length - 1];
+  if ((lastStart?.index ?? -1) > lastEnd.index)
+    return "corrupted";
+  return { start: firstStart.index, end: lastEnd.index + lastEnd[0].length };
+}
+function buildManagedBlock(managedBody, source = "AGENTS.md") {
+  const body = normalizeInstructionText(managedBody);
+  const bodyWithBreak = body.endsWith(`
+`) ? body : `${body}
+`;
+  const sha2562 = normalizedSha256(bodyWithBreak);
+  return `<!-- ditto:managed:start source=${source} sha256=${sha2562} -->
+${bodyWithBreak}${MANAGED_END}`;
+}
+function upsertManagedBlock(originalContent, managedBody, source = "AGENTS.md") {
+  const block = buildManagedBlock(managedBody, source);
+  const bounds = locateManagedSpan(originalContent);
+  if (bounds === "corrupted")
+    return { kind: "corrupted", original: originalContent };
+  if (bounds === null) {
+    if (originalContent.length === 0)
+      return { kind: "ok", content: `${block}
+` };
+    const separator = originalContent.endsWith(`
+`) ? `
+` : `
+
+`;
+    return { kind: "ok", content: `${originalContent}${separator}${block}
+` };
+  }
+  const next = `${originalContent.slice(0, bounds.start)}${block}${originalContent.slice(bounds.end)}`;
+  return { kind: "ok", content: next };
+}
+function stripManagedBlock(content) {
+  const bounds = locateBlock(content);
+  if (bounds === "corrupted")
+    return { kind: "corrupted", original: content };
+  if (bounds === null)
+    return { kind: "ok", content };
+  const before = content.slice(0, bounds.start);
+  const after = content.slice(bounds.end);
+  const beforeTail = before.match(/\n*$/)?.[0] ?? "";
+  const afterHead = after.match(/^\n*/)?.[0] ?? "";
+  let seam = beforeTail + afterHead;
+  if (seam.length >= 3)
+    seam = `
+
+`;
+  const next = before.slice(0, before.length - beforeTail.length) + seam + after.slice(afterHead.length);
+  return { kind: "ok", content: next };
+}
+var MARKER_LINE_RE = /^\s*<!--\s*ditto:managed:(?:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}|end)\s*-->\s*$/;
+function unwrapManagedBlock(content) {
+  const lines = content.split(`
+`);
+  const kept = lines.filter((line) => !MARKER_LINE_RE.test(line));
+  if (kept.length === lines.length)
+    return content;
+  return kept.join(`
+`);
+}
+var BACKUP_SUFFIX = ".ditto_bak";
+async function writeBackupOnce(targetPath) {
+  const bakPath = `${targetPath}${BACKUP_SUFFIX}`;
+  if (await Bun.file(bakPath).exists())
+    return null;
+  if (!await Bun.file(targetPath).exists())
+    return null;
+  await copyFile(targetPath, bakPath);
+  return bakPath;
+}
+async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
+  const exists = await Bun.file(targetPath).exists();
+  const current = exists ? await Bun.file(targetPath).text() : "";
+  const merged = upsertManagedBlock(current, managedBody, source);
+  if (merged.kind === "corrupted")
+    return { kind: "corrupted", path: targetPath };
+  const backupPath = await writeBackupOnce(targetPath);
+  await atomicWriteText(targetPath, merged.content);
+  return { kind: "ok", path: targetPath, backupPath };
+}
+
+// src/core/bridge-sync.ts
 async function syncClaudeCodeProjection(repoRoot, options = {}) {
   const source = await loadSource(repoRoot);
   if ("kind" in source)
     throw new Error("AGENTS.md is missing; cannot sync Claude projection");
   const path = join44(repoRoot, "CLAUDE.md");
   const projection = await loadProjection(repoRoot);
-  const block = managedBlock(source.content, source.normalizedSha256);
+  const block = buildManagedBlock(source.content);
   const check = options.check === true;
   if (projection.kind === "missing") {
     if (!check)
@@ -41094,122 +41187,6 @@ function collectDistributionReport(deps) {
 import { join as join63 } from "path";
 init_fs();
 init_shared();
-
-// src/core/managed-resource.ts
-init_fs();
-import { copyFile } from "fs/promises";
-var START_RE_G = /<!--\s*ditto:managed:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}\s*-->/g;
-var END_RE_G = /<!--\s*ditto:managed:end\s*-->/g;
-function locateBlock(content) {
-  const starts = [...content.matchAll(START_RE_G)];
-  const ends = [...content.matchAll(END_RE_G)];
-  if (starts.length === 0 && ends.length === 0)
-    return null;
-  if (starts.length !== 1 || ends.length !== 1)
-    return "corrupted";
-  const startMatch = starts[0];
-  const endMatch = ends[0];
-  if (startMatch?.index === undefined || endMatch?.index === undefined)
-    return "corrupted";
-  if (endMatch.index < startMatch.index)
-    return "corrupted";
-  return { start: startMatch.index, end: endMatch.index + endMatch[0].length };
-}
-function locateManagedSpan(content) {
-  const starts = [...content.matchAll(START_RE_G)];
-  const ends = [...content.matchAll(END_RE_G)];
-  if (starts.length === 0 && ends.length === 0)
-    return null;
-  if (starts.length !== ends.length)
-    return "corrupted";
-  const firstStart = starts[0];
-  const lastEnd = ends[ends.length - 1];
-  if (firstStart?.index === undefined || lastEnd?.index === undefined)
-    return "corrupted";
-  if ((ends[0]?.index ?? -1) < firstStart.index)
-    return "corrupted";
-  const lastStart = starts[starts.length - 1];
-  if ((lastStart?.index ?? -1) > lastEnd.index)
-    return "corrupted";
-  return { start: firstStart.index, end: lastEnd.index + lastEnd[0].length };
-}
-function buildManagedBlock(managedBody, source = "AGENTS.md") {
-  const body = normalizeInstructionText(managedBody);
-  const sha2562 = normalizedSha256(managedBody);
-  const bodyWithBreak = body.endsWith(`
-`) ? body : `${body}
-`;
-  return `<!-- ditto:managed:start source=${source} sha256=${sha2562} -->
-${bodyWithBreak}${MANAGED_END}`;
-}
-function upsertManagedBlock(originalContent, managedBody, source = "AGENTS.md") {
-  const block = buildManagedBlock(managedBody, source);
-  const bounds = locateManagedSpan(originalContent);
-  if (bounds === "corrupted")
-    return { kind: "corrupted", original: originalContent };
-  if (bounds === null) {
-    if (originalContent.length === 0)
-      return { kind: "ok", content: `${block}
-` };
-    const separator = originalContent.endsWith(`
-`) ? `
-` : `
-
-`;
-    return { kind: "ok", content: `${originalContent}${separator}${block}
-` };
-  }
-  const next = `${originalContent.slice(0, bounds.start)}${block}${originalContent.slice(bounds.end)}`;
-  return { kind: "ok", content: next };
-}
-function stripManagedBlock(content) {
-  const bounds = locateBlock(content);
-  if (bounds === "corrupted")
-    return { kind: "corrupted", original: content };
-  if (bounds === null)
-    return { kind: "ok", content };
-  const before = content.slice(0, bounds.start);
-  const after = content.slice(bounds.end);
-  const beforeTail = before.match(/\n*$/)?.[0] ?? "";
-  const afterHead = after.match(/^\n*/)?.[0] ?? "";
-  let seam = beforeTail + afterHead;
-  if (seam.length >= 3)
-    seam = `
-
-`;
-  const next = before.slice(0, before.length - beforeTail.length) + seam + after.slice(afterHead.length);
-  return { kind: "ok", content: next };
-}
-var MARKER_LINE_RE = /^\s*<!--\s*ditto:managed:(?:start\s+source=[^\s]+\s+sha256=[a-f0-9]{64}|end)\s*-->\s*$/;
-function unwrapManagedBlock(content) {
-  const lines = content.split(`
-`);
-  const kept = lines.filter((line) => !MARKER_LINE_RE.test(line));
-  if (kept.length === lines.length)
-    return content;
-  return kept.join(`
-`);
-}
-var BACKUP_SUFFIX = ".ditto_bak";
-async function writeBackupOnce(targetPath) {
-  const bakPath = `${targetPath}${BACKUP_SUFFIX}`;
-  if (await Bun.file(bakPath).exists())
-    return null;
-  if (!await Bun.file(targetPath).exists())
-    return null;
-  await copyFile(targetPath, bakPath);
-  return bakPath;
-}
-async function applyManagedFile(targetPath, managedBody, source = "AGENTS.md") {
-  const exists = await Bun.file(targetPath).exists();
-  const current = exists ? await Bun.file(targetPath).text() : "";
-  const merged = upsertManagedBlock(current, managedBody, source);
-  if (merged.kind === "corrupted")
-    return { kind: "corrupted", path: targetPath };
-  const backupPath = await writeBackupOnce(targetPath);
-  await atomicWriteText(targetPath, merged.content);
-  return { kind: "ok", path: targetPath, backupPath };
-}
 
 // src/core/settings-allowlist.ts
 init_fs();
@@ -55800,10 +55777,41 @@ function defaultRegistry() {
 }
 
 // src/core/setup.ts
-init_fs();
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm4, writeFile as writeFile6 } from "fs/promises";
 import { basename as basename6, dirname as dirname19, isAbsolute as isAbsolute16, join as join92, resolve as resolve24 } from "path";
+
+// src/core/charter-region.ts
+function leadingPrefixOffsets(content) {
+  const offsets = [];
+  for (let i3 = 0;i3 < content.length; i3++) {
+    if (content[i3] === `
+`)
+      offsets.push(i3 + 1);
+  }
+  if (offsets[offsets.length - 1] !== content.length)
+    offsets.push(content.length);
+  return offsets;
+}
+function refreshCharterRegion(params) {
+  const { current, bundledCharter } = params;
+  const currentSha = normalizedSha256(bundledCharter);
+  const known = new Set([...params.knownShas, currentSha]);
+  const offsets = leadingPrefixOffsets(current);
+  for (let i3 = offsets.length - 1;i3 >= 0; i3--) {
+    const boundary = offsets[i3];
+    const sha = normalizedSha256(current.slice(0, boundary));
+    if (!known.has(sha))
+      continue;
+    if (sha === currentSha)
+      return { kind: "up-to-date", content: current };
+    return { kind: "replaced", content: bundledCharter + current.slice(boundary) };
+  }
+  return { kind: "unrecognized", content: current };
+}
+
+// src/core/setup.ts
+init_fs();
 init_shared();
 
 // src/core/resource-routing.ts
@@ -55834,10 +55842,20 @@ function discoverResources(resourcesDir) {
 }
 
 // src/core/setup.ts
+var CHARTER_MANIFEST_FILENAME = "charter-manifest.json";
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
 var CODEX_PLUGIN_DEST_REL = join92(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = "ditto";
+async function loadCharterShas(resourcesDir) {
+  const raw = await readJsonIfExists(join92(resourcesDir, CHARTER_MANIFEST_FILENAME));
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+    return [];
+  const shas = raw.shas;
+  if (!Array.isArray(shas))
+    return [];
+  return shas.filter((s2) => typeof s2 === "string");
+}
 function setupHosts(host) {
   if (host === "codex")
     return new Set(["codex"]);
@@ -55847,7 +55865,7 @@ function setupHosts(host) {
 }
 function resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts) {
   const out = [];
-  const files = discoverResources(resourcesDir);
+  const files = discoverResources(resourcesDir).filter((f4) => f4 !== CHARTER_MANIFEST_FILENAME);
   if (hosts.has("claude-code")) {
     for (const filename of files) {
       const decision = routeResource(filename, { projectRoot, homeDir });
@@ -56027,7 +56045,7 @@ async function installCodexSurface(opts) {
     agentsInstalled
   };
 }
-async function installResource(decision, resourcesDir) {
+async function installResource(decision, resourcesDir, charterShas) {
   const common = {
     host: decision.host,
     filename: decision.filename,
@@ -56036,10 +56054,10 @@ async function installResource(decision, resourcesDir) {
   };
   const name = basename6(decision.destPath);
   if (name === "AGENTS.md") {
+    const bundledCharter = await readFile20(join92(resourcesDir, decision.filename), "utf8");
     const existed = await fileExists(decision.destPath);
     if (!existed) {
-      const body2 = await readFile20(join92(resourcesDir, decision.filename), "utf8");
-      await atomicWriteText(decision.destPath, body2);
+      await atomicWriteText(decision.destPath, bundledCharter);
       return { ...common, status: "written", backupPath: null };
     }
     const current = await readFile20(decision.destPath, "utf8");
@@ -56048,6 +56066,15 @@ async function installResource(decision, resourcesDir) {
       const backupPath = await writeBackupOnce(decision.destPath);
       await atomicWriteText(decision.destPath, unwrapped);
       return { ...common, status: "written", backupPath };
+    }
+    if (decision.filename === "AGENTS.md") {
+      const refresh = refreshCharterRegion({ current, bundledCharter, knownShas: charterShas });
+      if (refresh.kind === "replaced") {
+        const backupPath = await writeBackupOnce(decision.destPath);
+        await atomicWriteText(decision.destPath, refresh.content);
+        return { ...common, status: "refreshed", backupPath };
+      }
+      return { ...common, status: refresh.kind, backupPath: null };
     }
     return { ...common, status: "kept", backupPath: null };
   }
@@ -56163,9 +56190,10 @@ async function setup(opts) {
     ...decisions.filter((d2) => basename6(d2.destPath) !== "CLAUDE.md"),
     ...decisions.filter((d2) => basename6(d2.destPath) === "CLAUDE.md")
   ];
+  const charterShas = await loadCharterShas(resourcesDir);
   const resources = [];
   for (const decision of ordered) {
-    resources.push(await installResource(decision, resourcesDir));
+    resources.push(await installResource(decision, resourcesDir, charterShas));
   }
   const scaffold = await initScaffold(projectRoot, now);
   const allowlistPath = join92(projectRoot, ".claude", "settings.json");
@@ -56406,6 +56434,9 @@ async function runRecipeSetup(recipe2, host, deps) {
   }
   return { host, setup: setupResult, tools, agents, memory, githubSeed };
 }
+function charterRefreshNotices(resources) {
+  return resources.filter((r4) => r4.status === "unrecognized").map((r4) => `charter refresh: ${r4.destPath}\uC758 ditto \uCC28\uD130 \uC601\uC5ED\uC774 \uC218\uC815\uB418\uC5B4 \uC788\uC5B4 \uC0C8\uB85C\uACE0\uCE68\uC744 \uAC74\uB108\uB700 \u2014 \uD30C\uC77C\uC740 \uADF8\uB300\uB85C \uB450\uC5C8\uC2B5\uB2C8\uB2E4. \uCD5C\uC2E0 \uCC28\uD130\uB97C \uC9C1\uC811 \uBC18\uC601\uD558\uAC70\uB098 \uC6D0\uBCF8 \uCC28\uD130\uB85C \uB418\uB3CC\uB9B0 \uB4A4 \uB2E4\uC2DC setup\uC744 \uC2E4\uD589\uD558\uC138\uC694.`);
+}
 function parseSetupHost(value) {
   if (value === undefined || value === null || value === "")
     return "claude-code";
@@ -56496,6 +56527,8 @@ async function runWizard(resourcesDir, projectRoot) {
     });
     writeHuman(`setup: installed into ${projectRoot} (host=${result2.host})`);
     writeHuman(`.ditto/: ${result2.setup.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${result2.setup.allowlistApplied ? result2.setup.allowlistPath : "skipped"}`);
+    for (const line of charterRefreshNotices(result2.setup.resources))
+      writeHuman(line);
     writeHuman("tools:");
     for (const o4 of result2.provision.outcomes)
       writeHuman(`  ${o4.action}	${o4.message}`);
@@ -56592,6 +56625,8 @@ var setupCommand = defineCommand({
         });
         writeHuman(`setup: installed into ${projectRoot} (host=${summary.host}, recipe-driven)`);
         writeHuman(`.ditto/: ${summary.setup.scaffold.alreadyInitialized ? "already initialized" : "created"} \xB7 allowlist: ${summary.setup.allowlistApplied ? summary.setup.allowlistPath : "skipped"}`);
+        for (const line of charterRefreshNotices(summary.setup.resources))
+          writeHuman(line);
         if (summary.tools.length > 0) {
           writeHuman("tools:");
           for (const o4 of summary.tools)
@@ -56632,10 +56667,12 @@ var setupCommand = defineCommand({
       });
       writeHuman(`setup: installed into ${projectRoot} (host=${host})`);
       for (const r4 of result2.resources) {
-        const tag = r4.status === "corrupted" ? "SKIPPED (corrupted markers)" : r4.status === "kept" ? `\u2192 ${r4.destPath} (kept existing source)` : `\u2192 ${r4.destPath}`;
+        const tag = r4.status === "corrupted" ? "SKIPPED (corrupted markers)" : r4.status === "kept" ? `\u2192 ${r4.destPath} (kept existing source)` : r4.status === "refreshed" ? `\u2192 ${r4.destPath} (charter refreshed)` : r4.status === "up-to-date" ? `\u2192 ${r4.destPath} (charter up to date)` : r4.status === "unrecognized" ? `\u2192 ${r4.destPath} (charter kept \u2014 unrecognized, see notice)` : `\u2192 ${r4.destPath}`;
         const bak = r4.backupPath ? ` (backup ${r4.backupPath})` : "";
         writeHuman(`  ${r4.filename} [${r4.host}/${r4.scope}] ${tag}${bak}`);
       }
+      for (const line of charterRefreshNotices(result2.resources))
+        writeHuman(line);
       if (result2.codex) {
         writeHuman(`  codex marketplace \u2192 ${result2.codex.marketplacePath}`);
         writeHuman(`  codex plugin copy \u2192 ${result2.codex.installedPluginDir}`);
@@ -56663,17 +56700,19 @@ import { join as join96, resolve as resolve27 } from "path";
 init_fs();
 
 // src/core/teardown.ts
-init_fs();
-init_shared();
 import { copyFile as copyFile2, readFile as readFile21, rm as rm5 } from "fs/promises";
 import { join as join95 } from "path";
+init_fs();
+init_shared();
 var BACKUP_SUFFIX2 = ".ditto_bak";
+var CANONICAL_CHARTER_FILENAME = "AGENTS.md";
 async function teardown(opts) {
   const { resourcesDir, projectRoot, homeDir } = opts;
   const files = [];
-  for (const filename of discoverResources(resourcesDir)) {
+  const resources = discoverResources(resourcesDir).filter((f4) => f4 !== CHARTER_MANIFEST_FILENAME);
+  for (const filename of resources) {
     const decision = routeResource(filename, { projectRoot, homeDir });
-    const action = await teardownFile(decision.destPath);
+    const action = filename === CANONICAL_CHARTER_FILENAME ? await teardownCharterSource(decision.destPath, resourcesDir) : await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
   const allowlistPath = join95(projectRoot, ".claude", "settings.json");
@@ -56718,6 +56757,29 @@ async function teardownFile(destPath) {
   if (await Bun.file(bakPath).exists()) {
     await copyFile2(bakPath, destPath);
     return "restored-from-backup";
+  }
+  return "left-untouched";
+}
+async function loadCharterShas2(resourcesDir) {
+  const raw = await readJsonIfExists(join95(resourcesDir, CHARTER_MANIFEST_FILENAME));
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+    return [];
+  const shas = raw.shas;
+  if (!Array.isArray(shas))
+    return [];
+  return shas.filter((s2) => typeof s2 === "string");
+}
+async function teardownCharterSource(destPath, resourcesDir) {
+  if (!await Bun.file(destPath).exists())
+    return "left-untouched";
+  const current = await readFile21(destPath, "utf8");
+  const bundlePath = join95(resourcesDir, CANONICAL_CHARTER_FILENAME);
+  const bundledCharter = await fileExists(bundlePath) ? await readFile21(bundlePath, "utf8") : "";
+  const knownShas = [...await loadCharterShas2(resourcesDir), normalizedSha256(bundledCharter)];
+  const outcome = refreshCharterRegion({ current, bundledCharter: "", knownShas });
+  if (outcome.kind === "replaced") {
+    await atomicWriteText(destPath, outcome.content);
+    return "stripped";
   }
   return "left-untouched";
 }
@@ -57557,4 +57619,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=bb06a07dd3f344d9f604408d52d0e9c5a641b7958bb78eba290bc2f4613c7983
+//# ditto-src-stamp=de20d7b35cb1c502f307ca3850123aeccbd5853d4d2244bb0af7e3d982b258ae

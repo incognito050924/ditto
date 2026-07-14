@@ -1,11 +1,7 @@
 import { join } from 'node:path';
 import { atomicWriteText } from './fs';
-import {
-  MANAGED_END,
-  loadProjection,
-  loadSource,
-  normalizeInstructionText,
-} from './instruction-bridge';
+import { loadProjection, loadSource } from './instruction-bridge';
+import { buildManagedBlock } from './managed-resource';
 
 export type BridgeSyncAction =
   | 'created'
@@ -24,11 +20,6 @@ export interface BridgeSyncResult {
   message?: string;
 }
 
-function managedBlock(sourceContent: string, sha256: string): string {
-  const body = normalizeInstructionText(sourceContent);
-  return `<!-- ditto:managed:start source=AGENTS.md sha256=${sha256} -->\n${body}${MANAGED_END}`;
-}
-
 export async function syncClaudeCodeProjection(
   repoRoot: string,
   options: { check?: boolean } = {},
@@ -37,7 +28,9 @@ export async function syncClaudeCodeProjection(
   if ('kind' in source) throw new Error('AGENTS.md is missing; cannot sync Claude projection');
   const path = join(repoRoot, 'CLAUDE.md');
   const projection = await loadProjection(repoRoot);
-  const block = managedBlock(source.content, source.normalizedSha256);
+  // Single shared builder so bridge-sync and setup/teardown never diverge on the
+  // embedded-body newline discipline or on which body the marker sha is stamped over.
+  const block = buildManagedBlock(source.content);
   const check = options.check === true;
 
   if (projection.kind === 'missing') {

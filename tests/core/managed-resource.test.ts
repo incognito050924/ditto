@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MANAGED_END, MANAGED_START_RE } from '~/core/instruction-bridge';
+import { MANAGED_END, MANAGED_START_RE, loadProjection } from '~/core/instruction-bridge';
 import {
   applyManagedFile,
   buildManagedBlock,
@@ -95,6 +95,37 @@ describe('upsertManagedBlock', () => {
     expect(result.content).toContain(`last line with no newline\n${MANAGED_END}`);
     // the end marker must start at a line boundary (not glued to the body char)
     expect(result.content).not.toContain(`newline${MANAGED_END}`);
+  });
+});
+
+describe('buildManagedBlock sha/body round-trip', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'ditto-managed-sha-'));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  // The reader (loadProjection) recomputes actualSha256 over the body it captures
+  // BETWEEN the markers (which includes the forced trailing break). The writer must
+  // stamp a marker sha over that SAME embedded body, or the block is self-contradictory.
+  test('marker sha equals reader-recomputed actualSha256 for a body WITHOUT a trailing newline', async () => {
+    const block = buildManagedBlock('body line with no trailing newline', 'AGENTS.md');
+    await writeFile(join(dir, 'CLAUDE.md'), `${block}\n`, 'utf8');
+    const projection = await loadProjection(dir);
+    expect(projection.kind).toBe('ok');
+    if (projection.kind !== 'ok') return;
+    expect(projection.markerSha256).toBe(projection.actualSha256);
+  });
+
+  test('marker sha equals reader-recomputed actualSha256 for a body WITH a trailing newline', async () => {
+    const block = buildManagedBlock('body line with a trailing newline\n', 'AGENTS.md');
+    await writeFile(join(dir, 'CLAUDE.md'), `${block}\n`, 'utf8');
+    const projection = await loadProjection(dir);
+    expect(projection.kind).toBe('ok');
+    if (projection.kind !== 'ok') return;
+    expect(projection.markerSha256).toBe(projection.actualSha256);
   });
 });
 
