@@ -56,7 +56,8 @@ describe('M4.1 — handoff artifact 결정론 조립 + 링크 (HandoffStore.writ
       nextFirstCheck: 'Re-read work item and resume open node',
     });
     expect(handoffSchema.safeParse(h).success).toBe(true);
-    expect(h.work_item_id).toBe(wi.id);
+    // work_item_id now lives under the discriminated scope union.
+    expect(h.scope).toEqual({ kind: 'work_item', work_item_id: wi.id });
     expect(h.original_intent).toBe(wi.source_request); // 원래 의도 보존
     expect(h.current_state.length).toBeGreaterThan(0);
     expect(h.next_first_check.length).toBeGreaterThan(0);
@@ -88,7 +89,7 @@ describe('M4.1 — handoff artifact 결정론 조립 + 링크 (HandoffStore.writ
     expect(linked.handoff_path).toBe(`.ditto/local/handoff/${wi.id}.md`);
     // 라운드트립: parse 가능한 handoff 가 디스크에 있어야 한다.
     const back = await s.get(wi.id);
-    expect(back.work_item_id).toBe(wi.id);
+    expect(back.scope).toEqual({ kind: 'work_item', work_item_id: wi.id });
   });
 
   test('handoff 는 같은 autopilot_id 로 resume target 을 명시할 수 있다(scope 불변)', () => {

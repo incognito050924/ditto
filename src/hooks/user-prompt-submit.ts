@@ -252,9 +252,10 @@ async function intentHasRiskSignal(repoRoot: string, workItemId: string): Promis
   }
 }
 
-// re_entry 명령만 보조 힌트로 남긴다. handoff 본문은 더 이상 "see {path}" 로
-// 가리키지 않고, 아래 handler 가 .ditto/local/handoff/ 에서 본문을 자동으로 주입한다
-// (wi_260605wf3: 파일명 명시 없는 자동 읽기).
+// re_entry 명령만 보조 힌트로 남긴다 (work item 필드). handoff 본문·알림은 어떤 훅도
+// 컨텍스트에 자동 주입하지 않는다 — 발견·소비는 명시적 pull(CLI/스킬)로만 한다
+// (`ditto work handoff <id> --show` = 읽기 전용 수동 로드). 아래 handler 는 handoff 를
+// GC(stale sweep)만 할 뿐, 본문이나 "핸드오프 있음" 알림을 컨텍스트에 넣지 않는다.
 function pendingHandoffHint(item: WorkItem): string | undefined {
   return item.re_entry?.command;
 }

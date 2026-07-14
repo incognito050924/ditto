@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import * as fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HandoffStore, buildHandoff } from '~/core/handoff-store';
+import { HandoffStore, buildHandoff, buildSessionHandoff } from '~/core/handoff-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { handoff as handoffSchema } from '~/schemas/handoff';
 
@@ -36,7 +36,7 @@ describe('buildHandoff', () => {
       autopilotId: 'orch_handoff01',
       evidenceRefs: [{ kind: 'command', command: 'bun test', summary: '2 passed' }],
     });
-    expect(h.work_item_id).toBe(wi.id);
+    expect(h.scope).toEqual({ kind: 'work_item', work_item_id: wi.id });
     expect(h.original_intent).toBe('add a password strength endpoint');
     expect(h.autopilot_id).toBe('orch_handoff01');
     expect(h.evidence_refs).toHaveLength(1);
@@ -70,7 +70,7 @@ describe('HandoffStore', () => {
       buildHandoff({ workItem: wi, fromContext: 'c', currentState: 'mid', nextFirstCheck: 'c' }),
     );
     const got = await store.getActive(wi.id);
-    expect(got?.handoff.work_item_id).toBe(wi.id);
+    expect(got?.handoff.scope).toEqual({ kind: 'work_item', work_item_id: wi.id });
     expect(got?.body).toContain('mid');
   });
 
@@ -89,13 +89,20 @@ describe('HandoffStore', () => {
       }),
     );
     expect((await store.readLatest(wi.id))?.body).toContain('ACTIVE-marker');
-    // move active → archive; readLatest now falls back to the archived copy
-    await store.consumeFor(wi.id);
+    // HARD cleanup (age-sweep, not consume) moves active → archive; readLatest then
+    // falls back to the archived copy. (consume is SOFT now — it no longer moves.)
+    const path = join(repo, `.ditto/local/handoff/${wi.id}.md`);
+    const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    utimesSync(path, old, old);
+    await store.sweepStaleActive();
     expect(await store.getActive(wi.id)).toBeNull();
     expect((await store.readLatest(wi.id))?.body).toContain('ACTIVE-marker');
   });
 
-  test('consumeFor archives only the named work item, leaving siblings active', async () => {
+  // ac-7: consumeFor is SOFT — it returns the body + writes a per-recipient
+  // consumed-marker WITHOUT moving the file, so a failed resume never loses the
+  // handoff (the age-sweep is the sole hard cleanup).
+  test('consumeFor is soft — returns body + consumed-marker, leaves the file (no-loss)', async () => {
     const a = await workItem();
     const b = await new WorkItemStore(repo).create({
       title: 'pw2',
@@ -110,12 +117,17 @@ describe('HandoffStore', () => {
     await store.write(
       buildHandoff({ workItem: b, fromContext: 'c', currentState: 'b-state', nextFirstCheck: 'c' }),
     );
-    const consumed = await store.consumeFor(a.id);
-    expect(consumed?.handoff.work_item_id).toBe(a.id);
+    const consumed = await store.consumeFor(a.id, 'alice');
+    expect(consumed?.handoff.scope).toEqual({ kind: 'work_item', work_item_id: a.id });
     expect(consumed?.body).toContain('a-state');
-    expect(await store.exists(a.id)).toBe(false); // archived
+    // SOFT: the file is NOT moved — a failed resume can re-read it.
+    expect(await store.exists(a.id)).toBe(true);
     expect(await store.exists(b.id)).toBe(true); // sibling untouched
-    expect(await store.consumeFor(a.id)).toBeNull(); // idempotent: nothing left
+    // a per-recipient consumed-marker was recorded (only for a, not the sibling).
+    expect(await store.hasConsumedMarker('alice', `local-${a.id}`)).toBe(true);
+    expect(await store.hasConsumedMarker('alice', `local-${b.id}`)).toBe(false);
+    // no-loss idempotence: a second soft consume still returns the body.
+    expect((await store.consumeFor(a.id, 'alice'))?.body).toContain('a-state');
   });
 
   // wi_2606289nt: stale active sweep — an active handoff no session ever picked
@@ -155,7 +167,8 @@ describe('HandoffStore', () => {
 
     const swept = await store.sweepStaleActive(now);
 
-    expect(swept.map((s) => s.handoff?.work_item_id)).toEqual([stale.id]);
+    expect(swept).toHaveLength(1);
+    expect(swept[0]?.handoff?.scope).toEqual({ kind: 'work_item', work_item_id: stale.id });
     // move-not-delete: stale gone from active, recent still active
     expect(await store.exists(stale.id)).toBe(false);
     expect(await store.exists(recent.id)).toBe(true);
@@ -252,7 +265,10 @@ describe('HandoffStore', () => {
     expect(await store.exists(stale.id)).toBe(true); // still active, not lost
   });
 
-  test('consume moves active handoffs to archive (picked up once, no accumulation)', async () => {
+  // ac-7: consume is SOFT — it returns the bodies + writes consumed-markers but does
+  // NOT move the files (the age-sweep is the sole hard cleanup), so a failed resume
+  // never loses a handoff.
+  test('consume is soft — returns bodies + consumed-markers, leaving files active', async () => {
     const wi = await workItem();
     const store = new HandoffStore(repo);
     await store.write(
@@ -261,11 +277,11 @@ describe('HandoffStore', () => {
     const active = await store.listActive();
     expect(active).toHaveLength(1);
     expect(active[0]?.body).toContain('# Handoff');
-    const consumed = await store.consume();
+    const consumed = await store.consume('alice');
     expect(consumed).toHaveLength(1);
-    // active is now empty — a second turn picks up nothing.
-    expect(await store.listActive()).toHaveLength(0);
-    expect(await store.exists(wi.id)).toBe(false);
+    // SOFT: still active (no move) + a per-recipient consumed-marker recorded.
+    expect(await store.exists(wi.id)).toBe(true);
+    expect(await store.hasConsumedMarker('alice', `local-${wi.id}`)).toBe(true);
   });
 });
 
@@ -348,5 +364,226 @@ describe('handoff critical_decisions / irreversible_risks (ac-6)', () => {
     });
     // substance is carried in-band, not replaced by a re-fetch pointer
     expect(h.irreversible_risks[0]?.why_irreversible).toBe(substance);
+  });
+});
+
+// wi_260714xpw: scope union (ac-3, ac-5), session-scope handoffs, and the committed
+// REMOTE channel (ac-1, ac-4, ac-8) with soft consume markers.
+describe('HandoffStore — scope union, session + remote channel', () => {
+  const git = (args: string[], cwd = repo) =>
+    Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
+  const out = (r: ReturnType<typeof git>) => (r.stdout?.toString() ?? '').trim();
+  function initGitRepo(branch: string) {
+    git(['init', '-q']);
+    git(['config', 'user.email', 'dev@example.com']);
+    git(['config', 'user.name', 'Dev']);
+    git(['checkout', '-q', '-b', branch]);
+    // born HEAD so the first writeRemote is not on an unborn (detached-looking) branch
+    git(['commit', '-q', '--allow-empty', '-m', 'init']);
+  }
+
+  // ac-3: a session-scope handoff parses into listActive by its OWN required set
+  // (session_id, no work_item_id) — it is included, not fail-open dropped.
+  test('ac-3: a session-scope handoff is written + parsed into listActive', async () => {
+    const store = new HandoffStore(repo);
+    const rel = await store.write(
+      buildSessionHandoff({
+        sessionId: 'sess-42',
+        originalIntent: 'resume the thing',
+        fromContext: 'ctx',
+        currentState: 'session-state',
+        nextFirstCheck: 'c',
+      }),
+    );
+    expect(rel).toBe('.ditto/local/handoff/session__sess-42.md');
+    const { active, failures } = await store.listActiveDetailed();
+    expect(failures).toHaveLength(0);
+    expect(active).toHaveLength(1);
+    expect(active[0]?.handoff.scope).toEqual({ kind: 'session', session_id: 'sess-42' });
+    expect(active[0]?.body).toContain('session-state');
+  });
+
+  // ac-3 Root C: a session file present but unparsable is SURFACED as a failure, not
+  // silently dropped (list is the sole discovery channel).
+  test('ac-3: a malformed session file is surfaced as a failure (not silently dropped)', async () => {
+    const dir = join(repo, '.ditto/local/handoff');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'session__broken.md'), 'no frontmatter — cannot parse\n');
+    const store = new HandoffStore(repo);
+    const { active, failures } = await store.listActiveDetailed();
+    expect(active).toHaveLength(0);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.scope).toBe('session');
+    expect(failures[0]?.path).toContain('session__broken.md');
+  });
+
+  // ac-5: an existing on-disk WI-key handoff (top-level work_item_id, NO scope) is
+  // still read — the schema back-compat preprocess lifts it into scope.work_item.
+  test('ac-5: a legacy WI-key handoff (top-level work_item_id, no scope) still reads', async () => {
+    const dir = join(repo, '.ditto/local/handoff');
+    await mkdir(dir, { recursive: true });
+    const legacy = {
+      schema_version: '0.1.0',
+      work_item_id: 'wi_legacy0001',
+      from_context: 'old session',
+      original_intent: 'do the thing',
+      current_state: 'midway',
+      next_first_check: 'run tests',
+      created_at: '2026-06-01T00:00:00.000Z',
+    };
+    await writeFile(
+      join(dir, 'wi_legacy0001.md'),
+      `---\n${JSON.stringify(legacy)}\n---\n\n# Handoff: wi_legacy0001\n`,
+    );
+    const store = new HandoffStore(repo);
+    const got = await store.getActive('wi_legacy0001');
+    expect(got?.handoff.scope).toEqual({ kind: 'work_item', work_item_id: 'wi_legacy0001' });
+    expect((await store.listActive()).map((a) => a.handoff.scope)).toContainEqual({
+      kind: 'work_item',
+      work_item_id: 'wi_legacy0001',
+    });
+  });
+
+  // ac-4: a remote handoff is committed to the work item's branch, git-tracked (NOT
+  // gitignored), delivered on checkout — and never pushed.
+  test('ac-4: writeRemote commits to the work item branch, git-tracked, never pushes', async () => {
+    const wi = await workItem();
+    initGitRepo(`ditto/${wi.id}`);
+    // an upstream that must stay un-advanced (proves no auto-push)
+    const bare = await mkdtemp(join(tmpdir(), 'ditto-ho-bare-'));
+    git(['init', '--bare', '-q'], bare);
+    git(['remote', 'add', 'origin', bare]);
+
+    const store = new HandoffStore(repo);
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: 'remote-state',
+      nextFirstCheck: 'c',
+    });
+    const res = await store.writeRemote(h, { author: 'alice' });
+
+    expect(res.branch).toBe(`ditto/${wi.id}`);
+    expect(res.rel).toBe(`.ditto/handoff/${wi.id}__alice.md`);
+    // committed + git-tracked, NOT gitignored
+    expect(out(git(['ls-files', res.rel]))).toBe(res.rel);
+    expect(git(['check-ignore', '-q', '--', res.rel]).exitCode).toBe(1);
+    expect(out(git(['log', '--oneline', '-1']))).toContain(`${wi.id}__alice`);
+    // body + pointer land in the committed file (delivered on checkout)
+    expect(await Bun.file(join(repo, res.rel)).text()).toContain('remote-state');
+    // NO push: the upstream ref was never created/advanced
+    expect(git(['rev-parse', '--verify', '-q', `origin/ditto/${wi.id}`]).exitCode).not.toBe(0);
+
+    await rm(bare, { recursive: true, force: true });
+  });
+
+  // ac-1: two concurrent authors on the SAME scope land in SEPARATE files — no shared
+  // single file, neither overwrites the other, no merge conflict.
+  test('ac-1: two authors leave separate remote files, neither overwriting the other', async () => {
+    const wi = await workItem();
+    initGitRepo(`ditto/${wi.id}`);
+    const store = new HandoffStore(repo);
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: 's',
+      nextFirstCheck: 'c',
+    });
+    const a = await store.writeRemote(h, { author: 'alice' });
+    const b = await store.writeRemote(h, { author: 'bob' });
+    expect(a.rel).not.toBe(b.rel);
+    expect(a.rel).toBe(`.ditto/handoff/${wi.id}__alice.md`);
+    expect(b.rel).toBe(`.ditto/handoff/${wi.id}__bob.md`);
+    const tracked = out(git(['ls-files', '.ditto/handoff/']));
+    expect(tracked).toContain(`${wi.id}__alice.md`);
+    expect(tracked).toContain(`${wi.id}__bob.md`);
+  });
+
+  // ac-4 guard: refuse to commit to whatever branch happens to be checked out — a
+  // wrong-branch land is SURFACED (throws) and writes nothing.
+  test('writeRemote refuses to commit to the wrong branch (surfaces, no wrong land)', async () => {
+    const wi = await workItem();
+    initGitRepo('main'); // NOT ditto/<wi>
+    const store = new HandoffStore(repo);
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: 's',
+      nextFirstCheck: 'c',
+    });
+    await expect(store.writeRemote(h, { author: 'alice' })).rejects.toThrow(/expected 'ditto\//);
+    expect(out(git(['ls-files', '.ditto/handoff/']))).toBe(''); // nothing committed/written
+  });
+
+  // ac-4 Root D: the committed body is token-scrubbed (git history is irreversible).
+  test('writeRemote token-scrubs secrets from the committed body', async () => {
+    const wi = await workItem();
+    initGitRepo(`ditto/${wi.id}`);
+    const store = new HandoffStore(repo);
+    const token = `ghp_${'A'.repeat(36)}`;
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: `leaked ${token} here`,
+      nextFirstCheck: 'c',
+      evidenceRefs: [{ kind: 'note', summary: `also ${token}` }],
+    });
+    const res = await store.writeRemote(h, { author: 'alice' });
+    const committed = await Bun.file(join(repo, res.rel)).text();
+    expect(committed).not.toContain(token);
+    expect(committed).toContain('[redacted]');
+  });
+
+  // ac-8: remote consume = per-recipient LOCAL marker only — no git delete/commit/push;
+  // per-recipient (a second recipient still sees it); markers + remote files stay OUT
+  // of the local mtime age-sweep set.
+  test('ac-8: consumeRemote writes a per-recipient marker and never deletes/commits/pushes', async () => {
+    const wi = await workItem();
+    initGitRepo(`ditto/${wi.id}`);
+    const store = new HandoffStore(repo);
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'ctx',
+      currentState: 'remote-state',
+      nextFirstCheck: 'c',
+    });
+    const res = await store.writeRemote(h, { author: 'alice' });
+    const commitsBefore = out(git(['rev-list', '--count', 'HEAD']));
+
+    const waiting = await store.listRemote('bob');
+    const [first] = waiting.handoffs;
+    expect(first).toBeDefined();
+    if (!first) throw new Error('unreachable');
+    const consumed = await store.consumeRemote(first, 'bob');
+    expect(consumed.body).toContain('remote-state');
+
+    // per-recipient LOCAL marker; committed remote file untouched (NOT deleted)
+    expect(await store.hasConsumedMarker('bob', `remote-${res.stem}`)).toBe(true);
+    expect(await Bun.file(join(repo, res.rel)).exists()).toBe(true);
+    // no new commit for the marker (no auto-commit), and no push
+    expect(out(git(['rev-list', '--count', 'HEAD']))).toBe(commitsBefore);
+    // per-recipient: bob's next list excludes it; alice (a different recipient) still sees it
+    expect((await store.listRemote('bob')).handoffs).toHaveLength(0);
+    expect((await store.listRemote('alice')).handoffs).toHaveLength(1);
+
+    // remote files + consumed-markers are OUTSIDE the local mtime age-sweep set:
+    // even a far-future clock leaves both intact.
+    await store.sweepStaleActive(new Date(Date.now() + 100 * 24 * 60 * 60 * 1000));
+    expect(await Bun.file(join(repo, res.rel)).exists()).toBe(true);
+    expect(await store.hasConsumedMarker('bob', `remote-${res.stem}`)).toBe(true);
+  });
+
+  // charset guard: a session_id that would escape the fs path / git arg is rejected
+  // BEFORE it reaches join()/git.
+  test('write rejects an unsafe session_id before it touches an fs path', async () => {
+    const store = new HandoffStore(repo);
+    const evil = buildSessionHandoff({
+      sessionId: '../escape',
+      originalIntent: 'x',
+      fromContext: 'c',
+      currentState: 's',
+      nextFirstCheck: 'c',
+    });
+    await expect(store.write(evil)).rejects.toThrow(/session_id/);
   });
 });
