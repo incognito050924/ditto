@@ -1900,7 +1900,12 @@ describe('wi_2607148yg discovered real-behavior defects (materialize + chain-dri
     const decisions = await aps.readDecisions(WI);
     // NOT recorded as driven (the splice never drove) — it escalated instead.
     expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
-    expect(decisions.at(-1)?.failure_class).toBe('user_decision_needed');
+    expect(decisions.some((d) => d.failure_class === 'user_decision_needed')).toBe(true);
+    // (wi_260714mfx) the capped/undriven defect is still forward-traceable: materialize-only,
+    // disclosed as surface(discovered_defect) so its child wi_ is not lost from the ledger.
+    expect(
+      decisions.some((d) => d.decision === 'surface' && d.resolvability === 'discovered_defect'),
+    ).toBe(true);
   });
 
   test('(e) a condition-b defect fix does NOT auto-drive — fail-closed blocked handoff', async () => {
@@ -1984,5 +1989,172 @@ describe('wi_2607148yg discovered real-behavior defects (materialize + chain-dri
     expect(decisions.some((d) => d.decision === 'batch_escalate')).toBe(true);
     // the defect drive route never fires for a non-defect follow-up.
     expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+  });
+
+  // ── wi_260714mfx: honest multi-defect disclosure ──────────────────────────
+  // A single defect_fix splice drives ONE generic fix round, NOT per-defect. When
+  // N>1 drive-eligible defects are reported, only ONE may be attested as chain-driven;
+  // the others are materialize-only and must be disclosed as `surface`, never falsely
+  // logged as `defect_chain_driven` (the over-claim bug).
+
+  test('mfx-1 N>1 drive-eligible + splice pass → EXACTLY ONE defect_chain_driven, the other N-1 are surface(discovered_defect)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Implemented ac-1; a re-run reproduced TWO distinct real crashes.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          { item: 'first reproduced defect', reproduced: true },
+          { item: 'second reproduced defect', reproduced: true },
+        ],
+      },
+    });
+    // ONE splice (a fix+verify pair), not two — a single defect_fix round.
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toHaveLength(2);
+    const decisions = await aps.readDecisions(WI);
+    const driven = decisions.filter((d) => d.decision === 'defect_chain_driven');
+    // exactly ONE driven — the over-claim (N drivens for 1 round) is the bug.
+    expect(driven).toHaveLength(1);
+    // deterministic: the FIRST drive-eligible defect (array order) is the driven one.
+    expect(driven[0]?.reason).toContain('first reproduced defect');
+    // the OTHER defect is disclosed as surface(discovered_defect), NOT driven.
+    const surfaced = decisions.filter(
+      (d) => d.decision === 'surface' && d.resolvability === 'discovered_defect',
+    );
+    expect(surfaced).toHaveLength(1);
+    expect(surfaced[0]?.reason).toContain('second reproduced defect');
+    expect(surfaced[0]?.reason.toLowerCase()).toContain('not driven');
+    // both defects are materialized into REAL back-linked child work items (ac-3 traceable).
+    const drivenChild = childWiFromReason(driven[0]?.reason ?? '');
+    const surfacedChild = childWiFromReason(surfaced[0]?.reason ?? '');
+    if (!drivenChild || !surfacedChild)
+      throw new Error('expected a materialized child wi id in each disclosure reason');
+    expect(await wis.exists(drivenChild)).toBe(true);
+    expect(await wis.exists(surfacedChild)).toBe(true);
+    expect((await wis.get(surfacedChild)).discovered_by).toBe(WI);
+    expect(drivenChild).not.toBe(surfacedChild);
+  });
+
+  test('mfx-2 N>1 drive-eligible + splice ESCALATE (loop cap) → ALL N surface(discovered_defect) with a child wi_ in each reason, NONE driven', async () => {
+    const prior1 = { ...implementNode('IMP.rev.r0', 'passed') };
+    const prior2 = { ...implementNode('IMP.rev.r0.rev.r1', 'passed') };
+    await aps.write(WI, {
+      ...graph({
+        nodes: [prior1, prior2, implementNode()],
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          no_progress_rounds: 99,
+          converge_rounds: 99,
+          loop_rounds: 2,
+          oracle_failures_to_block: 3,
+          progress_continuation_cap: 24,
+        },
+      }),
+      work_item_id: WI,
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Two reproduced defects after the graph already hit the loop cap.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          { item: 'first capped defect', reproduced: true },
+          { item: 'second capped defect', reproduced: true },
+        ],
+      },
+    });
+    // the splice escalated at the shared cap — the SAME outcome is returned (no new block added).
+    expect(res.status).toBe('blocked');
+    expect(res.cap_exceeded).toBe(true);
+    expect(res.promoted_node_ids).toEqual([]);
+    const decisions = await aps.readDecisions(WI);
+    // NONE driven (the splice never drove a round).
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+    // ALL N are disclosed as surface(discovered_defect), each traceable to its own child wi_.
+    const surfaced = decisions.filter(
+      (d) => d.decision === 'surface' && d.resolvability === 'discovered_defect',
+    );
+    expect(surfaced).toHaveLength(2);
+    for (const s of surfaced) {
+      const child = childWiFromReason(s.reason ?? '');
+      if (!child) throw new Error('expected a materialized child wi id in each surface reason');
+      expect(await wis.exists(child)).toBe(true);
+    }
+    expect(surfaced.map((s) => s.reason).join('\n')).toContain('first capped defect');
+    expect(surfaced.map((s) => s.reason).join('\n')).toContain('second capped defect');
+  });
+
+  test('mfx-3 N=1 drive-eligible + splice pass → behavior-identical: exactly 1 defect_chain_driven, 0 surface(discovered_defect)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Implemented ac-1; a re-run reproduced ONE real crash.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [{ item: 'sole reproduced defect', reproduced: true }],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toHaveLength(2);
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.filter((d) => d.decision === 'defect_chain_driven')).toHaveLength(1);
+    // no spurious surface(discovered_defect) when the single defect IS driven.
+    expect(
+      decisions.some((d) => d.decision === 'surface' && d.resolvability === 'discovered_defect'),
+    ).toBe(false);
+  });
+
+  test('mfx-4 shared helper UNCHANGED — a non-defect (follow_up) escalate reason carries NO defect child wi_ id', async () => {
+    const prior1 = { ...implementNode('IMP.rev.r0', 'passed') };
+    const prior2 = { ...implementNode('IMP.rev.r0.rev.r1', 'passed') };
+    await aps.write(WI, {
+      ...graph({
+        nodes: [prior1, prior2, implementNode()],
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          no_progress_rounds: 99,
+          converge_rounds: 99,
+          loop_rounds: 2,
+          oracle_failures_to_block: 3,
+          progress_continuation_cap: 24,
+        },
+      }),
+      work_item_id: WI,
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'An in-scope follow-up after the graph already hit the loop cap.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        follow_ups: [{ item: 'an in-scope follow-up', in_scope: true }],
+      },
+    });
+    // the shared helper escalated generically — NOT a defect route, no child wi_ minted here.
+    expect(res.status).toBe('blocked');
+    expect(res.decision).toBe('escalate');
+    const escalate = (await aps.readDecisions(WI)).find((d) => d.decision === 'escalate');
+    expect(escalate).toBeDefined();
+    // the generic escalate reason must not embed a defect child wi_ id (contamination guard).
+    expect(escalate?.reason).not.toMatch(/wi_[a-z0-9]+/);
   });
 });

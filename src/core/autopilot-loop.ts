@@ -3409,18 +3409,34 @@ async function recordResultCore(
             ? { blockedByOptionalTool: input.payload.blocked_by_tool }
             : {}),
         });
-        // Record the materialize-AND-drive fact ONLY when the splice actually drove a
-        // round (an escalate/surface at the shared cap is already recorded by the helper,
-        // so a cap-hit is not falsely logged as a driven defect).
-        if (outcome.status === 'passed' && outcome.promoted_node_ids.length > 0) {
-          for (const d of driveEligible) {
-            const materializedWi = groundingByDefect.get(d);
+        // (wi_260714mfx) HONEST disclosure: ONE `defect_fix` splice drives ONE generic fix
+        // round — it is NOT per-defect (planForwardReexpansion takes no defect arg). So an
+        // N>1 report must NOT log `defect_chain_driven` N times (the over-claim bug). Attest
+        // `defect_chain_driven` for EXACTLY ONE defect — the first in deterministic array
+        // order — ONLY when the splice actually drove (passed + promoted). Every OTHER
+        // drive-eligible defect is materialize-only: disclosed as `surface`/`discovered_defect`
+        // with its REAL child wi_ grounding (lossless channel, mirrors the backlog path), so
+        // it is forward-traceable without being falsely logged as driven. When the splice did
+        // NOT drive (escalate at the shared cap, or a surface-block with empty promoted), ALL N
+        // are surface-only; the SAME outcome the splice produced is returned (no new block).
+        const driven = outcome.status === 'passed' && outcome.promoted_node_ids.length > 0;
+        for (const [i, d] of driveEligible.entries()) {
+          const materializedWi = groundingByDefect.get(d);
+          if (driven && i === 0) {
             await aps.appendDecision(input.workItemId, {
               ts: now.toISOString(),
               node_id: node.id,
               decision: 'defect_chain_driven',
               resolvability: 'discovered_defect',
               reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) and chain-driven to done in the SAME run via a same-graph forward splice — shares the originating run's loop_rounds budget, its fix lands as its OWN commit/node (never merged into the origin diff, ac-3): ${d.item}`,
+            });
+          } else {
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node.id,
+              decision: 'surface',
+              resolvability: 'discovered_defect',
+              reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven this run — a single defect_fix splice drives ONE fix round, not per-defect (honest disclosure, wi_260714mfx): ${d.item}`,
             });
           }
         }
