@@ -16,6 +16,7 @@ import {
   nextNode,
   recordResult,
   recordResultPayload,
+  reopenImplementNode,
 } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import {
@@ -1050,6 +1051,90 @@ const autopilotRevise = defineCommand({
 });
 
 /**
+ * `ditto autopilot reopen` — the USER-ACTION entrypoint (wi_260713wxq #31) that
+ * reopens a PASSED implement node passed→pending so the user can re-drive it with
+ * feedback. The OPPOSITE of `revise` (destructive: fresh ids) — reopen PRESERVES every
+ * node id. This entrypoint is the ONLY origin of a reopen (no-auto-pick,
+ * ADR-20260627/ADR-20260710) — never an autonomous record-result payload flag. It
+ * re-arms the transitive downstream verify/review subgraph, resets the affected
+ * work-item ACs (so no stale pass re-closes), releases the target lease, and records a
+ * durable `reopen` decision. Bounded by a per-node reopen cap (ac-7).
+ */
+const autopilotReopen = defineCommand({
+  meta: {
+    name: 'reopen',
+    description: 'Reopen a passed implement node (passed→pending) to re-drive it with feedback',
+  },
+  args: {
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
+    node: { type: 'string', description: 'The passed implement node id to reopen', required: true },
+    feedback: {
+      type: 'string',
+      description: "The user's correction, threaded into the re-dispatched implementer packet",
+      required: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: async ({ args }) => {
+    let format: ReturnType<typeof parseOutputFormat>;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const res = await reopenImplementNode(repoRoot, {
+        workItemId: args.workItem,
+        nodeId: args.node,
+        ...(args.feedback ? { feedback: args.feedback } : {}),
+        actor: 'user',
+      });
+      // ac-5/ac-7: a refused (bad target / terminal graph) or capped reopen is a
+      // non-zero exit so the caller (and the loop) does not treat it as a re-arm.
+      if (res.status === 'refused') {
+        writeError(`reopen refused: ${res.reason}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (res.status === 'capped') {
+        writeError(`reopen capped: ${res.reason}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === 'json') {
+        writeJson({
+          work_item_id: args.workItem,
+          node_id: res.node_id,
+          status: 'reopened',
+          downstream_rearmed: res.downstream_rearmed,
+          reset_criteria: res.reset_criteria,
+          reopen_count: res.reopen_count,
+          cap: res.cap,
+        });
+      } else {
+        writeHuman(`Reopened ${res.node_id} (passed → pending) for ${args.workItem}:`);
+        writeHuman(
+          `  downstream re-armed (${res.downstream_rearmed.length}): ${res.downstream_rearmed.join(', ') || '(none)'}`,
+        );
+        writeHuman(
+          `  work-item ACs reset to unverified (${res.reset_criteria.length}): ${res.reset_criteria.join(', ') || '(none)'}`,
+        );
+        writeHuman(`  reopen ${res.reopen_count}/${res.cap} (per-node cap)`);
+        writeHuman(
+          `  → re-drive: ditto autopilot next-node --workItem ${args.workItem} (the feedback is carried into the packet)`,
+        );
+      }
+    } catch (err) {
+      writeError(`reopen failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  },
+});
+
+/**
  * `ditto autopilot cleanup` — run the deterministic cleanup step for a
  * `driver`-owned (cleanup) node: tear down the per-run git worktrees (§2.2).
  * Worktree removal is irreversible git work, so it is gated by an EXPLICIT
@@ -1955,6 +2040,7 @@ export const autopilotCommand = defineCommand({
     'record-result': autopilotRecordResult,
     complete: autopilotComplete,
     revise: autopilotRevise,
+    reopen: autopilotReopen,
     cleanup: autopilotCleanup,
     'propose-e2e': autopilotProposeE2e,
     'intent-drift': autopilotIntentDrift,

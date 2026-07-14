@@ -948,6 +948,81 @@ describe('preToolUseHandler — (f) autopilot 경로 강제 (active-node lease a
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  // wi_260713wxq ac-1 clause 1: a READ-ONLY node (verify/review — its owner has no
+  // Edit tool) dispatched with an EMPTY declared file_scope declares no write-set.
+  // Pre-fix its empty scope built an empty allow-list → a deny-all that hard-blocked
+  // every edit (the bug forcing DITTO_AUTOPILOT_BYPASS). The empty read-only lease
+  // must be EXCLUDED from the enforcement set so it no longer blocks.
+  test('ac-1(a): read-only node with empty file_scope → edit NOT hard-blocked by an empty deny-all', async () => {
+    const dir = await setup({ leaseScope: [], node: { kind: 'review', owner: 'reviewer' } });
+    try {
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // wi_260713wxq ac-1 clause 2: excluding the empty read-only lease must NOT relax
+  // enforcement of a CONCURRENTLY-ACTIVE mutating node whose declared file_scope is
+  // non-empty. An in-scope edit allows; an edit OUTSIDE the mutating node's scope
+  // STILL blocks (the exclusion is scoped to empty read-only leases, not a whole-
+  // function fail-open).
+  test('ac-1(b): read-only empty lease + concurrent MUTATING non-empty lease → out-of-scope edit STILL blocks', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ditto-appath-'));
+    try {
+      await new SessionPointerStore(dir).set(SESS, WI);
+      const graph = graphWith('running', { kind: 'review', owner: 'reviewer' }); // N1 read-only
+      graph.nodes.push({
+        id: 'N2',
+        kind: 'implement',
+        owner: 'implementer',
+        purpose: 'edit src/core',
+        status: 'running',
+        depends_on: [],
+        acceptance_refs: [],
+        evidence_refs: [],
+        ac_verdicts: [],
+        attempts: { fix: 0, switch: 0 },
+      } as (typeof graph.nodes)[number]);
+      await new AutopilotStore(dir).write(WI, graph);
+      const leaseStore = new ActiveNodeLeaseStore(dir);
+      await leaseStore.set({
+        node_id: 'N1',
+        work_item_id: WI,
+        file_scope: [], // read-only empty write-set (excluded)
+        scope_source: 'declared',
+        created_at: new Date().toISOString(),
+      });
+      await leaseStore.set({
+        node_id: 'N2',
+        work_item_id: WI,
+        file_scope: ['src/core/'], // mutating node's enforced allow-list
+        scope_source: 'declared',
+        created_at: new Date().toISOString(),
+      });
+      expect((await edit(dir, 'src/core/x.ts')).exitCode).toBe(0); // in N2 scope
+      const out = await edit(dir, 'src/hooks/elsewhere.ts'); // outside N2 scope
+      expect(out.exitCode).toBe(2);
+      expect(out.stderr).toContain('autopilot-path');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  // wi_260713wxq ac-1 constraint 2: the exclusion is gated on READ-ONLY owner kind,
+  // NOT on scope-emptiness alone. A MUTATING node (implement/fix/refactor) dispatched
+  // with an empty declared file_scope must NOT be excluded — excluding it would run a
+  // mutating node with no allow-list (the scope-guard bypass this WI fixes, inverted).
+  // So its writes stay blocked (deny-all), never blanket-allowed.
+  test('ac-1(c): a MUTATING node with empty file_scope is NOT excluded → its writes are not blanket-allowed', async () => {
+    const dir = await setup({ leaseScope: [], node: { kind: 'implement', owner: 'implementer' } });
+    try {
+      expect((await edit(dir, 'src/hooks/elsewhere.ts')).exitCode).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('preToolUseHandler — (d2) whitelist scope_mode (Tidy cleanup profile, WU-1 ac-2)', () => {

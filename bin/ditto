@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -22821,7 +22803,7 @@ var SCOPE_LOCAL_UNIT_DIRECTIVE = "Scope-local unit tests (mid-wave): run ONLY th
 function isRedFirstImplement(owner, acceptance) {
   return owner === "implementer" && acceptance.some((a2) => a2.oracle?.verification_method === "dynamic_test");
 }
-function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext, retroContext, changeSurface) {
+function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScope = workItem2.changed_files, memoryContext, retroContext, changeSurface, reopenFeedback) {
   const isPlanner = node.owner === "planner";
   const isTestAuthor = node.kind === "test-author";
   const resolveAc = (ac) => ({
@@ -22850,6 +22832,7 @@ function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScop
       ...!isTestAuthor && isRedFirstImplement(node.owner, acceptance) ? [RED_FIRST_DIRECTIVE] : [],
       ...node.owner === "implementer" ? [SCOPE_LOCAL_UNIT_DIRECTIVE] : [],
       ...memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length ? [CITE_OR_ABSTAIN_DIRECTIVE] : [],
+      ...reopenFeedback ? [`Address the user's reopen feedback in this re-edit: ${reopenFeedback}`] : [],
       `Stop when done_when is met: ${doneWhen}.`
     ],
     must_not_do: [
@@ -22865,7 +22848,8 @@ function buildDelegationPacket(node, workItem2, variantCandidates = [], fileScop
       acceptance,
       ...memoryContext ? { memory: memoryContext } : {},
       ...retroContext ? { retro: retroContext } : {},
-      ...changeSurface ? { change_surface: changeSurface } : {}
+      ...changeSurface ? { change_surface: changeSurface } : {},
+      ...reopenFeedback ? { reopen_feedback: reopenFeedback } : {}
     },
     variant_candidates: variantCandidates
   };
@@ -26510,6 +26494,20 @@ async function nextNode(repoRoot, workItemId2) {
   });
   const leases = new ActiveNodeLeaseStore(repoRoot);
   const now = new Date;
+  let dispatchDecisions;
+  try {
+    dispatchDecisions = await aps.readDecisions(workItemId2);
+  } catch {
+    dispatchDecisions = [];
+  }
+  const reopenFeedbackFor = (nodeId) => {
+    let feedback;
+    for (const d2 of dispatchDecisions) {
+      if (d2.node_id === nodeId && d2.decision === "reopen" && d2.feedback)
+        feedback = d2.feedback;
+    }
+    return feedback;
+  };
   if (waveEligible.length >= 2) {
     const catalog2 = await loadVariantCatalog(repoRoot);
     const waveReviewSurface = waveEligible.some((n2) => isReviewOwner(n2.owner)) ? collectChangeSurface(repoRoot, workItem2.started_untracked_baseline) : undefined;
@@ -26532,7 +26530,7 @@ async function nextNode(repoRoot, workItemId2) {
       spawns.push({
         node_id: node2.id,
         owner: node2.owner,
-        packet: buildDelegationPacket(node2, workItem2, candidates2, scopeOf(node2), memory2, retro2, isReviewOwner(node2.owner) ? waveReviewSurface : undefined)
+        packet: buildDelegationPacket(node2, workItem2, candidates2, scopeOf(node2), memory2, retro2, isReviewOwner(node2.owner) ? waveReviewSurface : undefined, reopenFeedbackFor(node2.id))
       });
     }
     const attachments2 = await pressureAttachments(repoRoot, workItemId2, graph);
@@ -26609,8 +26607,101 @@ async function nextNode(repoRoot, workItemId2) {
     action: "spawn",
     node_id: chosen.id,
     owner: chosen.owner,
-    packet: buildDelegationPacket(chosen, workItem2, candidates, scopeOf(chosen), memory, retro, changeSurface),
+    packet: buildDelegationPacket(chosen, workItem2, candidates, scopeOf(chosen), memory, retro, changeSurface, reopenFeedbackFor(chosen.id)),
     ...attachments
+  };
+}
+async function reopenImplementNode(repoRoot, input) {
+  const aps = new AutopilotStore(repoRoot);
+  const graph = await aps.get(input.workItemId);
+  const now = input.now ?? new Date;
+  const target = graph.nodes.find((n2) => n2.id === input.nodeId);
+  if (!target) {
+    return { status: "refused", node_id: input.nodeId, reason: `node ${input.nodeId} not found` };
+  }
+  if (target.kind !== "implement") {
+    return {
+      status: "refused",
+      node_id: input.nodeId,
+      reason: `node ${input.nodeId} is a ${target.kind} node \u2014 reopen targets a passed implement node only`
+    };
+  }
+  if (target.status !== "passed") {
+    return {
+      status: "refused",
+      node_id: input.nodeId,
+      reason: `node ${input.nodeId} is ${target.status}, not passed \u2014 only a passed implement node can be reopened`
+    };
+  }
+  if (allNodesTerminal(graph)) {
+    return {
+      status: "refused",
+      node_id: input.nodeId,
+      reason: "graph is fully terminal (every node passed/failed) \u2014 reopen is a mid-run correction, not available on a finished run"
+    };
+  }
+  const decisions = await aps.readDecisions(input.workItemId);
+  const cap = graph.caps.oracle_failures_to_block;
+  const reopenCount = decisions.filter((d2) => d2.node_id === input.nodeId && d2.decision === "reopen").length;
+  if (reopenCount >= cap) {
+    return {
+      status: "capped",
+      node_id: input.nodeId,
+      reason: `node ${input.nodeId} hit the per-node reopen cap (${reopenCount} \u2265 ${cap}) \u2014 stopping and reporting instead of reopening again`,
+      reopen_count: reopenCount,
+      cap
+    };
+  }
+  const downstream = new Set(computeDownstream(graph.nodes, input.nodeId));
+  const rearmed = [];
+  const nodes = graph.nodes.map((n2) => {
+    if (n2.id === input.nodeId) {
+      rearmed.push(n2.id);
+      return { ...n2, status: nodeTransition("passed", "reopen") };
+    }
+    if (!downstream.has(n2.id))
+      return n2;
+    if (n2.status === "passed") {
+      rearmed.push(n2.id);
+      return { ...n2, status: nodeTransition("passed", "reopen") };
+    }
+    if (n2.status === "running") {
+      rearmed.push(n2.id);
+      return { ...n2, status: nodeTransition("running", "rollback") };
+    }
+    return n2;
+  });
+  await aps.write(input.workItemId, { ...graph, nodes });
+  const rearmedSet = new Set(rearmed);
+  const affected = new Set;
+  for (const n2 of nodes) {
+    if (rearmedSet.has(n2.id))
+      for (const ref of n2.acceptance_refs)
+        affected.add(ref);
+  }
+  if (affected.size > 0) {
+    await new WorkItemStore(repoRoot).update(input.workItemId, (w2) => ({
+      ...w2,
+      acceptance_criteria: w2.acceptance_criteria.map((c3) => affected.has(c3.id) ? { ...c3, verdict: "unverified", evidence: [] } : c3)
+    }));
+  }
+  await new ActiveNodeLeaseStore(repoRoot).removeByNode(input.workItemId, input.nodeId);
+  const decision = {
+    ts: now.toISOString(),
+    node_id: input.nodeId,
+    decision: "reopen",
+    reason: input.feedback ? `user reopen: ${input.feedback}` : "user reopen",
+    ...input.actor ? { actor: input.actor } : {},
+    ...input.feedback ? { feedback: input.feedback } : {}
+  };
+  await aps.appendDecision(input.workItemId, decision);
+  return {
+    status: "reopened",
+    node_id: input.nodeId,
+    downstream_rearmed: rearmed.filter((id) => id !== input.nodeId),
+    reset_criteria: [...affected],
+    reopen_count: reopenCount + 1,
+    cap
   };
 }
 var recordResultPayload = exports_external.object({
@@ -33558,6 +33649,71 @@ var autopilotRevise = defineCommand({
     }
   }
 });
+var autopilotReopen = defineCommand({
+  meta: {
+    name: "reopen",
+    description: "Reopen a passed implement node (passed\u2192pending) to re-drive it with feedback"
+  },
+  args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
+    node: { type: "string", description: "The passed implement node id to reopen", required: true },
+    feedback: {
+      type: "string",
+      description: "The user's correction, threaded into the re-dispatched implementer packet",
+      required: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await requireGraph(args.workItem);
+    try {
+      const res = await reopenImplementNode(repoRoot, {
+        workItemId: args.workItem,
+        nodeId: args.node,
+        ...args.feedback ? { feedback: args.feedback } : {},
+        actor: "user"
+      });
+      if (res.status === "refused") {
+        writeError(`reopen refused: ${res.reason}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (res.status === "capped") {
+        writeError(`reopen capped: ${res.reason}`);
+        process.exit(RUNTIME_ERROR_EXIT);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          work_item_id: args.workItem,
+          node_id: res.node_id,
+          status: "reopened",
+          downstream_rearmed: res.downstream_rearmed,
+          reset_criteria: res.reset_criteria,
+          reopen_count: res.reopen_count,
+          cap: res.cap
+        });
+      } else {
+        writeHuman(`Reopened ${res.node_id} (passed \u2192 pending) for ${args.workItem}:`);
+        writeHuman(`  downstream re-armed (${res.downstream_rearmed.length}): ${res.downstream_rearmed.join(", ") || "(none)"}`);
+        writeHuman(`  work-item ACs reset to unverified (${res.reset_criteria.length}): ${res.reset_criteria.join(", ") || "(none)"}`);
+        writeHuman(`  reopen ${res.reopen_count}/${res.cap} (per-node cap)`);
+        writeHuman(`  \u2192 re-drive: ditto autopilot next-node --workItem ${args.workItem} (the feedback is carried into the packet)`);
+      }
+    } catch (err) {
+      writeError(`reopen failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(RUNTIME_ERROR_EXIT);
+    }
+  }
+});
 var autopilotCleanup = defineCommand({
   meta: {
     name: "cleanup",
@@ -34247,6 +34403,7 @@ var autopilotCommand = defineCommand({
     "record-result": autopilotRecordResult,
     complete: autopilotComplete,
     revise: autopilotRevise,
+    reopen: autopilotReopen,
     cleanup: autopilotCleanup,
     "propose-e2e": autopilotProposeE2e,
     "intent-drift": autopilotIntentDrift,
@@ -48172,8 +48329,16 @@ async function checkAutopilotLease(input, filePath) {
     return;
   if (leases.some((l2) => l2.scope_source === "derived"))
     return;
+  const enforceable = leases.filter((l2) => {
+    if (l2.file_scope.length > 0)
+      return true;
+    const kind = graph.nodes.find((n3) => n3.id === l2.node_id)?.kind;
+    return kind === undefined || isMutatingOwner(kindToOwner(kind));
+  });
+  if (enforceable.length === 0)
+    return;
   const repoRel2 = leaseScopeRelPath(input.repoRoot, filePath);
-  const inScope = leases.some((l2) => fileScopeContains(l2.file_scope, repoRel2));
+  const inScope = enforceable.some((l2) => fileScopeContains(l2.file_scope, repoRel2));
   if (inScope)
     return;
   if (repoRel2.startsWith("tests/") && leases.some((l2) => TESTS_ALLOW_NODE_KINDS.has(graph.nodes.find((n3) => n3.id === l2.node_id)?.kind ?? ""))) {
@@ -57689,4 +57854,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=fc5f490cf500ff3d42b2c88067490ff88be7c35b44caa9d94385e97b05c87bbd
+//# ditto-src-stamp=9eccae0f839bf21a793dc8707397527cdae0e4e8efd3b6fb998e444c4a1dab94

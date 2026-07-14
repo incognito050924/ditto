@@ -54,6 +54,7 @@ import {
 } from './autopilot-dispatch';
 import { allNodesTerminal, mutationGate, rollbackOnRejection } from './autopilot-driver';
 import {
+  computeDownstream,
   fileOverlapGate,
   nodeTransition,
   pendingDoomedByFailure,
@@ -1257,6 +1258,28 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
 
   const leases = new ActiveNodeLeaseStore(repoRoot);
   const now = new Date();
+  // ac-3 (wi_260713wxq #31): a node reopened by `ditto autopilot reopen` carries the
+  // user's feedback on its `reopen` decision entry. Read the log once and thread the
+  // LATEST reopen feedback for the node being dispatched into its packet as DATA. A node
+  // never reopened yields undefined ⇒ packet byte-for-byte the no-reopen path. Derived
+  // from the append-only log (the SoT), never a stored field on the node.
+  // Fail-open (WS3 convention, cf. `readContextPressure`): a corrupt/truncated log
+  // degrades to NO reopen-feedback rather than throwing, so the loop still advances
+  // in the degraded state. On error `dispatchDecisions` is [] ⇒ `reopenFeedbackFor`
+  // returns undefined for every node ⇒ packet byte-for-byte the no-reopen path.
+  let dispatchDecisions: AutopilotDecision[];
+  try {
+    dispatchDecisions = await aps.readDecisions(workItemId);
+  } catch {
+    dispatchDecisions = [];
+  }
+  const reopenFeedbackFor = (nodeId: string): string | undefined => {
+    let feedback: string | undefined;
+    for (const d of dispatchDecisions) {
+      if (d.node_id === nodeId && d.decision === 'reopen' && d.feedback) feedback = d.feedback;
+    }
+    return feedback;
+  };
   if (waveEligible.length >= 2) {
     const catalog = await loadVariantCatalog(repoRoot);
     // AC1: compute the change surface ONCE for the whole wave (not per review node)
@@ -1309,6 +1332,7 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
           memory,
           retro,
           isReviewOwner(node.owner) ? waveReviewSurface : undefined,
+          reopenFeedbackFor(node.id),
         ),
       });
     }
@@ -1459,8 +1483,177 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
       memory,
       retro,
       changeSurface,
+      reopenFeedbackFor(chosen.id),
     ),
     ...attachments,
+  };
+}
+
+/** Result of a `ditto autopilot reopen` (wi_260713wxq #31). */
+export type ReopenResult =
+  | {
+      status: 'reopened';
+      node_id: string;
+      downstream_rearmed: string[];
+      reset_criteria: string[];
+      reopen_count: number;
+      cap: number;
+    }
+  | { status: 'refused'; node_id: string; reason: string }
+  | { status: 'capped'; node_id: string; reason: string; reopen_count: number; cap: number };
+
+/**
+ * User-action reopen of a PASSED implement node (wi_260713wxq #31 — the
+ * `ditto autopilot reopen` entrypoint). The OPPOSITE of `revise` (which is
+ * destructive: fresh ids, removeNodes+regenerate) — reopen PRESERVES every node id.
+ * The reopen originates ONLY from this user-action call, NEVER an autonomous
+ * record-result payload flag (no-auto-pick, ADR-20260627/ADR-20260710).
+ *
+ * It (ac-2) returns the target implement passed→pending via the explicit `reopen`
+ * transition and releases its active lease so re-dispatch re-grants a fresh scoped
+ * lease; (ac-4) re-arms every transitive downstream verify/review node to pending in
+ * ONE atomic graph write AND resets the affected work-item ACs so no stale pass
+ * re-closes over the re-mutated node; (ac-3/ac-7) appends a durable `reopen` decision
+ * carrying actor + feedback — both the audit record and the per-node cap's counting
+ * substrate; (ac-5) refuses a non-passed / non-implement target and a fully-terminal
+ * graph; (ac-6) touches no acceptance_refs, so the frozen AC id-set is conserved.
+ */
+export async function reopenImplementNode(
+  repoRoot: string,
+  input: { workItemId: string; nodeId: string; feedback?: string; actor?: string; now?: Date },
+): Promise<ReopenResult> {
+  const aps = new AutopilotStore(repoRoot);
+  const graph = await aps.get(input.workItemId);
+  const now = input.now ?? new Date();
+  const target = graph.nodes.find((n) => n.id === input.nodeId);
+
+  // ac-5 guards — refuse a non-implement / non-passed target, or a fully-terminal graph.
+  if (!target) {
+    return { status: 'refused', node_id: input.nodeId, reason: `node ${input.nodeId} not found` };
+  }
+  if (target.kind !== 'implement') {
+    return {
+      status: 'refused',
+      node_id: input.nodeId,
+      reason: `node ${input.nodeId} is a ${target.kind} node — reopen targets a passed implement node only`,
+    };
+  }
+  if (target.status !== 'passed') {
+    return {
+      status: 'refused',
+      node_id: input.nodeId,
+      reason: `node ${input.nodeId} is ${target.status}, not passed — only a passed implement node can be reopened`,
+    };
+  }
+  // ac-5: reopen is a MID-RUN correction. Once the graph is fully terminal (every node
+  // passed/failed, retro-exempt — the same terminality the loop closes on) there is no
+  // live run to correct; a finished run is reopened via the work item, not this in-flight
+  // re-arm. Refuse rather than silently resurrect a closed run.
+  if (allNodesTerminal(graph)) {
+    return {
+      status: 'refused',
+      node_id: input.nodeId,
+      reason:
+        'graph is fully terminal (every node passed/failed) — reopen is a mid-run correction, not available on a finished run',
+    };
+  }
+
+  // ac-7: the per-node reopen cap is DERIVED from the append-only decision log (count of
+  // prior user `reopen` decisions for this node) — never a driver-trusted stored counter
+  // (the same decision-log-derived discipline `sameOracleFailureCount` uses, ADR-0024 D6).
+  // Scoped to the `reopen` decision kind so the user-reopen cap never collides with the
+  // wrong-fixpoint `oracle-unsatisfied` count on the same node. At the cap: stop and report.
+  const decisions = await aps.readDecisions(input.workItemId);
+  const cap = graph.caps.oracle_failures_to_block;
+  const reopenCount = decisions.filter(
+    (d) => d.node_id === input.nodeId && d.decision === 'reopen',
+  ).length;
+  if (reopenCount >= cap) {
+    return {
+      status: 'capped',
+      node_id: input.nodeId,
+      reason: `node ${input.nodeId} hit the per-node reopen cap (${reopenCount} ≥ ${cap}) — stopping and reporting instead of reopening again`,
+      reopen_count: reopenCount,
+      cap,
+    };
+  }
+
+  // ac-4: re-arm the target PLUS every transitive downstream verify/review node in ONE
+  // atomic graph write (aps.write, the rollback-path single-write precedent). Re-arming
+  // node-by-node (updateNode ×N+1) risks a HALF-re-armed graph if a write throws partway
+  // = a false-green over the re-mutated node. Only `passed` downstream is reopened
+  // (passed→pending) and `running` downstream is rolled back (running→pending); the other
+  // statuses (failed/blocked/pending) have no legal edge to pending here, so they are left
+  // untouched — never the illegal `nodeTransition`. NOTE (do NOT "unify" with the tidy /
+  // wrong-fixpoint reopens): those re-arm ONLY the implement node and rely on
+  // implement-pending FLOORING the downstream verify (selectReadyNodes holds verify while
+  // an implement is non-terminal). THIS user reopen re-arms the whole downstream subgraph
+  // explicitly — stricter/correct; dropping it reintroduces the stale-downstream false-green.
+  const downstream = new Set(computeDownstream(graph.nodes, input.nodeId));
+  const rearmed: string[] = [];
+  const nodes = graph.nodes.map((n) => {
+    if (n.id === input.nodeId) {
+      rearmed.push(n.id);
+      return { ...n, status: nodeTransition('passed', 'reopen') };
+    }
+    if (!downstream.has(n.id)) return n;
+    if (n.status === 'passed') {
+      rearmed.push(n.id);
+      return { ...n, status: nodeTransition('passed', 'reopen') };
+    }
+    if (n.status === 'running') {
+      rearmed.push(n.id);
+      return { ...n, status: nodeTransition('running', 'rollback') };
+    }
+    return n;
+  });
+  await aps.write(input.workItemId, { ...graph, nodes });
+
+  // ac-4 (deepest false-green channel): re-arming graph nodes is NOT enough. Completion
+  // reconciliation (autopilot-complete.ts) flips a re-armed node's `unverified` fold back
+  // to `pass` whenever the work-item acceptance_criteria entry still carries a `pass` +
+  // command-kind evidence (from a prior `ditto verify` / a non-terminal complete mirror).
+  // So reset every AC referenced by a re-armed node to `unverified` + drop its evidence —
+  // that channel only supersedes on verdict==='pass', so unverified defuses it.
+  const rearmedSet = new Set(rearmed);
+  const affected = new Set<string>();
+  for (const n of nodes) {
+    if (rearmedSet.has(n.id)) for (const ref of n.acceptance_refs) affected.add(ref);
+  }
+  if (affected.size > 0) {
+    await new WorkItemStore(repoRoot).update(input.workItemId, (w) => ({
+      ...w,
+      acceptance_criteria: w.acceptance_criteria.map((c) =>
+        affected.has(c.id) ? { ...c, verdict: 'unverified' as const, evidence: [] } : c,
+      ),
+    }));
+  }
+
+  // ac-2: re-arm to pending is non-terminal, so record-result's removeByNode never fires
+  // for the target → its active lease would linger (until the 24h reap) and re-dispatch
+  // would mint a SECOND. Release it now; the fresh next-node dispatch re-grants a precise
+  // scoped lease so the re-edit passes the PreToolUse guard WITHOUT DITTO_AUTOPILOT_BYPASS.
+  await new ActiveNodeLeaseStore(repoRoot).removeByNode(input.workItemId, input.nodeId);
+
+  // ac-3/ac-7: append the durable `reopen` decision — BOTH the audit/observability record
+  // (actor + feedback, threaded into the re-dispatch packet) AND ac-7's counting substrate.
+  const decision: AutopilotDecision = {
+    ts: now.toISOString(),
+    node_id: input.nodeId,
+    decision: 'reopen',
+    reason: input.feedback ? `user reopen: ${input.feedback}` : 'user reopen',
+    ...(input.actor ? { actor: input.actor } : {}),
+    ...(input.feedback ? { feedback: input.feedback } : {}),
+  };
+  await aps.appendDecision(input.workItemId, decision);
+
+  return {
+    status: 'reopened',
+    node_id: input.nodeId,
+    downstream_rearmed: rearmed.filter((id) => id !== input.nodeId),
+    reset_criteria: [...affected],
+    reopen_count: reopenCount + 1,
+    cap,
   };
 }
 

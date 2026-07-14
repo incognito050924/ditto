@@ -48,8 +48,24 @@ export interface AutopilotDecision {
     // construction (no failure_class:'user_decision_needed', no decision∈{escalate,
     // batch_escalate}, no disposition:'blocked'), so neither is posted to GitHub.
     | 'direction'
-    | 'procedure_punt_continued';
+    | 'procedure_punt_continued'
+    // wi_260713wxq (#31): the USER-ACTION reopen of a passed implement node (the
+    // `ditto autopilot reopen` entrypoint). This single append-only entry is BOTH the
+    // durable audit record (actor + feedback) AND ac-7's counting substrate — the
+    // per-node reopen cap is derived by counting these entries, never a stored counter
+    // (the same decision-log-derived discipline `sameOracleFailureCount` uses). Scoped
+    // to this `reopen` decision kind so the user-reopen cap never collides with the
+    // wrong-fixpoint `oracle-unsatisfied` count on the same node.
+    | 'reopen';
   reason: string;
+  // wi_260713wxq (#31): present ONLY on a `reopen` decision. `actor` = who triggered the
+  // reopen (the user-action origin), `feedback` = the user's free-text correction, threaded
+  // into the re-dispatched implementer's delegation packet as DATA (never executed).
+  // Additive + optional (same convention as `attempts?`/`criterion_ids?` — backward
+  // compatible, no schema_version bump): every in-flight autopilot.json / decision log
+  // still parses.
+  actor?: string;
+  feedback?: string;
   // T1 (wi_2606266az, ac-3): the structured reason-category for an `auto_fix` /
   // `surface` / `batch_escalate` decision — the resolvability class the route was
   // chosen from (machine-attributable, NOT parsed from `reason`). Present only on

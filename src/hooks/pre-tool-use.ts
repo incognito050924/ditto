@@ -4,6 +4,8 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { parseJvmCodeqlCommand, runInternalPackagesGuard } from '~/acg/internal-packages';
 import { matchForbiddenScope, scopeRefMatches } from '~/acg/scope/resolve';
 import { ActiveNodeLeaseStore } from '~/core/active-node-lease';
+import { isMutatingOwner } from '~/core/autopilot-dispatch';
+import { kindToOwner } from '~/core/autopilot-graph';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { ChangeContractStore } from '~/core/change-contract-store';
 import { localDir } from '~/core/ditto-paths';
@@ -712,8 +714,23 @@ async function checkAutopilotLease(
   // (wi_260610iex — the dogfooding run blocked legitimate new artifact paths).
   if (leases.some((l) => l.scope_source === 'derived')) return undefined;
 
+  // A READ-ONLY node (verify/review/etc — its owner has no Edit tool) dispatched with
+  // an EMPTY declared file_scope declares no write-set; its empty scope must not build
+  // an empty allow-list that hard-blocks every edit (wi_260713wxq ac-1). Exclude ONLY
+  // empty-scope leases whose node is read-only. A MUTATING node's empty declared scope
+  // is NOT excluded — that would run it with no allow-list (the scope-guard bypass this
+  // fix exists to close, merely inverted); its empty scope stays a deny-all. When only
+  // read-only empty leases were active (enforceable set empties), there is no allow-list
+  // for the write to violate, so it fails open like the no-lease / derived cases above.
+  const enforceable = leases.filter((l) => {
+    if (l.file_scope.length > 0) return true;
+    const kind = graph.nodes.find((n) => n.id === l.node_id)?.kind;
+    return kind === undefined || isMutatingOwner(kindToOwner(kind));
+  });
+  if (enforceable.length === 0) return undefined; // only read-only empty leases active
+
   const repoRel = leaseScopeRelPath(input.repoRoot, filePath);
-  const inScope = leases.some((l) => fileScopeContains(l.file_scope, repoRel));
+  const inScope = enforceable.some((l) => fileScopeContains(l.file_scope, repoRel));
   if (inScope) return undefined; // allow-list hit
 
   // tests/** companion allowance (wi_260707j1e ac-1): deterministic ALLOW — not

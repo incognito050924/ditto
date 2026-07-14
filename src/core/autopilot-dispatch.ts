@@ -77,6 +77,11 @@ export interface DelegationPacket {
     // each re-run git. Present only on a review packet; absent ⇒ byte-for-byte the
     // no-surface path. Mechanical fact only — does not touch verdict independence.
     change_surface?: ChangeSurface;
+    // wi_260713wxq (#31, ac-3): the user's free-text feedback from a `ditto autopilot
+    // reopen`, threaded onto the RE-DISPATCHED implementer's packet as DATA (never
+    // executed). Present only when this node was reopened with feedback; absent ⇒ the
+    // packet is byte-for-byte the no-reopen path.
+    reopen_feedback?: string;
   };
   // Variant routing: deterministically filtered specialized-subagent candidates
   // (role + file_scope match). The driver picks a `subagent_type` from these
@@ -258,6 +263,11 @@ export function buildDelegationPacket(
   // it here for a review node, or `undefined` (then `context.change_surface` is
   // omitted entirely, keeping the packet identical to the no-surface path).
   changeSurface?: ChangeSurface,
+  // wi_260713wxq (#31, ac-3): the user's reopen feedback. Same purity contract as the
+  // args above — the loop reads the latest `reopen` decision's feedback from the log
+  // fail-open and passes it here; `undefined` ⇒ `context.reopen_feedback` is omitted and
+  // the reopen must_do directive is suppressed (packet identical to the no-reopen path).
+  reopenFeedback?: string,
 ): DelegationPacket {
   const isPlanner = node.owner === 'planner';
   // The pre-approval `test-author` node (#21) authors a red test for each dynamic_test AC and
@@ -335,6 +345,11 @@ export function buildDelegationPacket(
       ...(memoryContext?.decisions?.length || memoryContext?.decision_briefs?.length
         ? [CITE_OR_ABSTAIN_DIRECTIVE]
         : []),
+      // ac-3: on a user reopen, surface the user's correction as a directive so the
+      // re-editing implementer acts on it (the feedback is also in context as DATA).
+      ...(reopenFeedback
+        ? [`Address the user's reopen feedback in this re-edit: ${reopenFeedback}`]
+        : []),
       `Stop when done_when is met: ${doneWhen}.`,
     ],
     must_not_do: [
@@ -357,6 +372,9 @@ export function buildDelegationPacket(
       // Only present when the loop supplied a pre-computed surface for a review
       // node; omitted ⇒ packet is byte-for-byte the no-surface path.
       ...(changeSurface ? { change_surface: changeSurface } : {}),
+      // ac-3: only present on a re-dispatched reopened node carrying feedback; omitted
+      // ⇒ packet is byte-for-byte the no-reopen path.
+      ...(reopenFeedback ? { reopen_feedback: reopenFeedback } : {}),
     },
     variant_candidates: variantCandidates,
   };
