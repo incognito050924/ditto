@@ -49,13 +49,13 @@ export function assertSelectedPresentationContract(
     );
     for (const v of verdict.violations) {
       if (ROUND_SURFACE_FIELDS.has(v.field)) {
-        lines.push(`  - selected[${i}] "${q.text.slice(0, 80)}" ${v.field}: ${v.reason}`);
+        lines.push(`  - ${i + 1}번째 질문 "${q.text.slice(0, 80)}": ${v.reason}`);
       }
     }
   });
   if (lines.length > 0) {
     throw new Error(
-      `question round rejected — user-reaching selected question(s) violate the presentation contract; not persisted:\n${lines.join('\n')}`,
+      `이번 질문들을 저장하지 못했어요 — 사용자에게 보여줄 질문이 갖춰야 할 안내(왜 묻는지·쉬운 말 설명)를 아직 갖추지 못했어요:\n${lines.join('\n')}`,
     );
   }
 }

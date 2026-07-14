@@ -265,7 +265,7 @@ describe('presentation contract on the prism-equivalent write path (ac-1)', () =
     const bad = round([
       { text: 'Should we enforce auth here too?', property: 'blind-spot', scores: ctxScore },
     ]);
-    await expect(store.appendValueRound(wiId, bad)).rejects.toThrow(/user_explanation/);
+    await expect(store.appendValueRound(wiId, bad)).rejects.toThrow(/왜 이걸 묻는지/);
     expect(await store.readValueRounds(wiId)).toHaveLength(0);
   });
 

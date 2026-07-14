@@ -133,7 +133,7 @@ function validateSplitItems(
     for (const ac of p.data.acceptance_criteria) {
       if (isPlaceholderStatement(ac.statement)) {
         reasons.push(
-          `분할 항목 ${i + 1}의 완료 조건이 placeholder/모호함입니다: "${ac.statement}" — 관찰 가능한 기준으로 대체하세요`,
+          `분할 항목 ${i + 1}의 완료 조건이 아직 내용 없는 임시 문구예요: "${ac.statement}" — 눈으로 확인할 수 있는 실제 기준으로 바꿔 주세요`,
         );
       }
     }
@@ -163,10 +163,11 @@ export function proposeBacklogSplit(
 ): ProposeSplitResult {
   const reasons: string[] = [];
   if (doc.feature.trim().length === 0)
-    reasons.push('design doc가 미확정입니다: 기능 이름이 비어 있음');
-  if (doc.summary.trim().length === 0) reasons.push('design doc가 미확정입니다: 요약이 비어 있음');
+    reasons.push('설계 문서가 아직 확정되지 않았어요: 기능 이름이 비어 있어요');
+  if (doc.summary.trim().length === 0)
+    reasons.push('설계 문서가 아직 확정되지 않았어요: 요약이 비어 있어요');
   if (doc.acceptanceCriteria.length === 0)
-    reasons.push('design doc가 미확정입니다: 완료 조건이 없음 — 빈 백로그는 분할할 수 없습니다');
+    reasons.push('설계 문서가 아직 확정되지 않았어요: 완료 조건이 없어요 — 내용이 빈 상태로는 나눌 수 없어요');
 
   const itemCheck = validateSplitItems(items);
   if (!itemCheck.ok) reasons.push(...itemCheck.reasons);
@@ -216,7 +217,7 @@ export async function materializeBacklogSplit(
     return {
       status: 'rejected',
       reasons: [
-        '승인 없음: 물화에는 사용자 원문 승인(statement)이 필요합니다 — bare 호출은 승인이 아닙니다',
+        '승인이 없어요: 물화(승인된 제안을 실제 작업 항목으로 만드는 것)하려면 사용자가 직접 쓴 승인 문장이 필요해요 — 명령만 실행하는 것으로는 승인으로 인정되지 않아요',
       ],
     };
   }
@@ -225,7 +226,7 @@ export async function materializeBacklogSplit(
   if (split === null) {
     return {
       status: 'rejected',
-      reasons: [`분할안이 없습니다: ${parentId}에 대한 제안을 먼저 propose 하세요`],
+      reasons: [`나눌 제안이 아직 없어요: ${parentId}에 대한 분할 제안을 먼저 만들어 주세요`],
     };
   }
 

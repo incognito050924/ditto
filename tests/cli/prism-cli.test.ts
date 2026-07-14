@@ -455,7 +455,7 @@ describe('ditto prism tree — pure-query tree view (ac-4)', () => {
   test('a not-yet-seeded map is a clean message, not a crash', () => {
     const res = spawnDitto(['prism', 'tree', '--wi', WI]);
     expect(res.exitCode).toBe(0);
-    expect(res.stdout).toContain('아직 이슈맵이 없어요');
+    expect(res.stdout).toContain('아직 정리한 항목이 없어요');
   });
 
   test('renders the tree structure + label·severity·state + question-round timestamps', () => {
@@ -526,7 +526,7 @@ describe('ditto prism opponent — model-assist seam is genuinely invoked (ac-5/
     seed('인증 경계', ['--critical']);
     const res = spawnDitto(['prism', 'opponent', '--wi', WI, '--concern', 'dissent']);
     expect(res.exitCode).toBe(0);
-    expect(res.stdout).toContain('host_absent');
+    expect(res.stdout).toContain('반대 검토 모델');
     // The anchor (tree root) carries the self-describing degrade stamp.
     const map = await readIssueMap();
     const anchor = map.tree.root_id;

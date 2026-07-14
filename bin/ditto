@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -19713,7 +19731,7 @@ function closePrismNode(prism, nodeId, state, reason, residualRisk) {
     return {
       ok: false,
       reasons: [
-        `unknown-close (${state}) of critical node ${nodeId} requires a recorded residual_risk \u2014 a no-residual "\uBAA8\uB984-\uB2EB\uAE30" of critical scope is rejected and never counts as critical resolution (MODEL-1)`
+        `\uD575\uC2EC \uD56D\uBAA9 "${nodeId}"\uC744(\uB97C) '\uBAA8\uB984'\uC73C\uB85C \uB2EB\uC73C\uB824\uBA74(${state}) \uB0A8\uB294 \uC704\uD5D8(residual_risk)\uC744 \uBC18\uB4DC\uC2DC \uC801\uC5B4\uC57C \uD574\uC694 \u2014 \uC704\uD5D8\uC744 \uC548 \uC801\uACE0 '\uBAA8\uB984'\uC73C\uB85C \uB2EB\uB294 \uAC74 \uAC70\uBD80\uB418\uACE0, \uD575\uC2EC \uD56D\uBAA9\uC744 \uD574\uACB0\uD55C \uAC83\uC73C\uB85C \uCE58\uC9C0 \uC54A\uC544\uC694`
       ]
     };
   }
@@ -19722,19 +19740,19 @@ function closePrismNode(prism, nodeId, state, reason, residualRisk) {
     const missing = [];
     const hasReason = evalRec?.justifying_reason !== undefined && evalRec.justifying_reason.trim().length > 0;
     if (!hasReason)
-      missing.push("a non-empty justifying_reason");
+      missing.push("\uCC44\uC6B4 \uADFC\uAC70 \uC0AC\uC720(justifying_reason)");
     if (evalRec?.refutation_attempted !== true) {
-      missing.push("an attempted refutation (refutation_attempted)");
+      missing.push("\uAC00\uC7A5 \uAC15\uD55C \uBC18\uBC15\uC744 \uD55C \uBC88 \uC2DC\uB3C4\uD55C \uAE30\uB85D(refutation_attempted)");
     }
     if (!evidenceAddedForNode(prism, nodeId)) {
-      missing.push("added grounding this round \u2014 a child decomposition or a recorded opponent artifact, not a self-authored reason alone (OBJ-1)");
+      missing.push("\uC774\uBC88\uC5D0 \uC0C8\uB85C \uB354\uD574\uC9C4 \uADFC\uAC70(grounding) \u2014 \uD558\uC704 \uD56D\uBAA9\uC73C\uB85C \uCABC\uAC1C\uAC70\uB098 \uBC18\uB300 \uAC80\uD1A0 \uAE30\uB85D\uC774 \uC788\uC5B4\uC57C \uD558\uACE0, \uD63C\uC790 \uC4F4 \uC0AC\uC720\uB9CC\uC73C\uB85C\uB294 \uBD80\uC871\uD574\uC694");
     }
     if (missing.length > 0) {
       return {
         ok: false,
         prism: upsertEvaluation(prism, nodeId, { evaluation: "unevaluated" }),
         reasons: [
-          `resolved-close of critical node ${nodeId} requires ${missing.join(", ")} \u2014 the close is rejected and the node is stamped prism-level unevaluated (A2, ac-1; homomorphic with the MODEL-1 residual gate)`
+          `\uD575\uC2EC \uD56D\uBAA9 "${nodeId}"\uC744(\uB97C) \uD574\uACB0\uB85C \uB2EB\uC73C\uB824\uBA74 ${missing.join(", ")}\uC774(\uAC00) \uD544\uC694\uD574\uC694 \u2014 \uC774 \uB2EB\uAE30\uB294 \uAC70\uBD80\uB418\uACE0, \uD56D\uBAA9\uC740 '\uD310\uB2E8 \uBABB \uD568(unevaluated)' \uC0C1\uD0DC\uB85C \uD45C\uC2DC\uB3FC\uC694`
         ]
       };
     }
@@ -19757,7 +19775,7 @@ function criticalTermination(prism) {
   if (prism.tree.nodes.length === 0) {
     return {
       terminated: false,
-      reason: "empty map \u2014 no scope explored yet (B1 vacuous-truth guard)"
+      reason: "\uC544\uC9C1 \uC0B4\uD3B4\uBCF8 \uD56D\uBAA9\uC774 \uD558\uB098\uB3C4 \uC5C6\uC5B4\uC694 \u2014 \uBB34\uC5C7\uC744 \uC815\uD560\uC9C0 \uC815\uB9AC\uB97C \uC2DC\uC791\uD558\uAE30 \uC804\uC774\uC5D0\uC694"
     };
   }
   const criticalIds = new Set(prism.severities.filter((s2) => s2.severity === "critical").map((s2) => s2.node_id));
@@ -19765,19 +19783,19 @@ function criticalTermination(prism) {
   if (criticalNodes.length === 0) {
     return {
       terminated: false,
-      reason: "no critical nodes \u2014 termination/notification does NOT fire on a 0-critical map (B1 vacuous-truth guard)"
+      reason: "\uAF2D \uC815\uD574\uC57C \uD560 \uD575\uC2EC \uD56D\uBAA9\uC774 \uC544\uC9C1 \uC5C6\uC5B4\uC694 \u2014 \uD575\uC2EC \uD56D\uBAA9\uC774 \uD558\uB098\uB3C4 \uC5C6\uC73C\uBA74 \uCC29\uC218 \uC54C\uB9BC\uC740 \uB728\uC9C0 \uC54A\uC544\uC694"
     };
   }
   const unresolved = criticalNodes.filter((n2) => !isCriticalResolved(n2, evaluationOf(prism, n2.id)?.evaluation));
   if (unresolved.length > 0) {
     return {
       terminated: false,
-      reason: `${unresolved.length} critical node(s) still unresolved`
+      reason: `\uC544\uC9C1 \uC815\uD558\uC9C0 \uBABB\uD55C \uD575\uC2EC \uD56D\uBAA9\uC774 ${unresolved.length}\uAC1C \uB0A8\uC558\uC5B4\uC694`
     };
   }
   return {
     terminated: true,
-    reason: "every critical node resolved (non-critical scope may survive \u2014 the user decides)"
+    reason: "\uD575\uC2EC \uD56D\uBAA9\uC744 \uBAA8\uB450 \uC815\uB9AC\uD588\uC5B4\uC694 (\uB35C \uC911\uC694\uD55C \uD56D\uBAA9\uC740 \uB0A8\uC544 \uC788\uC744 \uC218 \uC788\uACE0, \uADF8\uAC74 \uC0AC\uC6A9\uC790\uAC00 \uD310\uB2E8\uD574\uC694)"
   };
 }
 function completenessSeedId(fragmentId) {
@@ -19888,14 +19906,14 @@ function detectDivergence(round, history) {
       return {
         diverged: false,
         action: "challenge-node",
-        reason: `challenge to decided ${round.challenge.decided_id} carries NEW evidence \u2014 admit as a visible challenge node (once)`
+        reason: `\uC774\uBBF8 \uC815\uD55C "${round.challenge.decided_id}"\uC5D0 \uC0C8 \uADFC\uAC70\uAC00 \uC788\uC5B4\uC694 \u2014 \uB2E4\uC2DC \uBCFC \uD56D\uBAA9\uC73C\uB85C \uD55C \uBC88\uB9CC \uBC1B\uC544\uB4E4\uC5EC\uC694`
       };
     }
     return {
       diverged: true,
       kind: "decided_conflict_no_evidence",
       action: "cap-stop",
-      reason: `re-challenge to decided ${round.challenge.decided_id} with no new evidence \u2014 flagged divergence (visibly suppressed, not silent)`
+      reason: `\uC774\uBBF8 \uC815\uD55C "${round.challenge.decided_id}"\uC744(\uB97C) \uC0C8 \uADFC\uAC70 \uC5C6\uC774 \uB2E4\uC2DC \uBB38\uC81C \uC0BC\uACE0 \uC788\uC5B4\uC694 \u2014 \uAC89\uB3C4\uB294 \uBC18\uBCF5\uC73C\uB85C \uBCF4\uACE0 \uBA48\uCDB0\uC694(\uC870\uC6A9\uD788 \uB118\uAE30\uC9C0 \uC54A\uACE0 \uB4DC\uB7EC\uB0C5\uB2C8\uB2E4)`
     };
   }
   if (round.question) {
@@ -19905,7 +19923,7 @@ function detectDivergence(round, history) {
         diverged: true,
         kind: "repeat_question",
         action: "cap-stop",
-        reason: "near-duplicate of an earlier question \u2014 repeated with no new signal (\uCCC7\uBC14\uD034)"
+        reason: "\uC55E\uC120 \uC9C8\uBB38\uACFC \uAC70\uC758 \uB611\uAC19\uC544\uC694 \u2014 \uC0C8\uB85C\uC6B4 \uB0B4\uC6A9 \uC5C6\uC774 \uC81C\uC790\uB9AC\uB97C \uB3C4\uB294 \uBC18\uBCF5\uC774\uC5D0\uC694(\uCCC7\uBC14\uD034)"
       };
     }
     if (round.question.trivial) {
@@ -19921,12 +19939,12 @@ function detectDivergence(round, history) {
           diverged: true,
           kind: "trivial_streak",
           action: "cap-stop",
-          reason: `${streak} consecutive trivial questions \u2014 flagged divergence`
+          reason: `\uC0AC\uC18C\uD55C \uC9C8\uBB38\uC774 ${streak}\uBC88 \uC5F0\uB2EC\uC544 \uB098\uC654\uC5B4\uC694 \u2014 \uAC89\uB3C4\uB294 \uBC18\uBCF5\uC73C\uB85C \uBD10\uC694`
         };
       }
     }
   }
-  return { diverged: false, action: "continue", reason: "no divergence signal" };
+  return { diverged: false, action: "continue", reason: "\uBC97\uC5B4\uB09C \uC2E0\uD638 \uC5C6\uC74C \u2014 \uACC4\uC18D \uC9C4\uD589\uD574\uC694" };
 }
 var PRISM_CAPS = {
   callsPerNode: 8,
@@ -20078,19 +20096,19 @@ function validateQuestionContext(candidate, opaqueVocab = []) {
   if (isBlank(candidate.user_explanation)) {
     violations.push({
       field: "user_explanation",
-      reason: "a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user"
+      reason: '\uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBB3B\uAE30 \uC804\uC5D0 "\uC65C \uC774\uAC78 \uBB3B\uB294\uC9C0"\uC640 "\uC774 \uB2F5\uC774 \uBB34\uC5C7\uC744 \uC815\uD558\uB294\uC9C0"\uB97C \uC26C\uC6B4 \uB9D0\uB85C(\uC804\uBB38\uC6A9\uC5B4\xB7\uCF54\uB4DC \uC5C6\uC774) \uBA3C\uC800 \uC801\uC5B4\uC57C \uD574\uC694'
     });
   }
   if (isBlank(candidate.recommended_answer)) {
     violations.push({
       field: "recommended_answer",
-      reason: "a suggested answer (the agent\u2019s recommended default, in user language) is required before asking the user"
+      reason: "\uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBB3B\uAE30 \uC804\uC5D0 \uCD94\uCC9C \uB2F5(\uC5D0\uC774\uC804\uD2B8\uAC00 \uAD8C\uD558\uB294 \uAE30\uBCF8 \uC120\uD0DD\uC9C0)\uC744 \uC26C\uC6B4 \uB9D0\uB85C \uD568\uAED8 \uC81C\uC2DC\uD574\uC57C \uD574\uC694"
     });
   }
   if (isBlank(candidate.why_matters)) {
     violations.push({
       field: "why_matters",
-      reason: "the value of the answer (what it decides) must be stated"
+      reason: "\uC774 \uB2F5\uC774 \uBB34\uC5C7\uC744 \uC815\uD558\uB294\uC9C0(\uC65C \uC911\uC694\uD55C\uC9C0)\uB97C \uBC1D\uD600\uC57C \uD574\uC694"
     });
   }
   const leaked = [
@@ -20100,7 +20118,7 @@ function validateQuestionContext(candidate, opaqueVocab = []) {
   if (leaked.length > 0) {
     violations.push({
       field: "unexplained_identifier",
-      reason: `internal identifier(s) ${[...new Set(leaked)].join(", ")} surfaced to the user with no inline gloss \u2014 restate in user language or add a (parenthetical / colon) explanation`
+      reason: `\uB0B4\uBD80\uC5D0\uC11C\uB9CC \uC4F0\uB294 \uD45C\uD604 ${[...new Set(leaked)].join(", ")}\uC774(\uAC00) \uC124\uBA85 \uC5C6\uC774 \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uADF8\uB300\uB85C \uB178\uCD9C\uB410\uC5B4\uC694 \u2014 \uC26C\uC6B4 \uB9D0\uB85C \uBC14\uAFB8\uAC70\uB098 \uAD04\uD638\uB098 \uCF5C\uB860\uC73C\uB85C \uB73B\uD480\uC774\uB97C \uB367\uBD99\uC5EC \uC8FC\uC138\uC694`
     });
   }
   return { ok: violations.length === 0, violations };
@@ -20551,12 +20569,12 @@ function interviewReadinessGate(state) {
   const reasons = [];
   const unresolved = state.dimensions.filter((d2) => d2.critical && d2.state !== "resolved").map((d2) => d2.id);
   if (unresolved.length > 0) {
-    reasons.push(`critical dimensions unresolved: ${unresolved.join(", ")}`);
+    reasons.push(`\uD575\uC2EC(critical) \uD56D\uBAA9 \uBBF8\uD574\uACB0: ${unresolved.join(", ")}`);
   }
   const floor = deterministicFloor(ambiguityFromInterview(state));
   const capped = Math.min(state.readiness.score, 1 - floor);
   if (capped < state.readiness.threshold) {
-    reasons.push(`readiness ${capped.toFixed(2)} (floor-capped) below threshold ${state.readiness.threshold}`);
+    reasons.push(`\uC900\uBE44\uB3C4 ${capped.toFixed(2)}(\uBAA8\uD638\uC131 \uD558\uD55C \uC801\uC6A9) < \uC784\uACC4\uAC12 ${state.readiness.threshold}`);
   }
   return gate(reasons);
 }
@@ -20604,10 +20622,10 @@ function acceptanceTestable(ac) {
   const lower = ac.statement.toLowerCase();
   const vague = VAGUE_TERMS.filter((t2) => new RegExp(`\\b${escapeRegex(t2)}\\b`).test(lower));
   if (vague.length > 0)
-    reasons.push(`vague term(s): ${[...new Set(vague)].join(", ")}`);
+    reasons.push(`\uBAA8\uD638\uD55C \uD45C\uD604(vague term): ${[...new Set(vague)].join(", ")}`);
   const hasEvidence = (ac.evidence_required?.length ?? 0) > 0;
   if (!OBSERVABLE.test(ac.statement) && !hasEvidence)
-    reasons.push("no observable/measurable predicate found");
+    reasons.push("\uAD00\uCC30\xB7\uCE21\uC815 \uAC00\uB2A5\uD55C \uC644\uB8CC \uC870\uAC74 \uC5C6\uC74C(no observable/measurable predicate)");
   return gate(reasons);
 }
 function isGrounded(u3) {
@@ -20627,7 +20645,7 @@ function resolvabilityBlockers(unverified, acceptanceIds) {
         continue;
       blockers.push({
         item: u3.item,
-        reason: u3.resolvability === "agent_resolvable" ? "declared agent_resolvable but parked (resolve it, do not park)" : "references an owned acceptance criterion but is unverified",
+        reason: u3.resolvability === "agent_resolvable" ? "\uC5D0\uC774\uC804\uD2B8\uAC00 \uD574\uACB0 \uAC00\uB2A5\uD558\uB2E4\uACE0 \uC120\uC5B8\uD574 \uB193\uACE0 \uBC29\uCE58\uD568 \u2014 \uBC29\uCE58\uD558\uC9C0 \uB9D0\uACE0 \uC9C0\uAE08 \uD574\uACB0\uD558\uB77C" : "\uC774 \uC791\uC5C5\uC774 \uCC45\uC784\uC9C4 \uC644\uB8CC \uC870\uAC74\uC744 \uAC00\uB9AC\uD0A4\uB294\uB370 \uC544\uC9C1 \uAC80\uC99D\uB418\uC9C0 \uC54A\uC74C",
         kind: "agent_resolvable",
         userDecision: false
       });
@@ -20636,9 +20654,10 @@ function resolvabilityBlockers(unverified, acceptanceIds) {
     if (u3.resolvability === "blocked_external" || u3.resolvability === "accepted_tradeoff") {
       if (grounded)
         continue;
+      const kindKo = u3.resolvability === "blocked_external" ? "\uC678\uBD80 \uC694\uC778 \uCC28\uB2E8" : "\uAC10\uC218\uD55C \uC808\uCDA9";
       blockers.push({
         item: u3.item,
-        reason: `declared ${u3.resolvability} without grounding (ungrounded residual claim)`,
+        reason: `${kindKo} \uC794\uC5EC\uC778\uB370 \uADFC\uAC70\uAC00 \uC5C6\uC74C(\uBBF8\uADFC\uAC70 \uC794\uC5EC \uC8FC\uC7A5)`,
         kind: "blocked_external",
         userDecision: false
       });
@@ -20649,7 +20668,7 @@ function resolvabilityBlockers(unverified, acceptanceIds) {
         continue;
       blockers.push({
         item: u3.item,
-        reason: "declared user_decision without a recorded decision pointer (surface for user ok)",
+        reason: "\uC0AC\uC6A9\uC790 \uACB0\uC815\uC774 \uD544\uC694\uD55C \uC0AC\uC548\uC778\uB370 \uACB0\uC815 \uAE30\uB85D\uC774 \uC5C6\uC74C(\uC0AC\uC6A9\uC790 \uC2B9\uC778\uC744 \uBC1B\uC544\uC57C \uD568)",
         kind: "user_decision",
         userDecision: true
       });
@@ -20670,10 +20689,10 @@ function riskRecordBlockers(records, acceptanceIds) {
   return resolvabilityBlockers(asUnverified, acceptanceIds);
 }
 function passCloseResidualBlockers(completion, acceptanceIds) {
-  const label = (b2, surface) => b2.userDecision ? `${surface} deferred_needs_user_ok \u2014 ${b2.item}: ${b2.reason}` : `${surface} blocks pass-close \u2014 ${b2.item}: ${b2.reason}`;
+  const label = (b2, surface) => b2.userDecision ? `${surface} \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uB300\uAE30(\uC0AC\uC6A9\uC790 \uACB0\uC815 \uD544\uC694) \u2014 ${b2.item}: ${b2.reason}` : `${surface} pass-close \uCC28\uB2E8(\uD1B5\uACFC-\uC885\uB8CC \uCC28\uB2E8) \u2014 ${b2.item}: ${b2.reason}`;
   return [
-    ...resolvabilityBlockers(completion.unverified, acceptanceIds).map((b2) => label(b2, "residual")),
-    ...riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b2) => label(b2, "residual-risk record"))
+    ...resolvabilityBlockers(completion.unverified, acceptanceIds).map((b2) => label(b2, "\uC794\uC5EC(residual)")),
+    ...riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b2) => label(b2, "\uC794\uC5EC \uC704\uD5D8 \uAE30\uB85D(residual-risk record)"))
   ];
 }
 var STATIC_SCAN_KINDS = new Set([
@@ -20739,18 +20758,18 @@ function completionGate(item, completion) {
         dupes.add(id);
       seen.add(id);
     }
-    reasons.push(`duplicate criterion_id(s): ${[...dupes].join(", ")}`);
+    reasons.push(`\uC911\uBCF5\uB41C \uC644\uB8CC \uC870\uAC74 id(duplicate): ${[...dupes].join(", ")}`);
   }
   const missing = expected.filter((id) => !reportedSet.has(id));
   if (missing.length > 0)
-    reasons.push(`missing criteria: ${missing.join(", ")}`);
+    reasons.push(`\uB204\uB77D\uB41C \uC644\uB8CC \uC870\uAC74(missing): ${missing.join(", ")}`);
   const extra = [...reportedSet].filter((id) => !expectedSet.has(id));
   if (extra.length > 0)
-    reasons.push(`extra criteria not in work item: ${extra.join(", ")}`);
+    reasons.push(`\uC791\uC5C5 \uD56D\uBAA9\uC5D0 \uC5C6\uB294 \uCD08\uACFC \uC644\uB8CC \uC870\uAC74(extra): ${extra.join(", ")}`);
   if (completion.final_verdict === "pass") {
     const notPass = completion.acceptance.filter((a2) => a2.verdict !== "pass").map((a2) => a2.criterion_id);
     if (notPass.length > 0) {
-      reasons.push(`final_verdict=pass but not-pass criteria: ${[...new Set(notPass)].join(", ")}`);
+      reasons.push(`\uCD5C\uC885 \uD310\uC815\uC740 pass\uC778\uB370 \uD1B5\uACFC\uD558\uC9C0 \uBABB\uD55C \uC644\uB8CC \uC870\uAC74\uC774 \uC788\uC74C: ${[...new Set(notPass)].join(", ")}`);
     }
   }
   return gate(reasons);
@@ -20762,7 +20781,7 @@ function completionEvidenceGate(completion) {
   const hasRealCriterionEvidence = completion.acceptance.some((a2) => a2.evidence.some((e2) => e2.kind !== "note") || a2.evidence_records.length > 0);
   if (!ranCommand && !hasRealCriterionEvidence) {
     return gate([
-      "final_verdict=pass with no runnable verification evidence (ack/approval is not verification)"
+      "\uCD5C\uC885 \uD310\uC815\uC740 pass\uC778\uB370 \uC2E4\uD589 \uAC00\uB2A5\uD55C \uAC80\uC99D \uC99D\uAC70\uAC00 \uC5C6\uC74C \u2014 \uC2B9\uC778/\uD655\uC778(ack/approval)\uC740 \uAC80\uC99D\uC774 \uC544\uB2C8\uB2E4"
     ]);
   }
   return gate([]);
@@ -20776,7 +20795,7 @@ function nonPassTerminationGate(completion) {
   if (completion.non_pass_status)
     return gate([]);
   return gate([
-    `non-pass completion parks in-scope criterion/criteria at unverified/fail without an honest partial/blocked declaration (non_pass_status): ${parked.map((a2) => a2.criterion_id).join(", ")} \u2014 resolve them or declare non_pass_status{state,reason,grounding}`
+    `\uBE44-\uD1B5\uACFC \uC644\uB8CC\uAC00 \uBC94\uC704 \uC548 \uC644\uB8CC \uC870\uAC74\uC744 \uC815\uC9C1\uD55C \uBD80\uBD84\uC644\uB8CC/\uCC28\uB2E8 \uC120\uC5B8(\uC0C1\uD0DC\xB7\uC774\uC720\xB7\uADFC\uAC70) \uC5C6\uC774 \uBBF8\uAC80\uC99D/\uC2E4\uD328 \uC0C1\uD0DC\uB85C \uBC29\uCE58\uD568: ${parked.map((a2) => a2.criterion_id).join(", ")} \u2014 \uD574\uACB0\uD558\uAC70\uB098, \uC815\uC9C1\uD55C \uBD80\uBD84\uC644\uB8CC/\uCC28\uB2E8 \uC120\uC5B8(\uC0C1\uD0DC\xB7\uC774\uC720\xB7\uADFC\uAC70)\uC744 \uB0A8\uACA8\uB77C`
   ]);
 }
 function convergenceGate(c3) {
@@ -20784,20 +20803,20 @@ function convergenceGate(c3) {
   const maxScore = Math.max(...c3.versions.map((v2) => v2.score));
   const selected = c3.versions.find((v2) => v2.version === c3.selected_version);
   if (!selected) {
-    reasons.push(`selected_version ${c3.selected_version} not present in versions`);
+    reasons.push(`\uC120\uD0DD\uB41C \uBC84\uC804 ${c3.selected_version}\uC774(\uAC00) \uD6C4\uBCF4 \uBAA9\uB85D\uC5D0 \uC5C6\uC74C`);
   } else if (selected.score !== maxScore) {
-    reasons.push(`selected_version is not argmax (selected ${selected.score} < max ${maxScore})`);
+    reasons.push(`\uC120\uD0DD\uB41C \uBC84\uC804\uC774 \uCD5C\uACE0 \uC810\uC218 \uD6C4\uBCF4\uAC00 \uC544\uB2D8(\uC120\uD0DD ${selected.score} < \uCD5C\uACE0 ${maxScore})`);
   }
   const openComputed = c3.decision_ledger.filter((e2) => e2.admissible && e2.status === "deferred").length;
   if (c3.open_admissible_count !== openComputed) {
-    reasons.push(`open_admissible_count recorded ${c3.open_admissible_count} != computed ${openComputed}`);
+    reasons.push(`\uBBF8\uD574\uACB0 \uBC18\uB860 \uC218 \uAE30\uB85D\uAC12 ${c3.open_admissible_count} != \uACC4\uC0B0\uAC12 ${openComputed}`);
   }
   const expectedConverged = c3.gate.completion_gate === "pass" && openComputed === 0;
   if (c3.gate.converged !== expectedConverged) {
-    reasons.push(`gate.converged recorded ${c3.gate.converged} != expected ${expectedConverged} (completion \u2227 no-open-admissible)`);
+    reasons.push(`\uC218\uB834 \uD310\uC815 \uAE30\uB85D\uAC12 ${c3.gate.converged} != \uAE30\uB300\uAC12 ${expectedConverged}(\uC644\uB8CC \uD1B5\uACFC \u2227 \uBBF8\uD574\uACB0 \uBC18\uB860 0)`);
   }
   if (!expectedConverged) {
-    reasons.push("not converged: completion_gate != pass or open admissible objections remain");
+    reasons.push("\uC218\uB834 \uC548 \uB428: \uC644\uB8CC \uAC8C\uC774\uD2B8\uAC00 \uD1B5\uACFC\uAC00 \uC544\uB2C8\uAC70\uB098, \uBBF8\uD574\uACB0 \uBC18\uB860\uC774 \uB0A8\uC544 \uC788\uC74C");
   }
   return gate(reasons);
 }
@@ -20814,16 +20833,16 @@ function knowledgeUpdateGate(t2, d2) {
   const reasons = [];
   const recorded = d2.decisions + d2.glossary_terms + d2.patterns + d2.learnings;
   if (!knowledgeTriggerFired(t2) && recorded > 0) {
-    reasons.push("durable content recorded but no trigger declared (over-recording: noise)");
+    reasons.push("\uC120\uC5B8\uB41C \uAE30\uB85D \uACC4\uAE30 \uC5C6\uC774 \uC9C0\uC18D \uC9C0\uC2DD\uC774 \uAE30\uB85D\uB428 \u2014 \uACFC\uC789\uAE30\uB85D \uB178\uC774\uC988(over-recording)");
   }
   if (t2.adr_worthy_decision && d2.decisions === 0) {
-    reasons.push("adr_worthy_decision trigger fired but no decision/ADR recorded (under-recording)");
+    reasons.push("ADR\uAC10 \uACB0\uC815 \uACC4\uAE30\uAC00 \uCF1C\uC84C\uB294\uB370 \uAE30\uB85D\uB41C \uACB0\uC815/ADR\uC774 \uC5C6\uC74C \u2014 \uB204\uB77D(under-recording)");
   }
   if (t2.new_agreed_term && d2.glossary_terms === 0) {
-    reasons.push("new_agreed_term trigger fired but no glossary term added (under-recording)");
+    reasons.push("\uC0C8 \uD569\uC758 \uC6A9\uC5B4 \uACC4\uAE30\uAC00 \uCF1C\uC84C\uB294\uB370 \uCD94\uAC00\uB41C \uC6A9\uC5B4\uC9D1 \uD56D\uBAA9\uC774 \uC5C6\uC74C \u2014 \uB204\uB77D(under-recording)");
   }
   if (t2.repeated_pattern && d2.patterns + d2.learnings === 0) {
-    reasons.push("repeated_pattern trigger fired but no pattern/learning recorded (under-recording)");
+    reasons.push("\uBC18\uBCF5 \uD328\uD134 \uACC4\uAE30\uAC00 \uCF1C\uC84C\uB294\uB370 \uAE30\uB85D\uB41C \uD328\uD134/\uD559\uC2B5\uC774 \uC5C6\uC74C \u2014 \uB204\uB77D(under-recording)");
   }
   return gate(reasons);
 }
@@ -20857,22 +20876,22 @@ function intentDriftGate(a2) {
   const intentGoal = a2.intent.goal.trim();
   const intentAcIds = idSet(a2.intent.acceptance_criteria);
   if (a2.workItem.goal.trim() !== intentGoal) {
-    advisories.push("H1: work-item goal diverges from intent goal (re-statement or drift \u2014 review)");
+    advisories.push("H1: \uC791\uC5C5 \uD56D\uBAA9 \uBAA9\uD45C\uAC00 \uC6D0 \uC758\uB3C4\uC758 \uBAA9\uD45C\uC640 \uC5B4\uAE0B\uB0A8(\uC7AC\uAE30\uC220\uC774\uAC70\uB098 \uD45C\uB958 \u2014 \uAC80\uD1A0 \uD544\uC694)");
   }
   if (a2.workItem.source_request.trim() !== a2.intent.source_request.trim()) {
-    advisories.push("H1: work-item source_request diverges from intent (review)");
+    advisories.push("H1: \uC791\uC5C5 \uD56D\uBAA9\uC758 \uC6D0 \uC694\uCCAD\uC774 \uC6D0 \uC758\uB3C4\uC640 \uC5B4\uAE0B\uB0A8(\uAC80\uD1A0 \uD544\uC694)");
   }
   const wiAcIds = idSet(a2.workItem.acceptance_criteria);
   const wiAdded = missingFrom(wiAcIds, intentAcIds);
   if (wiAdded.length > 0) {
-    reasons.push(`H1: work-item AC id(s) not in intent (scope grow): ${wiAdded.join(", ")}`);
+    reasons.push(`H1: \uC6D0 \uC758\uB3C4\uC5D0 \uC5C6\uB294 \uC791\uC5C5 \uD56D\uBAA9 \uC644\uB8CC \uC870\uAC74 id(scope grow): ${wiAdded.join(", ")}`);
   }
   const wiDropped = missingFrom(intentAcIds, wiAcIds);
   if (wiDropped.length > 0) {
-    reasons.push(`H1: intent AC id(s) missing from work-item (scope shrink): ${wiDropped.join(", ")}`);
+    reasons.push(`H1: \uC791\uC5C5 \uD56D\uBAA9\uC5D0\uC11C \uBE60\uC9C4 \uC6D0 \uC758\uB3C4 \uC644\uB8CC \uC870\uAC74 id(scope shrink): ${wiDropped.join(", ")}`);
   }
   if (a2.graph.root_goal.trim() !== intentGoal) {
-    advisories.push("H2: autopilot root_goal diverges from intent goal (re-statement or drift \u2014 review)");
+    advisories.push("H2: autopilot \uCD5C\uC0C1\uC704 \uBAA9\uD45C\uAC00 \uC6D0 \uC758\uB3C4\uC758 \uBAA9\uD45C\uC640 \uC5B4\uAE0B\uB0A8(\uC7AC\uAE30\uC220\uC774\uAC70\uB098 \uD45C\uB958 \u2014 \uAC80\uD1A0 \uD544\uC694)");
   }
   const covered = new Set;
   for (const node of a2.graph.nodes) {
@@ -20881,21 +20900,21 @@ function intentDriftGate(a2) {
   }
   const uncovered = missingFrom(intentAcIds, covered);
   if (uncovered.length > 0) {
-    reasons.push(`H2: intent AC id(s) addressed by no node (scope shrink): ${uncovered.join(", ")}`);
+    reasons.push(`H2: \uC5B4\uB5A4 \uB178\uB4DC\uB3C4 \uB2E4\uB8E8\uC9C0 \uC54A\uB294 \uC6D0 \uC758\uB3C4 \uC644\uB8CC \uC870\uAC74 id(scope shrink): ${uncovered.join(", ")}`);
   }
   const invented = missingFrom(covered, intentAcIds);
   if (invented.length > 0) {
-    reasons.push(`H2: node acceptance_refs id(s) not in intent (scope grow): ${invented.join(", ")}`);
+    reasons.push(`H2: \uC6D0 \uC758\uB3C4\uC5D0 \uC5C6\uB294 \uB178\uB4DC \uC644\uB8CC \uC870\uAC74 \uCC38\uC870 id(scope grow): ${invented.join(", ")}`);
   }
   if (a2.completion && a2.completion.final_verdict !== "pass") {
     const compIds = new Set(a2.completion.acceptance.map((c3) => c3.criterion_id));
     const compAdded = missingFrom(compIds, intentAcIds);
     if (compAdded.length > 0) {
-      reasons.push(`H3: completion criterion_id(s) not in intent (scope grow): ${compAdded.join(", ")}`);
+      reasons.push(`H3: \uC6D0 \uC758\uB3C4\uC5D0 \uC5C6\uB294 \uC644\uB8CC\uBCF8 \uC644\uB8CC \uC870\uAC74 id(scope grow): ${compAdded.join(", ")}`);
     }
     const compDropped = missingFrom(intentAcIds, compIds);
     if (compDropped.length > 0) {
-      reasons.push(`H3: intent AC id(s) missing from completion (scope shrink): ${compDropped.join(", ")}`);
+      reasons.push(`H3: \uC644\uB8CC\uBCF8\uC5D0\uC11C \uBE60\uC9C4 \uC6D0 \uC758\uB3C4 \uC644\uB8CC \uC870\uAC74 id(scope shrink): ${compDropped.join(", ")}`);
     }
   }
   return { ...gate(reasons), advisories };
@@ -20915,15 +20934,15 @@ function directionForkGate(carrier, purposeCheck) {
   }
   const purposeOk = purposeChanged && hasEvidence(carrier.purpose_change);
   if (!purposeOk) {
-    reasons.push(purposeConserved ? "purpose_change: not corroborated \u2014 the intent AC id-set is conserved (no purpose change)" : "purpose_change: missing (present:false or empty basis)");
+    reasons.push(purposeConserved ? "purpose_change: \uB4B7\uBC1B\uCE68 \uC548 \uB428 \u2014 \uC758\uB3C4 AC id \uC9D1\uD569\uC774 \uADF8\uB300\uB85C(conserved)\uB77C \uBAA9\uC801 \uBCC0\uACBD\uC774 \uC544\uB2D8" : "purpose_change: \uBBF8\uCDA9\uC871(present:false \uB610\uB294 \uADFC\uAC70 \uBE44\uC5B4 \uC788\uC74C)");
   }
   const advantageOk = carrier.no_clear_advantage.present && hasEvidence(carrier.no_clear_advantage);
   if (!advantageOk) {
-    reasons.push("no_clear_advantage: missing (present:false or empty basis)");
+    reasons.push("no_clear_advantage: \uBBF8\uCDA9\uC871(present:false \uB610\uB294 \uADFC\uAC70 \uBE44\uC5B4 \uC788\uC74C)");
   }
   const tieOk = carrier.intent_cannot_break_tie.present && hasEvidence(carrier.intent_cannot_break_tie);
   if (!tieOk) {
-    reasons.push("intent_cannot_break_tie: missing (present:false or empty basis)");
+    reasons.push("intent_cannot_break_tie: \uBBF8\uCDA9\uC871(present:false \uB610\uB294 \uADFC\uAC70 \uBE44\uC5B4 \uC788\uC74C)");
   }
   return {
     ...gate(reasons),
@@ -20945,10 +20964,10 @@ function interfaceBaselineDriftGate(baseline, current) {
   const removed = baseline.filter((b2) => !current.includes(b2));
   const reasons = [];
   if (added.length > 0) {
-    reasons.push(`interface/scope added vs frozen baseline (unconsented grow): ${added.join(", ")}`);
+    reasons.push(`\uACE0\uC815 \uAE30\uC900\uC120 \uB300\uBE44 \uC778\uD130\uD398\uC774\uC2A4/\uBC94\uC704 \uCD94\uAC00\uB428 \u2014 \uBBF8\uC2B9\uC778 \uD655\uC7A5(grow): ${added.join(", ")}`);
   }
   if (removed.length > 0) {
-    reasons.push(`interface/scope removed vs frozen baseline (unconsented shrink): ${removed.join(", ")}`);
+    reasons.push(`\uACE0\uC815 \uAE30\uC900\uC120 \uB300\uBE44 \uC778\uD130\uD398\uC774\uC2A4/\uBC94\uC704 \uC81C\uAC70\uB428 \u2014 \uBBF8\uC2B9\uC778 \uCD95\uC18C(shrink): ${removed.join(", ")}`);
   }
   return gate(reasons);
 }
@@ -20958,7 +20977,7 @@ function landGate(status, finalVerdict, uncommittedChangedFiles) {
   if (uncommittedChangedFiles.length === 0)
     return gate([]);
   return gate([
-    `final_verdict=pass and status=done but changed_files remain uncommitted in git (verified but not landed): ${uncommittedChangedFiles.join(", ")} \u2014 land them (commit) before terminating, or close blocked`
+    `\uCD5C\uC885 \uD310\uC815 pass\uC774\uACE0 \uC0C1\uD0DC done\uC778\uB370 changed_files\uAC00 git\uC5D0 \uCEE4\uBC0B\uB418\uC9C0 \uC54A\uACE0 \uB0A8\uC544 \uC788\uC74C(uncommitted) \u2014 \uAC80\uC99D\uD588\uC9C0\uB9CC \uBC18\uC601 \uC548 \uB428(verified but not landed): ${uncommittedChangedFiles.join(", ")} \u2014 \uC885\uB8CC \uC804\uC5D0 \uCEE4\uBC0B\uD574 \uBC18\uC601\uD558\uAC70\uB098, blocked\uB85C \uB2EB\uC544\uB77C`
   ]);
 }
 
@@ -39753,12 +39772,12 @@ function assertSelectedPresentationContract(selected, opaqueVocab = []) {
     }, opaqueVocab);
     for (const v2 of verdict2.violations) {
       if (ROUND_SURFACE_FIELDS.has(v2.field)) {
-        lines.push(`  - selected[${i2}] "${q2.text.slice(0, 80)}" ${v2.field}: ${v2.reason}`);
+        lines.push(`  - ${i2 + 1}\uBC88\uC9F8 \uC9C8\uBB38 "${q2.text.slice(0, 80)}": ${v2.reason}`);
       }
     }
   });
   if (lines.length > 0) {
-    throw new Error(`question round rejected \u2014 user-reaching selected question(s) violate the presentation contract; not persisted:
+    throw new Error(`\uC774\uBC88 \uC9C8\uBB38\uB4E4\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694 \u2014 \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBCF4\uC5EC\uC904 \uC9C8\uBB38\uC774 \uAC16\uCDB0\uC57C \uD560 \uC548\uB0B4(\uC65C \uBB3B\uB294\uC9C0\xB7\uC26C\uC6B4 \uB9D0 \uC124\uBA85)\uB97C \uC544\uC9C1 \uAC16\uCD94\uC9C0 \uBABB\uD588\uC5B4\uC694:
 ${lines.join(`
 `)}`);
   }
@@ -39816,7 +39835,7 @@ function validateSplitItems(items) {
     }
     for (const ac of p.data.acceptance_criteria) {
       if (isPlaceholderStatement(ac.statement)) {
-        reasons.push(`\uBD84\uD560 \uD56D\uBAA9 ${i2 + 1}\uC758 \uC644\uB8CC \uC870\uAC74\uC774 placeholder/\uBAA8\uD638\uD568\uC785\uB2C8\uB2E4: "${ac.statement}" \u2014 \uAD00\uCC30 \uAC00\uB2A5\uD55C \uAE30\uC900\uC73C\uB85C \uB300\uCCB4\uD558\uC138\uC694`);
+        reasons.push(`\uBD84\uD560 \uD56D\uBAA9 ${i2 + 1}\uC758 \uC644\uB8CC \uC870\uAC74\uC774 \uC544\uC9C1 \uB0B4\uC6A9 \uC5C6\uB294 \uC784\uC2DC \uBB38\uAD6C\uC608\uC694: "${ac.statement}" \u2014 \uB208\uC73C\uB85C \uD655\uC778\uD560 \uC218 \uC788\uB294 \uC2E4\uC81C \uAE30\uC900\uC73C\uB85C \uBC14\uAFD4 \uC8FC\uC138\uC694`);
       }
     }
     parsed.push(p.data);
@@ -39828,11 +39847,11 @@ function validateSplitItems(items) {
 function proposeBacklogSplit(doc, items) {
   const reasons = [];
   if (doc.feature.trim().length === 0)
-    reasons.push("design doc\uAC00 \uBBF8\uD655\uC815\uC785\uB2C8\uB2E4: \uAE30\uB2A5 \uC774\uB984\uC774 \uBE44\uC5B4 \uC788\uC74C");
+    reasons.push("\uC124\uACC4 \uBB38\uC11C\uAC00 \uC544\uC9C1 \uD655\uC815\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694: \uAE30\uB2A5 \uC774\uB984\uC774 \uBE44\uC5B4 \uC788\uC5B4\uC694");
   if (doc.summary.trim().length === 0)
-    reasons.push("design doc\uAC00 \uBBF8\uD655\uC815\uC785\uB2C8\uB2E4: \uC694\uC57D\uC774 \uBE44\uC5B4 \uC788\uC74C");
+    reasons.push("\uC124\uACC4 \uBB38\uC11C\uAC00 \uC544\uC9C1 \uD655\uC815\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694: \uC694\uC57D\uC774 \uBE44\uC5B4 \uC788\uC5B4\uC694");
   if (doc.acceptanceCriteria.length === 0)
-    reasons.push("design doc\uAC00 \uBBF8\uD655\uC815\uC785\uB2C8\uB2E4: \uC644\uB8CC \uC870\uAC74\uC774 \uC5C6\uC74C \u2014 \uBE48 \uBC31\uB85C\uADF8\uB294 \uBD84\uD560\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4");
+    reasons.push("\uC124\uACC4 \uBB38\uC11C\uAC00 \uC544\uC9C1 \uD655\uC815\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694: \uC644\uB8CC \uC870\uAC74\uC774 \uC5C6\uC5B4\uC694 \u2014 \uB0B4\uC6A9\uC774 \uBE48 \uC0C1\uD0DC\uB85C\uB294 \uB098\uB20C \uC218 \uC5C6\uC5B4\uC694");
   const itemCheck = validateSplitItems(items);
   if (!itemCheck.ok)
     reasons.push(...itemCheck.reasons);
@@ -39850,7 +39869,7 @@ async function materializeBacklogSplit(deps) {
     return {
       status: "rejected",
       reasons: [
-        "\uC2B9\uC778 \uC5C6\uC74C: \uBB3C\uD654\uC5D0\uB294 \uC0AC\uC6A9\uC790 \uC6D0\uBB38 \uC2B9\uC778(statement)\uC774 \uD544\uC694\uD569\uB2C8\uB2E4 \u2014 bare \uD638\uCD9C\uC740 \uC2B9\uC778\uC774 \uC544\uB2D9\uB2C8\uB2E4"
+        "\uC2B9\uC778\uC774 \uC5C6\uC5B4\uC694: \uBB3C\uD654(\uC2B9\uC778\uB41C \uC81C\uC548\uC744 \uC2E4\uC81C \uC791\uC5C5 \uD56D\uBAA9\uC73C\uB85C \uB9CC\uB4DC\uB294 \uAC83)\uD558\uB824\uBA74 \uC0AC\uC6A9\uC790\uAC00 \uC9C1\uC811 \uC4F4 \uC2B9\uC778 \uBB38\uC7A5\uC774 \uD544\uC694\uD574\uC694 \u2014 \uBA85\uB839\uB9CC \uC2E4\uD589\uD558\uB294 \uAC83\uC73C\uB85C\uB294 \uC2B9\uC778\uC73C\uB85C \uC778\uC815\uB418\uC9C0 \uC54A\uC544\uC694"
       ]
     };
   }
@@ -39858,7 +39877,7 @@ async function materializeBacklogSplit(deps) {
   if (split === null) {
     return {
       status: "rejected",
-      reasons: [`\uBD84\uD560\uC548\uC774 \uC5C6\uC2B5\uB2C8\uB2E4: ${parentId}\uC5D0 \uB300\uD55C \uC81C\uC548\uC744 \uBA3C\uC800 propose \uD558\uC138\uC694`]
+      reasons: [`\uB098\uB20C \uC81C\uC548\uC774 \uC544\uC9C1 \uC5C6\uC5B4\uC694: ${parentId}\uC5D0 \uB300\uD55C \uBD84\uD560 \uC81C\uC548\uC744 \uBA3C\uC800 \uB9CC\uB4E4\uC5B4 \uC8FC\uC138\uC694`]
     };
   }
   const itemCheck = validateSplitItems(split.items);
@@ -40294,19 +40313,19 @@ var finalizeCmd = defineCommand({
         payload: parsed.data
       });
       if (result2.status === "not_ready") {
-        writeError("interview is not ready; cannot finalize:");
+        writeError("\uC778\uD130\uBDF0\uAC00 \uC544\uC9C1 \uC900\uBE44\uB418\uC9C0 \uC54A\uC544 \uD655\uC815(finalize)\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4:");
         for (const r3 of result2.gate.reasons)
           writeError(`  - ${r3}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result2.status === "not_confirmed") {
-        writeError("readiness gate passed (1\uCC28) but the user has not confirmed the intent (2\uCC28 \uAC8C\uC774\uD2B8): " + "capture the user confirmation (user_confirmation.confirmed=true with their statement) and re-run finalize");
+        writeError("1\uCC28(\uC2DC\uC2A4\uD15C \uC900\uBE44) \uAC8C\uC774\uD2B8\uB294 \uD1B5\uACFC\uD588\uC9C0\uB9CC 2\uCC28(\uC0AC\uC6A9\uC790 \uD655\uC778) \uAC8C\uC774\uD2B8\uAC00 \uC544\uC9C1 \uB0A8\uC558\uC2B5\uB2C8\uB2E4: " + "\uC0AC\uC6A9\uC790 \uD655\uC778(\uD655\uC815 \uD45C\uC2DC\uC640 \uADF8 \uC6D0\uBB38)\uC744 \uAE30\uB85D\uD55C \uB4A4 finalize\uB97C \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694");
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result2.status === "blocked_by_dissent") {
-        writeError("intent-dissent opponent flagged a critical dimension: the opponent found a " + "stronger/more-accurate reading of the intent. Review each dissent, then acknowledge it " + "(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) and re-run finalize:");
+        writeError("\uC758\uB3C4 \uBC18\uB860\uC790(\uC758\uB3C4\uB97C \uB354 \uC815\uD655\uD788 \uC77D\uC5C8\uB294\uC9C0 \uBC18\uBC15\uD558\uB294 \uAC80\uD1A0\uC790)\uAC00 \uD575\uC2EC \uD56D\uBAA9 \uD558\uB098\uB97C \uBB38\uC81C\uB85C \uC9C0\uBAA9\uD588\uC2B5\uB2C8\uB2E4 \u2014 " + "\uC758\uB3C4\uB97C \uB354 \uAC15\uD558\uAC70\uB098 \uC815\uD655\uD558\uAC8C \uC77D\uC740 \uBC18\uB860\uC785\uB2C8\uB2E4. \uAC01 \uBC18\uB860\uC744 \uAC80\uD1A0\uD55C \uB4A4 \uD655\uC778(acknowledge)\uD558\uACE0 " + "(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) finalize\uB97C \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694:");
         for (const b2 of result2.blocking)
           writeError(`  - [${b2.dimension}] ${b2.text}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -40439,7 +40458,7 @@ var premortemCmd = defineCommand({
     try {
       const result2 = await promotePremortem(repoRoot, args.workItem, parsed.data);
       if (result2.unpromoted.length > 0) {
-        writeError(`${result2.unpromoted.length} critical pre-mortem item(s) require promotion (\xA75) but are promoted_to:'none' \u2014 promote each to ac | out_of_scope | user_owned_decision and re-run:`);
+        writeError(`\uB418\uB3CC\uB9B4 \uC218 \uC5C6\uAC70\uB098 \uD30C\uAE09\uC774 \uD070 \uC0AC\uC804 \uBD80\uAC80(pre-mortem) \uD56D\uBAA9 ${result2.unpromoted.length}\uAC74\uC774 \uBC18\uB4DC\uC2DC \uC5B4\uB518\uAC00\uB85C \uBC30\uC815\uB3FC\uC57C \uD558\uB294\uB370 \uC544\uC9C1 \uBC30\uC815\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4 \u2014 \uAC01 \uD56D\uBAA9\uC744 \uC644\uB8CC\uC870\uAC74 | \uBC94\uC704\uBC16 | \uC0AC\uC6A9\uC790\uACB0\uC815 \uC911 \uD558\uB098\uB85C \uBC30\uC815\uD55C \uB4A4 \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694:`);
         for (const item of result2.unpromoted) {
           writeError(`  - [${item.reversibility}/blast:${item.blast_radius}] ${item.scenario}`);
         }
@@ -40511,7 +40530,7 @@ var checkQuestionCmd = defineCommand({
     } else if (verdict2.ok) {
       writeHuman("check-question: ok (presentation contract satisfied)");
     } else {
-      writeError("check-question: REJECTED \u2014 under-contextualized, do not ask as-is:");
+      writeError("check-question: \uAC70\uC808\uB428 \u2014 \uB9E5\uB77D(\uC65C \uBB3B\uB294\uC9C0\xB7\uBB34\uC5C7\uC744 \uC815\uD558\uB294\uC9C0)\uC774 \uBD80\uC871\uD55C \uC9C8\uBB38\uC785\uB2C8\uB2E4. \uC774\uB300\uB85C \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBB3B\uC9C0 \uB9C8\uC138\uC694:");
       for (const v2 of verdict2.violations) {
         writeError(`  - ${v2.field}: ${v2.reason}`);
       }
@@ -40977,7 +40996,7 @@ var finalizeFromDocCmd = defineCommand({
       return;
     }
     if (!args.statement || args.statement.trim().length === 0) {
-      writeError('finalize-from-doc requires --statement "<\uC6D0\uBB38 \uD655\uC815>": the user confirmation is the 2\uCC28 gate half');
+      writeError('finalize-from-doc\uC5D0\uB294 --statement "<\uC6D0\uBB38 \uD655\uC815>"\uC774 \uBC18\uB4DC\uC2DC \uD544\uC694\uD569\uB2C8\uB2E4: \uC774 \uC0AC\uC6A9\uC790 \uD655\uC778\uC774 2\uCC28(\uC0AC\uC6A9\uC790 \uD655\uC778) \uAC8C\uC774\uD2B8\uB97C \uCC44\uC6C1\uB2C8\uB2E4');
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -40989,26 +41008,26 @@ var finalizeFromDocCmd = defineCommand({
         userConfirmation: { confirmed: true, statement: args.statement }
       });
       if (result2.status === "compile_rejected") {
-        writeError("design document did not compile \u2014 fix the compile-input sections and re-run:");
+        writeError("\uC124\uACC4 \uBB38\uC11C\uB97C \uC758\uB3C4(intent)\uB85C \uBCC0\uD658\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4 \u2014 \uBCC0\uD658 \uC785\uB825\uC774 \uB418\uB294 \uC139\uC158\uC744 \uACE0\uCE5C \uB4A4 \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694:");
         for (const r3 of result2.reasons)
           writeError(`  - ${r3}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result2.status === "not_ready") {
-        writeError("interview is not ready; cannot finalize:");
+        writeError("\uC778\uD130\uBDF0\uAC00 \uC544\uC9C1 \uC900\uBE44\uB418\uC9C0 \uC54A\uC544 \uD655\uC815(finalize)\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4:");
         for (const r3 of result2.gate.reasons)
           writeError(`  - ${r3}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result2.status === "not_confirmed") {
-        writeError("readiness gate passed (1\uCC28) but the user confirmation is missing (2\uCC28 \uAC8C\uC774\uD2B8) \u2014 pass --statement");
+        writeError("1\uCC28(\uC2DC\uC2A4\uD15C \uC900\uBE44) \uAC8C\uC774\uD2B8\uB294 \uD1B5\uACFC\uD588\uC73C\uB098 2\uCC28(\uC0AC\uC6A9\uC790 \uD655\uC778) \uAC8C\uC774\uD2B8\uAC00 \uBE44\uC5C8\uC2B5\uB2C8\uB2E4 \u2014 --statement\uB85C \uC0AC\uC6A9\uC790 \uD655\uC778\uC744 \uC804\uB2EC\uD558\uC138\uC694");
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result2.status === "blocked_by_dissent") {
-        writeError("intent-dissent opponent flagged a critical dimension: acknowledge each dissent " + "(ditto deep-interview acknowledge-dissent) and re-run:");
+        writeError("\uC758\uB3C4 \uBC18\uB860\uC790(\uC758\uB3C4 \uD574\uC11D\uC744 \uBC18\uBC15\uD558\uB294 \uAC80\uD1A0\uC790)\uAC00 \uD575\uC2EC \uD56D\uBAA9\uC744 \uC9C0\uBAA9\uD588\uC2B5\uB2C8\uB2E4: \uAC01 \uBC18\uB860\uC744 \uD655\uC778(acknowledge)\uD55C \uB4A4 " + "(ditto deep-interview acknowledge-dissent) \uB2E4\uC2DC \uC2E4\uD589\uD558\uC138\uC694:");
         for (const b2 of result2.blocking)
           writeError(`  - [${b2.dimension}] ${b2.text}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -48971,12 +48990,12 @@ function semanticScanNudge(input) {
   if (input.changedSourceFiles.length === 0)
     return null;
   if (input.observationChangeCount === null) {
-    return `DITTO semantic check: ${input.changedSourceFiles.length} changed source file(s) vs ${input.base} but no current semantic-scan-observation.json. Run \`ditto semantic observe --work-item ${input.workItemId} --base ${input.base}\` to check exported-signature changes.
+    return `DITTO \uC758\uBBF8 \uAC80\uC0AC: ${input.base} \uB300\uBE44 \uBCC0\uACBD\uB41C \uC18C\uC2A4 \uD30C\uC77C ${input.changedSourceFiles.length}\uAC74\uC778\uB370 \uD604\uC7AC semantic-scan-observation.json\uC774 \uC5C6\uC74C. \`ditto semantic observe --work-item ${input.workItemId} --base ${input.base}\`\uB97C \uC2E4\uD589\uD574 \uB0B4\uBCF4\uB0B8 \uC2DC\uADF8\uB2C8\uCC98 \uBCC0\uACBD\uC744 \uC810\uAC80\uD558\uB77C.
 `;
   }
   if (input.observationChangeCount === 0)
     return null;
-  return `DITTO semantic check: ${input.observationChangeCount} observed exported-signature change(s) (semantic-scan-observation.json) not yet resolved. Promote any meaning-breaking change with \`ditto semantic detect\` + \`ditto semantic verdict\`, or declare it intended.
+  return `DITTO \uC758\uBBF8 \uAC80\uC0AC: \uAD00\uCE21\uB41C \uB0B4\uBCF4\uB0B8 \uC2DC\uADF8\uB2C8\uCC98 \uBCC0\uACBD ${input.observationChangeCount}\uAC74(semantic-scan-observation.json)\uC774 \uC544\uC9C1 \uCC98\uB9AC\uB418\uC9C0 \uC54A\uC74C. \uC758\uBBF8\uB97C \uBC14\uAFB8\uB294 \uBCC0\uACBD\uC740 \`ditto semantic detect\` + \`ditto semantic verdict\`\uB85C \uC2B9\uACA9\uD558\uAC70\uB098, \uC758\uB3C4\uB41C \uBCC0\uACBD\uC774\uB77C\uACE0 \uC120\uC5B8\uD558\uB77C.
 `;
 }
 function computeSemanticNudge(repoRoot, workItem2, opts) {
@@ -49019,10 +49038,10 @@ function dialecticForcesContinuation(d2, repoRoot) {
   const reasons = [];
   const verdict2 = d2.synthesizer.verdict;
   if (verdict2 === "reject" || verdict2 === "blocked") {
-    reasons.push(`dialectic ${d2.review_id} verdict=${verdict2}; deliberation not resolved`);
+    reasons.push(`\uC2EC\uC758(dialectic) ${d2.review_id} \uD310\uC815=${verdict2}; \uC2EC\uC758\uAC00 \uD574\uC18C\uB418\uC9C0 \uC54A\uC74C`);
   }
   if (verdict2 === "revise" && d2.round < d2.input.constraints.max_rounds && d2.synthesizer.required_edits.length > 0) {
-    reasons.push(`dialectic ${d2.review_id}: verdict=revise at round ${d2.round}/${d2.input.constraints.max_rounds} with ${d2.synthesizer.required_edits.length} required_edits open \u2014 re-deliberate next round`);
+    reasons.push(`\uC2EC\uC758(dialectic) ${d2.review_id}: \uB77C\uC6B4\uB4DC ${d2.round}/${d2.input.constraints.max_rounds}\uC5D0\uC11C \uD310\uC815=revise, \uC544\uC9C1 \uC5F4\uB9B0 required_edits ${d2.synthesizer.required_edits.length}\uAC74 \u2014 \uB2E4\uC74C \uB77C\uC6B4\uB4DC\uC5D0\uC11C \uC7AC\uC2EC\uC758\uD558\uB77C`);
   }
   const resolved = new Set([
     ...d2.synthesizer.accepted_objections,
@@ -49032,12 +49051,12 @@ function dialecticForcesContinuation(d2, repoRoot) {
     const admissible = obj.maps_to.trim().length > 0 && ADMISSIBLE_SEVERITIES.has(obj.severity);
     const idResolved = obj.id !== undefined && resolved.has(obj.id);
     if (admissible && !resolved.has(obj.claim) && !idResolved) {
-      reasons.push(`dialectic ${d2.review_id}: admissible objection unresolved \u2014 ${obj.claim}`);
+      reasons.push(`\uC2EC\uC758(dialectic) ${d2.review_id}: \uC720\uD6A8\uD55C(admissible) \uBC18\uB860\uC774 \uBBF8\uD574\uACB0 \u2014 ${obj.claim}`);
     }
     if (admissible && repoRoot !== undefined) {
       const anchor = fileAnchorPath(obj.maps_to);
       if (anchor !== undefined && !existsSync11(join73(repoRoot, anchor))) {
-        reasons.push(`dialectic ${d2.review_id}: objection maps_to '${obj.maps_to}' does not resolve to an existing file \u2014 backward-finding oracle unverifiable/stale`);
+        reasons.push(`\uC2EC\uC758(dialectic) ${d2.review_id}: \uBC18\uB860\uC758 maps_to '${obj.maps_to}'\uAC00 \uC874\uC7AC\uD558\uB294 \uD30C\uC77C\uB85C \uD655\uC778\uB418\uC9C0 \uC54A\uC74C(does not resolve) \u2014 backward-finding \uC624\uB77C\uD074\uC774 \uAC80\uC99D \uBD88\uAC00/\uC624\uB798\uB428`);
       }
     }
   }
@@ -49121,7 +49140,7 @@ function autopilotBypassForcesContinuation(workItem2, completion, pilot, complet
   if (!changedCode)
     return [];
   return [
-    `work item ${workItem2.id} changed code but is closing on completion.json alone, without going through autopilot (no real plan was ever run). Non-trivial work should run finalize \u2192 bootstrap \u2192 autopilot drive (ditto autopilot bootstrap ${workItem2.id}, then the autopilot skill). To close without autopilot, run "ditto autopilot exempt ${workItem2.id}" or transition the work item to done/abandoned.`
+    `\uC791\uC5C5 \uD56D\uBAA9 ${workItem2.id}\uC774(\uAC00) \uCF54\uB4DC\uB97C \uBC14\uAFE8\uB294\uB370 autopilot\uC744 \uAC70\uCE58\uC9C0 \uC54A\uACE0 completion.json\uB9CC\uC73C\uB85C \uB2EB\uD788\uB824 \uD568(\uC81C\uB300\uB85C \uB41C \uACC4\uD68D\uC774 \uD55C \uBC88\uB3C4 \uC2E4\uD589\uB418\uC9C0 \uC54A\uC74C). \uBE44\uB2E8\uC21C \uC791\uC5C5\uC740 finalize \u2192 bootstrap \u2192 autopilot drive\uB97C \uAC70\uCCD0\uC57C \uD568(ditto autopilot bootstrap ${workItem2.id} \uC2E4\uD589 \uD6C4 autopilot \uC2A4\uD0AC). autopilot \uC5C6\uC774 \uB2EB\uC73C\uB824\uBA74 "ditto autopilot exempt ${workItem2.id}"\uB97C \uC2E4\uD589\uD558\uAC70\uB098 \uC791\uC5C5 \uD56D\uBAA9\uC744 done/abandoned\uB85C \uC804\uD658\uD558\uB77C.`
   ];
 }
 function acgReviewForcesContinuation(graph) {
@@ -49129,7 +49148,7 @@ function acgReviewForcesContinuation(graph) {
   for (const file of graph.files) {
     if (file.risk === "high" && file.evidence === undefined) {
       const id = file.path ?? file.journey_id ?? "(unidentified)";
-      reasons.push(`acg review: high-risk change without evidence \u2014 ${id} (${file.risk_reason})`);
+      reasons.push(`acg \uB9AC\uBDF0: \uC99D\uAC70 \uC5C6\uB294 \uACE0\uC704\uD5D8 \uBCC0\uACBD(high-risk change without evidence) \u2014 ${id} (${file.risk_reason})`);
     }
   }
   return reasons;
@@ -49139,13 +49158,13 @@ function assuranceSnapshotForcesContinuation(snapshot) {
   for (const r4 of snapshot.results) {
     if (r4.outcome === "fail") {
       const n3 = r4.new_violations ?? r4.violations ?? 0;
-      reasons.push(`fitness: ${r4.function_id} failed \u2014 ${n3} blocking violation(s)`);
+      reasons.push(`fitness: ${r4.function_id} \uC2E4\uD328 \u2014 \uCC28\uB2E8 \uC704\uBC18 ${n3}\uAC74`);
     }
   }
   return reasons;
 }
 function impactForcesContinuation(graph) {
-  return graph.unresolved.map((u6) => `impact: unresolved ${u6.kind} \u2014 ${u6.path} (${u6.reason})`);
+  return graph.unresolved.map((u6) => `impact: unresolved ${u6.kind}(\uBBF8\uD574\uACB0 \uC601\uD5A5) \u2014 ${u6.path} (${u6.reason})`);
 }
 function semanticForcesContinuation(sem) {
   return sem.changes.flatMap((change) => {
@@ -49153,11 +49172,13 @@ function semanticForcesContinuation(sem) {
     const where = `${change.before} \u2192 ${change.after}`;
     if (v2.semantic_safe === "unverified") {
       return [
-        `semantic: meaning compatibility unverified for ${where} \u2014 verify or declare intended`
+        `semantic: \uC758\uBBF8 \uD638\uD658\uC131 \uBBF8\uAC80\uC99D (${where}) \u2014 \uAC80\uC99D\uD558\uAC70\uB098 \uC758\uB3C4\uB41C \uBCC0\uACBD\uC73C\uB85C \uC120\uC5B8\uD558\uB77C`
       ];
     }
     if (v2.semantic_safe === "no" && v2.intended_breaking !== true) {
-      return [`semantic: unintended meaning break ${where} (was: ${change.old_meaning})`];
+      return [
+        `semantic: \uC758\uB3C4\uCE58 \uC54A\uC740 \uC758\uBBF8 \uD30C\uC190 (${where}) \u2014 \uC6D0\uB798 \uC758\uBBF8: ${change.old_meaning}`
+      ];
     }
     return [];
   });
@@ -49171,15 +49192,15 @@ function knowledgeForcesContinuation(graph, carrier) {
   if (!hasTerminalKnowledgeNode || carrier === undefined)
     return [];
   const g4 = knowledgeUpdateGate(carrier.triggers, carrier.delta);
-  return g4.pass ? [] : g4.reasons.map((r4) => `knowledge update \u2014 ${r4}`);
+  return g4.pass ? [] : g4.reasons.map((r4) => `\uC9C0\uC2DD \uC5C5\uB370\uC774\uD2B8(knowledge update) \u2014 ${r4}`);
 }
 function residualResolvabilityForcesContinuation(completion, workItem2) {
   const acceptanceIds = workItem2.acceptance_criteria.map((c5) => c5.id);
-  return resolvabilityBlockers(completion.unverified, acceptanceIds).map((b3) => b3.userDecision ? `residual deferred_needs_user_ok \u2014 ${b3.item}: ${b3.reason}` : `residual blocks pass-close \u2014 ${b3.item}: ${b3.reason}`);
+  return resolvabilityBlockers(completion.unverified, acceptanceIds).map((b3) => b3.userDecision ? `\uC794\uC5EC(residual) \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uB300\uAE30(\uC0AC\uC6A9\uC790 \uACB0\uC815 \uD544\uC694) \u2014 ${b3.item}: ${b3.reason}` : `\uC794\uC5EC(residual) pass-close \uCC28\uB2E8(\uD1B5\uACFC-\uC885\uB8CC \uCC28\uB2E8) \u2014 ${b3.item}: ${b3.reason}`);
 }
 function riskRecordForcesContinuation(completion, workItem2) {
   const acceptanceIds = workItem2.acceptance_criteria.map((c5) => c5.id);
-  return riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b3) => b3.userDecision ? `residual-risk record deferred_needs_user_ok \u2014 ${b3.item}: ${b3.reason}` : `residual-risk record blocks pass-close \u2014 ${b3.item}: ${b3.reason}`);
+  return riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b3) => b3.userDecision ? `\uC794\uC5EC \uC704\uD5D8 \uAE30\uB85D(residual-risk record) \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uB300\uAE30(\uC0AC\uC6A9\uC790 \uACB0\uC815 \uD544\uC694) \u2014 ${b3.item}: ${b3.reason}` : `\uC794\uC5EC \uC704\uD5D8 \uAE30\uB85D(residual-risk record) pass-close \uCC28\uB2E8(\uD1B5\uACFC-\uC885\uB8CC \uCC28\uB2E8) \u2014 ${b3.item}: ${b3.reason}`);
 }
 function decisionConflictForcesContinuation(carrier) {
   if (carrier === undefined)
@@ -49188,8 +49209,8 @@ function decisionConflictForcesContinuation(carrier) {
   const line = (d2) => `${d2.conflict.adr_id} (${d2.conflict.kind}/${d2.conflict.level}) \u2192 ${d2.route}: ${d2.conflict.basis}`;
   const blocks = (d2) => d2.route === "block" || d2.route === "ask_user";
   return {
-    reasons: dispositions.filter(blocks).map((d2) => `decision conflict \u2014 ${line(d2)}`),
-    advisories: dispositions.filter((d2) => !blocks(d2)).map((d2) => `decision conflict (disclosed, agent followed ADR) \u2014 ${line(d2)}`)
+    reasons: dispositions.filter(blocks).map((d2) => `\uC758\uC0AC\uACB0\uC815 \uCDA9\uB3CC(decision conflict) \u2014 ${line(d2)}`),
+    advisories: dispositions.filter((d2) => !blocks(d2)).map((d2) => `decision conflict (disclosed, agent followed ADR) / \uC758\uC0AC\uACB0\uC815 \uCDA9\uB3CC(\uACF5\uAC1C\uB428, \uC5D0\uC774\uC804\uD2B8\uAC00 ADR\uC744 \uB530\uB984) \u2014 ${line(d2)}`)
   };
 }
 function fitnessInputFingerprint(repoRoot) {
@@ -49289,6 +49310,11 @@ async function maybeRecordProcedurePunt(repoRoot, workItemId2, graph) {
     });
   } catch {}
 }
+var ATTESTATION_STATE_GLOSS = {
+  "verified-by-evidence": "\uC99D\uAC70\uB85C \uAC80\uC99D\uB428",
+  "reasoned-honest-partial": "\uC815\uC9C1\uD55C \uBD80\uBD84\uC644\uB8CC(\uADFC\uAC70 \uC788\uC74C)",
+  "blocked-for-user": "\uC0AC\uC6A9\uC790 \uD310\uB2E8 \uD544\uC694(\uCC28\uB2E8)"
+};
 var stopHandler = async (input) => {
   const raw = input.raw ?? {};
   if (raw.stop_hook_active === true)
@@ -49297,7 +49323,7 @@ var stopHandler = async (input) => {
   if (!sessionId)
     return {
       exitCode: 0,
-      stderr: `DITTO Stop completion gate did not run: no session_id was provided, so the completion/convergence gates could not be checked.
+      stderr: `DITTO Stop \uC644\uB8CC \uAC8C\uC774\uD2B8\uAC00 \uC2E4\uD589\uB418\uC9C0 \uC54A\uC74C(did not run): session_id\uAC00 \uC5C6\uC5B4 \uC644\uB8CC/\uC218\uB834 \uAC8C\uC774\uD2B8\uB97C \uAC80\uC0AC\uD560 \uC218 \uC5C6\uC74C.
 `
     };
   const pointer = await new SessionPointerStore(input.repoRoot).get(sessionId);
@@ -49340,7 +49366,7 @@ var stopHandler = async (input) => {
   if (malformed && malformed.status === "malformed") {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: ${malformed.name} is malformed (cannot verify completion). Fix or remove it before stopping.
+      stderr: `DITTO Stop gate: ${malformed.name} \uD30C\uC77C\uC774 malformed(\uD615\uC2DD \uC624\uB958)\uB77C \uC644\uB8CC\uB97C \uAC80\uC99D\uD560 \uC218 \uC5C6\uC74C. \uBA48\uCD94\uAE30 \uC804\uC5D0 \uACE0\uCE58\uAC70\uB098 \uC81C\uAC70\uD558\uB77C.
 `
     };
   }
@@ -49358,10 +49384,10 @@ var stopHandler = async (input) => {
     if (oracleGapPending(workItem2, pilot.data))
       return { exitCode: 0 };
     await maybeRecordProcedurePunt(input.repoRoot, pointer, pilot.data);
-    reasons.push(`autopilot approval is pending on a routine procedure-punt (no intent-conflict / high-risk / oracle-gap decision to yield for) \u2014 force-continuing; approve the plan ("ditto autopilot approve ${workItem2.id}") to stop being re-prompted`);
+    reasons.push(`autopilot \uC2B9\uC778\uC774 \uC77C\uC0C1\uC801 \uC808\uCC28 \uBBF8\uB8E8\uAE30(procedure-punt) \uC0C1\uD0DC\uB85C \uB300\uAE30 \uC911\uC784 \u2014 \uC591\uBCF4\uD560 \uB9CC\uD55C \uACB0\uC815(\uC758\uB3C4 \uCDA9\uB3CC / \uACE0\uC704\uD5D8 / \uC644\uB8CC \uD310\uC815 \uADFC\uAC70 \uACF5\uBC31(oracle-gap))\uC774 \uC5C6\uC74C \u2014 \uACC4\uC18D \uC9C4\uD589\uD568; \uB2E4\uC2DC \uBB3B\uC9C0 \uC54A\uAC8C \uD558\uB824\uBA74 \uACC4\uD68D\uC744 \uC2B9\uC778\uD558\uB77C("ditto autopilot approve ${workItem2.id}")`);
   }
   if (forkGate && forkGate.pass === false) {
-    reasons.push(...forkGate.reasons.map((r4) => `direction fork incomplete \u2014 ${r4}`));
+    reasons.push(...forkGate.reasons.map((r4) => `\uBC29\uD5A5 \uBD84\uAE30(direction fork)\uAC00 \uBD88\uC644\uC804\uD568 \u2014 ${r4}`));
   }
   let completionWouldClose = false;
   if (completion.status === "ok") {
@@ -49384,7 +49410,7 @@ var stopHandler = async (input) => {
       reasons.push(...g4.reasons);
   }
   if (pilot.status === "ok" && autopilotForcesContinuation(pilot.data) && NON_TERMINAL_STATUSES.includes(workItem2.status) && workItem2.autopilot_exempt !== true) {
-    reasons.push("autopilot has runnable node(s); the work item is not complete yet");
+    reasons.push("autopilot\uC5D0 \uC2E4\uD589 \uAC00\uB2A5\uD55C \uB178\uB4DC\uAC00 \uB0A8\uC544 \uC788\uC74C \u2014 \uC791\uC5C5 \uD56D\uBAA9\uC774 \uC544\uC9C1 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC74C");
   }
   reasons.push(...autopilotBypassForcesContinuation(workItem2, completion, pilot, completionWouldClose));
   if (completion.status === "ok" && completionWouldClose) {
@@ -49402,8 +49428,8 @@ var stopHandler = async (input) => {
       ...completion.status === "ok" ? { completion: completion.data } : {}
     });
     if (!d2.pass)
-      reasons.push(...d2.reasons.map((r4) => `intent drift \u2014 ${r4}`));
-    advisories.push(...d2.advisories.map((r4) => `intent drift (advisory) \u2014 ${r4}`));
+      reasons.push(...d2.reasons.map((r4) => `\uC758\uB3C4 \uD45C\uB958(intent drift) \u2014 ${r4}`));
+    advisories.push(...d2.advisories.map((r4) => `\uC758\uB3C4 \uD45C\uB958(intent drift, \uCC38\uACE0) \u2014 ${r4}`));
     await recordIntentDriftMetric(input.repoRoot, pointer, {
       reasons: d2.reasons,
       advisories: d2.advisories
@@ -49431,7 +49457,7 @@ var stopHandler = async (input) => {
   const dc = decisionConflictForcesContinuation(decisionConflicts.status === "ok" ? decisionConflicts.data : undefined);
   reasons.push(...dc.reasons);
   advisories.push(...dc.advisories);
-  const advisoryBlock = advisories.length > 0 ? `DITTO Stop advisory (non-blocking) \u2014 ${advisories.length} item(s):
+  const advisoryBlock = advisories.length > 0 ? `DITTO Stop advisory(\uBE44\uCC28\uB2E8 \uCC38\uACE0) \u2014 ${advisories.length}\uAC74:
 - ${advisories.join(`
 - `)}
 ` : "";
@@ -49440,14 +49466,14 @@ var stopHandler = async (input) => {
     verdict: a4.verdict,
     ...a4.notes !== undefined ? { notes: a4.notes } : {}
   }))) : [];
-  const attestationBlock = attestation.length > 0 ? `DITTO Stop attestation (per-AC) \u2014 ${attestation.length} criterion/criteria:
-${attestation.map((a4) => `- ${a4.criterion_id}: ${a4.state}${a4.basis ? ` \u2014 ${a4.basis}` : ""}`).join(`
+  const attestationBlock = attestation.length > 0 ? `DITTO Stop attestation(\uC644\uB8CC \uC870\uAC74\uBCC4 \uC99D\uAC70 \uD655\uC778) \u2014 \uC644\uB8CC \uC870\uAC74 ${attestation.length}\uAC74:
+${attestation.map((a4) => `- ${a4.criterion_id}: ${a4.state}(${ATTESTATION_STATE_GLOSS[a4.state]})${a4.basis ? ` \u2014 ${a4.basis}` : ""}`).join(`
 `)}
 ` : "";
   if (reasons.length > 0) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: keep going \u2014 ${reasons.length} item(s) remain:
+      stderr: `DITTO Stop gate: \uACC4\uC18D \uC9C4\uD589 \u2014 \uB0A8\uC740 \uD56D\uBAA9 ${reasons.length}\uAC74:
 - ${reasons.join(`
 - `)}
 ${advisoryBlock}${attestationBlock}`
@@ -49456,7 +49482,7 @@ ${advisoryBlock}${attestationBlock}`
   if (completion.status === "absent" && conv.status === "absent" && (pilot.status === "absent" || pilot.status === "ok" && isDegeneratePendingAutopilot(pilot.data)) && NON_TERMINAL_STATUSES.includes(workItem2.status)) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: work item ${workItem2.id} is ${workItem2.status} but has no real verification path (no completion.json / convergence.json, and no autopilot.json with a plan to run). Run /ditto:verify (writes completion.json) or transition the work item to done/abandoned before stopping.
+      stderr: `DITTO Stop gate: \uC791\uC5C5 \uD56D\uBAA9 ${workItem2.id}\uC774(\uAC00) ${workItem2.status} \uC0C1\uD0DC\uC778\uB370 \uC2E4\uC9C8\uC801 \uAC80\uC99D \uACBD\uB85C\uAC00 \uC5C6\uC74C(no real verification path) \u2014 completion.json/convergence.json\uB3C4 \uC5C6\uACE0(no completion.json / convergence.json), \uC2E4\uD589\uD560 \uACC4\uD68D\uC774 \uB2F4\uAE34 autopilot.json\uB3C4 \uC5C6\uC74C. \uBA48\uCD94\uAE30 \uC804\uC5D0 /ditto:verify\uB97C \uC2E4\uD589\uD558\uAC70\uB098(completion.json \uC0DD\uC131) \uC791\uC5C5 \uD56D\uBAA9\uC744 done/abandoned\uB85C \uC804\uD658\uD558\uB77C.
 `
     };
   }
@@ -53156,9 +53182,9 @@ var prismDivergeCommand = defineCommand({
       if (format === "json") {
         writeJson2({ work_item_id: args.wi, verdict: verdict2, ...decision ? { decision } : {} });
       } else {
-        writeHuman(`\uD310\uC815: ${verdict2.action} \u2014 ${verdict2.reason}`);
+        writeHuman(`\uD310\uC815: ${verdict2.reason}`);
         if (decision)
-          writeHuman(`\uAE30\uB85D\uB428(Record tier): ${decision.kind}`);
+          writeHuman(`\uAE30\uB85D\uC73C\uB85C \uB0A8\uACBC\uC5B4\uC694(Record \uACC4\uCE35 \u2014 \uCEE4\uBC0B\uB418\uC5B4 \uD568\uAED8 \uACF5\uC720\uB418\uB294 \uACB0\uC815 \uAE30\uB85D): ${decision.kind}`);
       }
       if (verdict2.diverged)
         process.exit(RUNTIME_ERROR_EXIT);
@@ -53409,7 +53435,7 @@ var prismTreeCommand = defineCommand({
           });
           return;
         }
-        writeHuman(`\uC544\uC9C1 \uC774\uC288\uB9F5\uC774 \uC5C6\uC5B4\uC694 (${args.wi}) \u2014 \uBA3C\uC800 \`ditto prism seed\`\uB85C \uD56D\uBAA9\uC744 \uCD94\uAC00\uD558\uC138\uC694.`);
+        writeHuman(`\uC544\uC9C1 \uC815\uB9AC\uD55C \uD56D\uBAA9\uC774 \uC5C6\uC5B4\uC694 (${args.wi}) \u2014 \uBA3C\uC800 \`ditto prism seed\`\uB85C \uD56D\uBAA9\uC744 \uCD94\uAC00\uD558\uC138\uC694.`);
         return;
       }
       const prism = await store.getMap(args.wi);
@@ -53468,15 +53494,15 @@ var prismTreeCommand = defineCommand({
       walk(prism.tree.root_id, 0);
       for (const node2 of prism.tree.nodes)
         walk(node2.id, 0);
-      writeHuman(`\uC774\uC288\uB9F5 (${args.wi}):`);
+      writeHuman(`\uC815\uB9AC\uD55C \uD56D\uBAA9 (${args.wi}):`);
       for (const line of lines)
         writeHuman(line);
       if (timestamps.length > 0) {
-        writeHuman("\uC9C8\uBB38 \uB77C\uC6B4\uB4DC \uC2DC\uAC01:");
+        writeHuman("\uC9C8\uBB38\uC744 \uC8FC\uACE0\uBC1B\uC740 \uC2DC\uAC01:");
         for (const ts of timestamps)
           writeHuman(`  - ${ts}`);
       } else {
-        writeHuman("\uC9C8\uBB38 \uB77C\uC6B4\uB4DC \uAE30\uB85D \uC5C6\uC74C");
+        writeHuman("\uC544\uC9C1 \uC9C8\uBB38\uC744 \uC8FC\uACE0\uBC1B\uC740 \uAE30\uB85D\uC774 \uC5C6\uC5B4\uC694");
       }
     } catch (err) {
       writeError(`prism tree failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -53552,12 +53578,12 @@ var prismOpponentCommand = defineCommand({
         return;
       }
       if (!outcome.host_available) {
-        writeHuman(`opponent host \uC5C6\uC74C \u2014 \uACB0\uC815\uC801 shell\uB85C \uC6B0\uC544\uD558\uAC8C \uAC15\uB4F1\uD588\uC5B4\uC694 (${concern}, host_absent). (ADR-0018)`);
+        writeHuman(`\uBC18\uB300 \uAC80\uD1A0 \uBAA8\uB378\uC744 \uBD99\uC77C \uC218 \uC5C6\uC5B4 \uC774\uBC88\uC5D4 \uAC74\uB108\uB6F0\uC5C8\uC5B4\uC694 (${concern}). \uAC15\uC81C\uB85C \uBA48\uCD94\uC9C0 \uC54A\uACE0 \uC548\uC804\uD558\uAC8C \uB118\uC5B4\uAC11\uB2C8\uB2E4.`);
       } else {
-        writeHuman(`opponent \uC2E4\uD589 (${concern}): ${outcome.engaged.length}\uAC74 \uAE30\uB85D, ${outcome.degraded.length}\uAC74 \uAC15\uB4F1.`);
+        writeHuman(`\uBC18\uB300 \uAC80\uD1A0 \uC2E4\uD589 (${concern}): ${outcome.engaged.length}\uAC74 \uAE30\uB85D, ${outcome.degraded.length}\uAC74 \uAC74\uB108\uB700.`);
       }
       if (outcome.degraded.length > 0) {
-        writeHuman("\uAC15\uB4F1\uB41C \uB178\uB4DC(host_absent \uC2A4\uD0EC\uD504):");
+        writeHuman("\uAC74\uB108\uB6F4 \uD56D\uBAA9(\uBC18\uB300 \uAC80\uD1A0 \uBAA8\uB378 \uC5C6\uC74C):");
         for (const id of outcome.degraded)
           writeHuman(`  - ${id}`);
       }
@@ -53705,13 +53731,13 @@ var prismOpponentRecordCommand = defineCommand({
         writeJson2({ work_item_id: args.wi, engaged, degraded, unanswered });
         return;
       }
-      writeHuman(`opponent-record: ${engaged.length}\uAC74 \uAE30\uB85D(engaged), ${degraded.length}\uAC74 \uAC15\uB4F1.`);
+      writeHuman(`\uBC18\uB300 \uAC80\uD1A0 \uBC18\uC601: ${engaged.length}\uAC74 \uAE30\uB85D, ${degraded.length}\uAC74 \uAC74\uB108\uB700.`);
       if (engaged.length > 0)
-        writeHuman(`  engaged: ${engaged.join(", ")}`);
+        writeHuman(`  \uAE30\uB85D\uB428: ${engaged.join(", ")}`);
       if (degraded.length > 0)
-        writeHuman(`  degraded(host_absent): ${degraded.join(", ")}`);
+        writeHuman(`  \uAC74\uB108\uB700(\uBC18\uB300 \uAC80\uD1A0 \uBAA8\uB378 \uC5C6\uC74C): ${degraded.join(", ")}`);
       if (unanswered.length > 0) {
-        writeHuman(`  \uBE0C\uB9AC\uD551\uB410\uC73C\uB098 \uBBF8\uC751\uB2F5: ${unanswered.join(", ")}`);
+        writeHuman(`  \uC548\uB0B4\uD588\uC9C0\uB9CC \uB2F5\uC774 \uC624\uC9C0 \uC54A\uC740 \uD56D\uBAA9: ${unanswered.join(", ")}`);
       }
     } catch (err) {
       writeError(`prism opponent-record failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -53858,7 +53884,7 @@ var prismBacklogProposeCommand = defineCommand({
         writeJson2({ work_item_id: args.wi, ok: true, proposed: result2.items.length });
         return;
       }
-      writeHuman(`\uBD84\uD560\uC548\uC744 \uC81C\uC548\uD588\uC5B4\uC694 (${result2.items.length}\uAC74). \uC2B9\uC778 \uD6C4\uC5D0\uB9CC \uBB3C\uD654\uB429\uB2C8\uB2E4:`);
+      writeHuman(`\uBD84\uD560\uC548\uC744 \uC81C\uC548\uD588\uC5B4\uC694 (${result2.items.length}\uAC74). \uC2B9\uC778\uD574\uC57C\uB9CC \uBB3C\uD654(\uC2B9\uC778\uB41C \uC81C\uC548\uC744 \uC2E4\uC81C \uC791\uC5C5 \uD56D\uBAA9\uC73C\uB85C \uB9CC\uB4DC\uB294 \uAC83)\uB429\uB2C8\uB2E4:`);
       for (const item of result2.items)
         writeHuman(`  - ${item.title}`);
       writeHuman('\uC2B9\uC778\uD558\uB824\uBA74: ditto prism backlog materialize --wi <wi> --statement "<\uC6D0\uBB38 \uC2B9\uC778>"');
@@ -53897,7 +53923,7 @@ var prismBacklogMaterializeCommand = defineCommand({
       return;
     }
     if (!args.statement || args.statement.trim().length === 0) {
-      writeError('prism backlog materialize requires --statement "<\uC6D0\uBB38 \uC2B9\uC778>": bare \uD638\uCD9C\uC740 \uC2B9\uC778\uC774 \uC544\uB2D9\uB2C8\uB2E4 (\uC0AC\uC6A9\uC790 \uC6D0\uBB38 \uD544\uC694)');
+      writeError('prism backlog materialize\uC5D0\uB294 --statement "<\uC6D0\uBB38 \uC2B9\uC778>"\uC774 \uD544\uC694\uD574\uC694: \uBA85\uB839\uB9CC \uC2E4\uD589\uD558\uB294 \uAC83\uC73C\uB85C\uB294 \uC2B9\uC778\uC73C\uB85C \uC778\uC815\uB418\uC9C0 \uC54A\uC544\uC694 (\uC0AC\uC6A9\uC790\uAC00 \uC9C1\uC811 \uC4F4 \uBB38\uC7A5 \uD544\uC694)');
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -53931,7 +53957,7 @@ var prismBacklogMaterializeCommand = defineCommand({
         writeJson2({ work_item_id: args.wi, ok: true, materialized_wis: result2.materialized_wis });
         return;
       }
-      writeHuman(`\uC2B9\uC778 \uD655\uC778 \u2014 ${result2.materialized_wis.length}\uAC74\uC744 draft \uC791\uC5C5\uC73C\uB85C \uBB3C\uD654\uD588\uC5B4\uC694 (\uC790\uB3D9 \uCC29\uC218 \uC5C6\uC74C):`);
+      writeHuman(`\uC2B9\uC778 \uD655\uC778 \u2014 ${result2.materialized_wis.length}\uAC74\uC744 \uC2E4\uC81C \uC791\uC5C5 \uCD08\uC548\uC73C\uB85C \uB9CC\uB4E4\uC5C8\uC5B4\uC694 (\uC790\uB3D9\uC73C\uB85C \uC2DC\uC791\uD558\uC9C0\uB294 \uC54A\uC544\uC694):`);
       for (const id of result2.materialized_wis)
         writeHuman(`  - ${id}`);
     } catch (err) {
@@ -57854,4 +57880,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=9eccae0f839bf21a793dc8707397527cdae0e4e8efd3b6fb998e444c4a1dab94
+//# ditto-src-stamp=8dc1665e77aab11ecde0072161975c51682d532107c819102e0c3f2d332fe2a4

@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import { type CharterContext, charterProjection } from '~/core/charter';
-import { OPAQUE_VOCAB_FLOOR, findUnexplainedIdentifiers } from '~/core/question-context';
+import { loadGlossaryVocab, warnMalformedGlossary } from '~/core/knowledge-bridge';
+import { type ModeReport, formatModeBanner } from '~/core/mode-doctor';
+import { findUnexplainedIdentifiers } from '~/core/question-context';
 
 describe('charterProjection (D8)', () => {
   test('base case: prime directive only when ctx is empty', () => {
@@ -122,27 +125,65 @@ describe('charterProjection (D8)', () => {
       }
     });
 
-    // wi_260714aaq (#29) ac-3: the new opaque-vocab class is HARD on the deep-interview
-    // QUESTION face but ADVISORY at the per-turn banner (#30 has not rewritten these strings
-    // yet). Concretely, no OPAQUE_VOCAB_FLOOR entry raw-leaks into any banner surface — the
-    // banner uses the SPACE form ("acceptance criteria") while the floor uses the UNDERSCORE
-    // form ("acceptance_criteria"), and no axis name / coined compound appears — so the banner
-    // is never hard-blocked by the new class. Regression guard: a future banner edit that
-    // surfaces an axis name / schema field un-glossed trips here.
-    test('no OPAQUE_VOCAB_FLOOR entry raw-leaks into any banner surface (ac-3: banner advisory)', () => {
+    // wi_260714z16 (#30) AC-3: the opaque-vocab leak gate at the per-turn BANNER is now HARD
+    // (advisory→hard). #29 (wi_260714aaq) left it ADVISORY — a weak floor-literal `not.toContain`
+    // check — because #30 had not yet reworded the conversational banner strings. Now that the
+    // rewrite nodes cleaned those surfaces, this runs the FULL findUnexplainedIdentifiers
+    // detector — the SAME one the deep-interview / prism QUESTION faces run — over EVERY banner
+    // surface (PRIME_DIRECTIVE, the fully-flagged charterProjection, and every formatModeBanner
+    // variant) and asserts ZERO unexplained identifiers. A leak turns the BUILD red.
+    //
+    // WHY a build-time test gate and NOT a runtime throw: the banner-injection consumers
+    // (UserPromptSubmit / SessionStart) run under runHook (src/hooks/runtime.ts), which CATCHES
+    // ALL throws and fails OPEN (exit 0). A runtime throw would therefore silently DROP the
+    // banner — the opposite of "hard". And hard-blocking a live turn because a user's own
+    // work-item title contains a glossary word would be user-hostile. So the enforcement lives
+    // here, at build time, over the SOURCE banner strings.
+    //
+    // Glossary PARITY (the point of the promotion): the detector is fed the SAME opaqueVocab the
+    // runtime question faces use — the glossary's forbidden_abbreviations via loadGlossaryVocab,
+    // unioned inside findUnexplainedIdentifiers with the hardcoded OPAQUE_VOCAB_FLOOR — NOT
+    // floor-only. This mirrors interview-driver.recordTurn / PrismStore.appendValueRound, so the
+    // banner enforces the identical closed set as the question surfaces. Regression guard: a
+    // future banner edit (or a new glossary forbidden_abbreviation) that surfaces un-glossed
+    // trips the build here.
+    test('no banner surface leaks an unexplained identifier — full glossary-parity detector (ac-3: banner HARD)', async () => {
+      const repoRoot = join(import.meta.dir, '..', '..');
+      const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
+      const modeReport = (over: Partial<ModeReport>): ModeReport => ({
+        sessionMode: 'installed',
+        installed: { present: true, version: '0.1.0', fresh: true },
+        drift: { src: false, surface: false },
+        action: 'none',
+        reason: '',
+        ...over,
+      });
       const surfaces = [
-        charterProjection(),
+        charterProjection(), // PRIME_DIRECTIVE (base projection)
         charterProjection({
           workItemGuide: true,
           placeholderAcceptanceCriteria: true,
           deepInterviewDirective: true,
           selfAnswerHint: true,
         }),
+        formatModeBanner(modeReport({ sessionMode: 'dev' }), { inDittoRepo: true }).text,
+        formatModeBanner(
+          modeReport({
+            sessionMode: 'installed',
+            installed: { present: true, version: '0.1.0', fresh: false },
+          }),
+          { inDittoRepo: true },
+        ).text,
+        formatModeBanner(
+          modeReport({
+            sessionMode: 'installed',
+            installed: { present: true, version: '0.1.0', fresh: true },
+          }),
+          { inDittoRepo: true },
+        ).text,
       ];
       for (const s of surfaces) {
-        for (const entry of OPAQUE_VOCAB_FLOOR) {
-          expect(s).not.toContain(entry);
-        }
+        expect(findUnexplainedIdentifiers(s, opaqueVocab)).toEqual([]);
       }
     });
 

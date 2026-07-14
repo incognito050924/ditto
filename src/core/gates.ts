@@ -65,14 +65,14 @@ export function interviewReadinessGate(state: InterviewState): GateResult {
     .filter((d) => d.critical && d.state !== 'resolved')
     .map((d) => d.id);
   if (unresolved.length > 0) {
-    reasons.push(`critical dimensions unresolved: ${unresolved.join(', ')}`);
+    reasons.push(`핵심(critical) 항목 미해결: ${unresolved.join(', ')}`);
   }
   // LLM self-reported readiness cannot escape the deterministic floor on ambiguity.
   const floor = deterministicFloor(ambiguityFromInterview(state));
   const capped = Math.min(state.readiness.score, 1 - floor);
   if (capped < state.readiness.threshold) {
     reasons.push(
-      `readiness ${capped.toFixed(2)} (floor-capped) below threshold ${state.readiness.threshold}`,
+      `준비도 ${capped.toFixed(2)}(모호성 하한 적용) < 임계값 ${state.readiness.threshold}`,
     );
   }
   return gate(reasons);
@@ -148,13 +148,13 @@ export function acceptanceTestable(ac: {
   // Word-boundary match: 'breakfast' must not hit 'fast', 'improvement' must not
   // hit 'improve'. Multi-word phrases ('user friendly') keep \b around the whole.
   const vague = VAGUE_TERMS.filter((t) => new RegExp(`\\b${escapeRegex(t)}\\b`).test(lower));
-  if (vague.length > 0) reasons.push(`vague term(s): ${[...new Set(vague)].join(', ')}`);
+  if (vague.length > 0) reasons.push(`모호한 표현(vague term): ${[...new Set(vague)].join(', ')}`);
   // An AC passes the observable check when EITHER an OBSERVABLE keyword matches OR
   // the author declared a non-empty evidence_required (a named verification path is
   // a strong testability signal). VAGUE_TERMS rejection above is independent.
   const hasEvidence = (ac.evidence_required?.length ?? 0) > 0;
   if (!OBSERVABLE.test(ac.statement) && !hasEvidence)
-    reasons.push('no observable/measurable predicate found');
+    reasons.push('관찰·측정 가능한 완료 조건 없음(no observable/measurable predicate)');
   return gate(reasons);
 }
 
@@ -228,8 +228,8 @@ export function resolvabilityBlockers(
         item: u.item,
         reason:
           u.resolvability === 'agent_resolvable'
-            ? 'declared agent_resolvable but parked (resolve it, do not park)'
-            : 'references an owned acceptance criterion but is unverified',
+            ? '에이전트가 해결 가능하다고 선언해 놓고 방치함 — 방치하지 말고 지금 해결하라'
+            : '이 작업이 책임진 완료 조건을 가리키는데 아직 검증되지 않음',
         kind: 'agent_resolvable',
         userDecision: false,
       });
@@ -238,9 +238,10 @@ export function resolvabilityBlockers(
 
     if (u.resolvability === 'blocked_external' || u.resolvability === 'accepted_tradeoff') {
       if (grounded) continue;
+      const kindKo = u.resolvability === 'blocked_external' ? '외부 요인 차단' : '감수한 절충';
       blockers.push({
         item: u.item,
-        reason: `declared ${u.resolvability} without grounding (ungrounded residual claim)`,
+        reason: `${kindKo} 잔여인데 근거가 없음(미근거 잔여 주장)`,
         kind: 'blocked_external',
         userDecision: false,
       });
@@ -251,7 +252,7 @@ export function resolvabilityBlockers(
       if (grounded) continue;
       blockers.push({
         item: u.item,
-        reason: 'declared user_decision without a recorded decision pointer (surface for user ok)',
+        reason: '사용자 결정이 필요한 사안인데 결정 기록이 없음(사용자 승인을 받아야 함)',
         kind: 'user_decision',
         userDecision: true,
       });
@@ -326,12 +327,14 @@ export function passCloseResidualBlockers(
 ): string[] {
   const label = (b: ResolvabilityBlocker, surface: string): string =>
     b.userDecision
-      ? `${surface} deferred_needs_user_ok — ${b.item}: ${b.reason}`
-      : `${surface} blocks pass-close — ${b.item}: ${b.reason}`;
+      ? `${surface} 사용자 승인 대기(사용자 결정 필요) — ${b.item}: ${b.reason}`
+      : `${surface} pass-close 차단(통과-종료 차단) — ${b.item}: ${b.reason}`;
   return [
-    ...resolvabilityBlockers(completion.unverified, acceptanceIds).map((b) => label(b, 'residual')),
+    ...resolvabilityBlockers(completion.unverified, acceptanceIds).map((b) =>
+      label(b, '잔여(residual)'),
+    ),
     ...riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b) =>
-      label(b, 'residual-risk record'),
+      label(b, '잔여 위험 기록(residual-risk record)'),
     ),
   ];
 }
@@ -507,19 +510,21 @@ export function completionGate(item: WorkItem, completion: CompletionContract): 
       if (seen.has(id)) dupes.add(id);
       seen.add(id);
     }
-    reasons.push(`duplicate criterion_id(s): ${[...dupes].join(', ')}`);
+    reasons.push(`중복된 완료 조건 id(duplicate): ${[...dupes].join(', ')}`);
   }
   const missing = expected.filter((id) => !reportedSet.has(id));
-  if (missing.length > 0) reasons.push(`missing criteria: ${missing.join(', ')}`);
+  if (missing.length > 0) reasons.push(`누락된 완료 조건(missing): ${missing.join(', ')}`);
   const extra = [...reportedSet].filter((id) => !expectedSet.has(id));
-  if (extra.length > 0) reasons.push(`extra criteria not in work item: ${extra.join(', ')}`);
+  if (extra.length > 0) reasons.push(`작업 항목에 없는 초과 완료 조건(extra): ${extra.join(', ')}`);
 
   if (completion.final_verdict === 'pass') {
     const notPass = completion.acceptance
       .filter((a) => a.verdict !== 'pass')
       .map((a) => a.criterion_id);
     if (notPass.length > 0) {
-      reasons.push(`final_verdict=pass but not-pass criteria: ${[...new Set(notPass)].join(', ')}`);
+      reasons.push(
+        `최종 판정은 pass인데 통과하지 못한 완료 조건이 있음: ${[...new Set(notPass)].join(', ')}`,
+      );
     }
   }
   return gate(reasons);
@@ -545,7 +550,7 @@ export function completionEvidenceGate(completion: CompletionContract): GateResu
   );
   if (!ranCommand && !hasRealCriterionEvidence) {
     return gate([
-      'final_verdict=pass with no runnable verification evidence (ack/approval is not verification)',
+      '최종 판정은 pass인데 실행 가능한 검증 증거가 없음 — 승인/확인(ack/approval)은 검증이 아니다',
     ]);
   }
   return gate([]);
@@ -585,9 +590,9 @@ export function nonPassTerminationGate(completion: CompletionContract): GateResu
   // guarantees reason + grounding present whenever the object is present.
   if (completion.non_pass_status) return gate([]);
   return gate([
-    `non-pass completion parks in-scope criterion/criteria at unverified/fail without an honest partial/blocked declaration (non_pass_status): ${parked
+    `비-통과 완료가 범위 안 완료 조건을 정직한 부분완료/차단 선언(상태·이유·근거) 없이 미검증/실패 상태로 방치함: ${parked
       .map((a) => a.criterion_id)
-      .join(', ')} — resolve them or declare non_pass_status{state,reason,grounding}`,
+      .join(', ')} — 해결하거나, 정직한 부분완료/차단 선언(상태·이유·근거)을 남겨라`,
   ]);
 }
 
@@ -599,28 +604,26 @@ export function convergenceGate(c: Convergence): GateResult {
   const maxScore = Math.max(...c.versions.map((v) => v.score));
   const selected = c.versions.find((v) => v.version === c.selected_version);
   if (!selected) {
-    reasons.push(`selected_version ${c.selected_version} not present in versions`);
+    reasons.push(`선택된 버전 ${c.selected_version}이(가) 후보 목록에 없음`);
   } else if (selected.score !== maxScore) {
-    reasons.push(`selected_version is not argmax (selected ${selected.score} < max ${maxScore})`);
+    reasons.push(`선택된 버전이 최고 점수 후보가 아님(선택 ${selected.score} < 최고 ${maxScore})`);
   }
 
   const openComputed = c.decision_ledger.filter(
     (e) => e.admissible && e.status === 'deferred',
   ).length;
   if (c.open_admissible_count !== openComputed) {
-    reasons.push(
-      `open_admissible_count recorded ${c.open_admissible_count} != computed ${openComputed}`,
-    );
+    reasons.push(`미해결 반론 수 기록값 ${c.open_admissible_count} != 계산값 ${openComputed}`);
   }
 
   const expectedConverged = c.gate.completion_gate === 'pass' && openComputed === 0;
   if (c.gate.converged !== expectedConverged) {
     reasons.push(
-      `gate.converged recorded ${c.gate.converged} != expected ${expectedConverged} (completion ∧ no-open-admissible)`,
+      `수렴 판정 기록값 ${c.gate.converged} != 기대값 ${expectedConverged}(완료 통과 ∧ 미해결 반론 0)`,
     );
   }
   if (!expectedConverged) {
-    reasons.push('not converged: completion_gate != pass or open admissible objections remain');
+    reasons.push('수렴 안 됨: 완료 게이트가 통과가 아니거나, 미해결 반론이 남아 있음');
   }
   return gate(reasons);
 }
@@ -693,20 +696,16 @@ export function knowledgeUpdateGate(t: KnowledgeTriggers, d: KnowledgeRecordDelt
   const reasons: string[] = [];
   const recorded = d.decisions + d.glossary_terms + d.patterns + d.learnings;
   if (!knowledgeTriggerFired(t) && recorded > 0) {
-    reasons.push('durable content recorded but no trigger declared (over-recording: noise)');
+    reasons.push('선언된 기록 계기 없이 지속 지식이 기록됨 — 과잉기록 노이즈(over-recording)');
   }
   if (t.adr_worthy_decision && d.decisions === 0) {
-    reasons.push(
-      'adr_worthy_decision trigger fired but no decision/ADR recorded (under-recording)',
-    );
+    reasons.push('ADR감 결정 계기가 켜졌는데 기록된 결정/ADR이 없음 — 누락(under-recording)');
   }
   if (t.new_agreed_term && d.glossary_terms === 0) {
-    reasons.push('new_agreed_term trigger fired but no glossary term added (under-recording)');
+    reasons.push('새 합의 용어 계기가 켜졌는데 추가된 용어집 항목이 없음 — 누락(under-recording)');
   }
   if (t.repeated_pattern && d.patterns + d.learnings === 0) {
-    reasons.push(
-      'repeated_pattern trigger fired but no pattern/learning recorded (under-recording)',
-    );
+    reasons.push('반복 패턴 계기가 켜졌는데 기록된 패턴/학습이 없음 — 누락(under-recording)');
   }
   return gate(reasons);
 }
@@ -899,29 +898,25 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
 
   // ── H1 intent → work-item ──
   if (a.workItem.goal.trim() !== intentGoal) {
-    advisories.push(
-      'H1: work-item goal diverges from intent goal (re-statement or drift — review)',
-    );
+    advisories.push('H1: 작업 항목 목표가 원 의도의 목표와 어긋남(재기술이거나 표류 — 검토 필요)');
   }
   if (a.workItem.source_request.trim() !== a.intent.source_request.trim()) {
-    advisories.push('H1: work-item source_request diverges from intent (review)');
+    advisories.push('H1: 작업 항목의 원 요청이 원 의도와 어긋남(검토 필요)');
   }
   const wiAcIds = idSet(a.workItem.acceptance_criteria);
   const wiAdded = missingFrom(wiAcIds, intentAcIds);
   if (wiAdded.length > 0) {
-    reasons.push(`H1: work-item AC id(s) not in intent (scope grow): ${wiAdded.join(', ')}`);
+    reasons.push(`H1: 원 의도에 없는 작업 항목 완료 조건 id(scope grow): ${wiAdded.join(', ')}`);
   }
   const wiDropped = missingFrom(intentAcIds, wiAcIds);
   if (wiDropped.length > 0) {
-    reasons.push(
-      `H1: intent AC id(s) missing from work-item (scope shrink): ${wiDropped.join(', ')}`,
-    );
+    reasons.push(`H1: 작업 항목에서 빠진 원 의도 완료 조건 id(scope shrink): ${wiDropped.join(', ')}`);
   }
 
   // ── H2 intent → autopilot ──
   if (a.graph.root_goal.trim() !== intentGoal) {
     advisories.push(
-      'H2: autopilot root_goal diverges from intent goal (re-statement or drift — review)',
+      'H2: autopilot 최상위 목표가 원 의도의 목표와 어긋남(재기술이거나 표류 — 검토 필요)',
     );
   }
   const covered = new Set<string>();
@@ -930,15 +925,11 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
   }
   const uncovered = missingFrom(intentAcIds, covered);
   if (uncovered.length > 0) {
-    reasons.push(
-      `H2: intent AC id(s) addressed by no node (scope shrink): ${uncovered.join(', ')}`,
-    );
+    reasons.push(`H2: 어떤 노드도 다루지 않는 원 의도 완료 조건 id(scope shrink): ${uncovered.join(', ')}`);
   }
   const invented = missingFrom(covered, intentAcIds);
   if (invented.length > 0) {
-    reasons.push(
-      `H2: node acceptance_refs id(s) not in intent (scope grow): ${invented.join(', ')}`,
-    );
+    reasons.push(`H2: 원 의도에 없는 노드 완료 조건 참조 id(scope grow): ${invented.join(', ')}`);
   }
 
   // ── H3 intent → completion (only on a non-pass completion; pass-case owned by
@@ -947,15 +938,11 @@ export function intentDriftGate(a: IntentChainArtifacts): IntentDriftResult {
     const compIds = new Set(a.completion.acceptance.map((c) => c.criterion_id));
     const compAdded = missingFrom(compIds, intentAcIds);
     if (compAdded.length > 0) {
-      reasons.push(
-        `H3: completion criterion_id(s) not in intent (scope grow): ${compAdded.join(', ')}`,
-      );
+      reasons.push(`H3: 원 의도에 없는 완료본 완료 조건 id(scope grow): ${compAdded.join(', ')}`);
     }
     const compDropped = missingFrom(intentAcIds, compIds);
     if (compDropped.length > 0) {
-      reasons.push(
-        `H3: intent AC id(s) missing from completion (scope shrink): ${compDropped.join(', ')}`,
-      );
+      reasons.push(`H3: 완료본에서 빠진 원 의도 완료 조건 id(scope shrink): ${compDropped.join(', ')}`);
     }
   }
 
@@ -1034,20 +1021,20 @@ export function directionForkGate(
   if (!purposeOk) {
     reasons.push(
       purposeConserved
-        ? 'purpose_change: not corroborated — the intent AC id-set is conserved (no purpose change)'
-        : 'purpose_change: missing (present:false or empty basis)',
+        ? 'purpose_change: 뒷받침 안 됨 — 의도 AC id 집합이 그대로(conserved)라 목적 변경이 아님'
+        : 'purpose_change: 미충족(present:false 또는 근거 비어 있음)',
     );
   }
 
   const advantageOk = carrier.no_clear_advantage.present && hasEvidence(carrier.no_clear_advantage);
   if (!advantageOk) {
-    reasons.push('no_clear_advantage: missing (present:false or empty basis)');
+    reasons.push('no_clear_advantage: 미충족(present:false 또는 근거 비어 있음)');
   }
 
   const tieOk =
     carrier.intent_cannot_break_tie.present && hasEvidence(carrier.intent_cannot_break_tie);
   if (!tieOk) {
-    reasons.push('intent_cannot_break_tie: missing (present:false or empty basis)');
+    reasons.push('intent_cannot_break_tie: 미충족(present:false 또는 근거 비어 있음)');
   }
 
   return {
@@ -1092,14 +1079,10 @@ export function interfaceBaselineDriftGate(
   const removed = baseline.filter((b) => !current.includes(b));
   const reasons: string[] = [];
   if (added.length > 0) {
-    reasons.push(
-      `interface/scope added vs frozen baseline (unconsented grow): ${added.join(', ')}`,
-    );
+    reasons.push(`고정 기준선 대비 인터페이스/범위 추가됨 — 미승인 확장(grow): ${added.join(', ')}`);
   }
   if (removed.length > 0) {
-    reasons.push(
-      `interface/scope removed vs frozen baseline (unconsented shrink): ${removed.join(', ')}`,
-    );
+    reasons.push(`고정 기준선 대비 인터페이스/범위 제거됨 — 미승인 축소(shrink): ${removed.join(', ')}`);
   }
   return gate(reasons);
 }
@@ -1137,8 +1120,8 @@ export function landGate(
   if (status !== 'done' || finalVerdict !== 'pass') return gate([]);
   if (uncommittedChangedFiles.length === 0) return gate([]);
   return gate([
-    `final_verdict=pass and status=done but changed_files remain uncommitted in git (verified but not landed): ${uncommittedChangedFiles.join(
+    `최종 판정 pass이고 상태 done인데 changed_files가 git에 커밋되지 않고 남아 있음(uncommitted) — 검증했지만 반영 안 됨(verified but not landed): ${uncommittedChangedFiles.join(
       ', ',
-    )} — land them (commit) before terminating, or close blocked`,
+    )} — 종료 전에 커밋해 반영하거나, blocked로 닫아라`,
   ]);
 }

@@ -155,7 +155,7 @@ export function closePrismNode(
     return {
       ok: false,
       reasons: [
-        `unknown-close (${state}) of critical node ${nodeId} requires a recorded residual_risk — a no-residual "모름-닫기" of critical scope is rejected and never counts as critical resolution (MODEL-1)`,
+        `핵심 항목 "${nodeId}"을(를) '모름'으로 닫으려면(${state}) 남는 위험(residual_risk)을 반드시 적어야 해요 — 위험을 안 적고 '모름'으로 닫는 건 거부되고, 핵심 항목을 해결한 것으로 치지 않아요`,
       ],
     };
   }
@@ -165,13 +165,13 @@ export function closePrismNode(
     const missing: string[] = [];
     const hasReason =
       evalRec?.justifying_reason !== undefined && evalRec.justifying_reason.trim().length > 0;
-    if (!hasReason) missing.push('a non-empty justifying_reason');
+    if (!hasReason) missing.push('채운 근거 사유(justifying_reason)');
     if (evalRec?.refutation_attempted !== true) {
-      missing.push('an attempted refutation (refutation_attempted)');
+      missing.push('가장 강한 반박을 한 번 시도한 기록(refutation_attempted)');
     }
     if (!evidenceAddedForNode(prism, nodeId)) {
       missing.push(
-        'added grounding this round — a child decomposition or a recorded opponent artifact, not a self-authored reason alone (OBJ-1)',
+        '이번에 새로 더해진 근거(grounding) — 하위 항목으로 쪼개거나 반대 검토 기록이 있어야 하고, 혼자 쓴 사유만으로는 부족해요',
       );
     }
     if (missing.length > 0) {
@@ -181,7 +181,7 @@ export function closePrismNode(
         // rebuttal (argumentation 3-value). The score reads the SAME stamp (below).
         prism: upsertEvaluation(prism, nodeId, { evaluation: 'unevaluated' }),
         reasons: [
-          `resolved-close of critical node ${nodeId} requires ${missing.join(', ')} — the close is rejected and the node is stamped prism-level unevaluated (A2, ac-1; homomorphic with the MODEL-1 residual gate)`,
+          `핵심 항목 "${nodeId}"을(를) 해결로 닫으려면 ${missing.join(', ')}이(가) 필요해요 — 이 닫기는 거부되고, 항목은 '판단 못 함(unevaluated)' 상태로 표시돼요`,
         ],
       };
     }
@@ -237,7 +237,7 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
   if (prism.tree.nodes.length === 0) {
     return {
       terminated: false,
-      reason: 'empty map — no scope explored yet (B1 vacuous-truth guard)',
+      reason: '아직 살펴본 항목이 하나도 없어요 — 무엇을 정할지 정리를 시작하기 전이에요',
     };
   }
   const criticalIds = new Set(
@@ -247,8 +247,7 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
   if (criticalNodes.length === 0) {
     return {
       terminated: false,
-      reason:
-        'no critical nodes — termination/notification does NOT fire on a 0-critical map (B1 vacuous-truth guard)',
+      reason: '꼭 정해야 할 핵심 항목이 아직 없어요 — 핵심 항목이 하나도 없으면 착수 알림은 뜨지 않아요',
     };
   }
   const unresolved = criticalNodes.filter(
@@ -257,12 +256,12 @@ export function criticalTermination(prism: PrismIssueMap): CriticalTerminationVe
   if (unresolved.length > 0) {
     return {
       terminated: false,
-      reason: `${unresolved.length} critical node(s) still unresolved`,
+      reason: `아직 정하지 못한 핵심 항목이 ${unresolved.length}개 남았어요`,
     };
   }
   return {
     terminated: true,
-    reason: 'every critical node resolved (non-critical scope may survive — the user decides)',
+    reason: '핵심 항목을 모두 정리했어요 (덜 중요한 항목은 남아 있을 수 있고, 그건 사용자가 판단해요)',
   };
 }
 
@@ -573,14 +572,14 @@ export function detectDivergence(
       return {
         diverged: false,
         action: 'challenge-node',
-        reason: `challenge to decided ${round.challenge.decided_id} carries NEW evidence — admit as a visible challenge node (once)`,
+        reason: `이미 정한 "${round.challenge.decided_id}"에 새 근거가 있어요 — 다시 볼 항목으로 한 번만 받아들여요`,
       };
     }
     return {
       diverged: true,
       kind: 'decided_conflict_no_evidence',
       action: 'cap-stop',
-      reason: `re-challenge to decided ${round.challenge.decided_id} with no new evidence — flagged divergence (visibly suppressed, not silent)`,
+      reason: `이미 정한 "${round.challenge.decided_id}"을(를) 새 근거 없이 다시 문제 삼고 있어요 — 겉도는 반복으로 보고 멈춰요(조용히 넘기지 않고 드러냅니다)`,
     };
   }
   if (round.question) {
@@ -590,7 +589,7 @@ export function detectDivergence(
         diverged: true,
         kind: 'repeat_question',
         action: 'cap-stop',
-        reason: 'near-duplicate of an earlier question — repeated with no new signal (쳇바퀴)',
+        reason: '앞선 질문과 거의 똑같아요 — 새로운 내용 없이 제자리를 도는 반복이에요(쳇바퀴)',
       };
     }
     if (round.question.trivial) {
@@ -604,12 +603,12 @@ export function detectDivergence(
           diverged: true,
           kind: 'trivial_streak',
           action: 'cap-stop',
-          reason: `${streak} consecutive trivial questions — flagged divergence`,
+          reason: `사소한 질문이 ${streak}번 연달아 나왔어요 — 겉도는 반복으로 봐요`,
         };
       }
     }
   }
-  return { diverged: false, action: 'continue', reason: 'no divergence signal' };
+  return { diverged: false, action: 'continue', reason: '벗어난 신호 없음 — 계속 진행해요' };
 }
 
 /**

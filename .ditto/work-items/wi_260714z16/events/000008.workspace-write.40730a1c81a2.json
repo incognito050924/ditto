@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714z16",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "40730a1c81a2f27d339c8a546784fa262f664fad5d2af5b18406ac80b4653d67",
+  "ts": "2026-07-14T08:49:48.911Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/stop.test.ts tests/core/gates.test.ts tests/cli/autopilot-intent-drift-cli.test.ts tests/cli/prism-cli.test.ts tests/core/question-round.test.ts tests/acg/semantic-pipeline-e2e.test.ts tests/hooks/direction-fork-stop-integration.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

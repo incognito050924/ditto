@@ -153,7 +153,7 @@ describe('ditto autopilot intent-drift CLI', () => {
     expect(res.exitCode).toBe(0);
     const out = json(res.stdout);
     expect(out.pass).toBe(true);
-    expect(out.advisories.join(' ')).toContain('root_goal');
+    expect(out.advisories.join(' ')).toContain('최상위 목표');
   });
 
   test("sibling work item's working-tree change is NOT flagged (surface scoped to this work item)", async () => {

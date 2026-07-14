@@ -190,20 +190,19 @@ export function validateQuestionContext(
     violations.push({
       field: 'user_explanation',
       reason:
-        'a plain-language why-we-ask + what-the-answer-decides (user language, no raw code/jargon) is required before asking the user',
+        '사용자에게 묻기 전에 "왜 이걸 묻는지"와 "이 답이 무엇을 정하는지"를 쉬운 말로(전문용어·코드 없이) 먼저 적어야 해요',
     });
   }
   if (isBlank(candidate.recommended_answer)) {
     violations.push({
       field: 'recommended_answer',
-      reason:
-        'a suggested answer (the agent’s recommended default, in user language) is required before asking the user',
+      reason: '사용자에게 묻기 전에 추천 답(에이전트가 권하는 기본 선택지)을 쉬운 말로 함께 제시해야 해요',
     });
   }
   if (isBlank(candidate.why_matters)) {
     violations.push({
       field: 'why_matters',
-      reason: 'the value of the answer (what it decides) must be stated',
+      reason: '이 답이 무엇을 정하는지(왜 중요한지)를 밝혀야 해요',
     });
   }
   // ac-1 (D1): the user-reaching face (text + user_explanation) must not leak an
@@ -216,7 +215,7 @@ export function validateQuestionContext(
   if (leaked.length > 0) {
     violations.push({
       field: 'unexplained_identifier',
-      reason: `internal identifier(s) ${[...new Set(leaked)].join(', ')} surfaced to the user with no inline gloss — restate in user language or add a (parenthetical / colon) explanation`,
+      reason: `내부에서만 쓰는 표현 ${[...new Set(leaked)].join(', ')}이(가) 설명 없이 사용자에게 그대로 노출됐어요 — 쉬운 말로 바꾸거나 괄호나 콜론으로 뜻풀이를 덧붙여 주세요`,
     });
   }
   return { ok: violations.length === 0, violations };

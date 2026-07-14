@@ -199,7 +199,7 @@ describe('stopHandler', () => {
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(0);
     expect(out.stderr).toContain('advisory');
-    expect(out.stderr).toContain('root_goal');
+    expect(out.stderr).toContain('최상위 목표');
   });
 
   test('intent drift: malformed intent.json => exit 2 (fail-closed governance floor)', async () => {
@@ -384,7 +384,7 @@ describe('stopHandler', () => {
       await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
       const out = await run({ stop_hook_active: false });
       expect(out.exitCode).toBe(2);
-      expect(out.stderr).toContain('without going through autopilot');
+      expect(out.stderr).toContain('autopilot을 거치지 않고');
       expect(out.stderr).toContain('ditto autopilot exempt');
     });
 
@@ -438,7 +438,7 @@ describe('stopHandler', () => {
       const out = await run({ stop_hook_active: false });
       expect(out.exitCode).toBe(2); // blocked by completion gate, not (B)
       expect(out.stderr).toContain('missing');
-      expect(out.stderr).not.toContain('without going through autopilot');
+      expect(out.stderr).not.toContain('autopilot을 거치지 않고');
     });
 
     test('OBJ-2: a fig-leaf autopilot.json with no plan (no implementer node) still fires => exit 2', async () => {
@@ -449,7 +449,7 @@ describe('stopHandler', () => {
       await writeArtifact('completion.json', passingCompletion({ changed_files: ['src/x.ts'] }));
       const out = await run({ stop_hook_active: false });
       expect(out.exitCode).toBe(2);
-      expect(out.stderr).toContain('without going through autopilot');
+      expect(out.stderr).toContain('autopilot을 거치지 않고');
     });
   });
 
@@ -934,7 +934,7 @@ describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('semantic: unintended meaning break');
+    expect(out.stderr).toContain('semantic: 의도치 않은 의미 파손');
   });
 
   test('unverified meaning forces continuation (exit 2)', async () => {
@@ -945,7 +945,7 @@ describe('stopHandler — ACG semantic (SemanticCompatibility) ledger', () => {
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('semantic: meaning compatibility unverified');
+    expect(out.stderr).toContain('semantic: 의미 호환성 미검증');
   });
 
   test('declared-intended break (semantic_safe=no, intended_breaking) does not block (exit 0)', async () => {
@@ -1148,7 +1148,7 @@ describe('stopHandler — residual resolvability gate (ac-2 runtime wiring)', ()
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('resolvable');
+    expect(out.stderr).toContain('해결 가능');
   });
 
   // (b) accepted_tradeoff WITH grounding → not blocked by THIS gate.
@@ -1168,7 +1168,7 @@ describe('stopHandler — residual resolvability gate (ac-2 runtime wiring)', ()
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('blocked_external');
+    expect(out.stderr).toContain('외부 요인');
   });
 
   // (d) ungrounded user_decision → exit 2 with a user-decision-surface reason.
@@ -1176,7 +1176,7 @@ describe('stopHandler — residual resolvability gate (ac-2 runtime wiring)', ()
     await writeArtifact('completion.json', passingWithResidual({ resolvability: 'user_decision' }));
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('deferred_needs_user_ok');
+    expect(out.stderr).toContain('사용자 승인 대기');
   });
 
   // (e) a NON-passing completion (would-close=false) must NOT add the residual
@@ -1209,7 +1209,7 @@ describe('stopHandler — residual resolvability gate (ac-2 runtime wiring)', ()
     // no autopilot.json written
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('resolvable');
+    expect(out.stderr).toContain('해결 가능');
   });
 });
 
@@ -1234,7 +1234,7 @@ describe('stopHandler — residual-risk-record gate (ac-3 completion-side, riskR
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('resolvable');
+    expect(out.stderr).toContain('해결 가능');
   });
 
   // a blocked_external record WITH grounding releases (genuine residual).
@@ -1272,7 +1272,7 @@ describe('stopHandler — residual-risk-record gate (ac-3 completion-side, riskR
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('blocked_external');
+    expect(out.stderr).toContain('외부 요인');
   });
 
   // Regression: a pass completion with NO remaining_risk_records behaves exactly as
@@ -1293,7 +1293,7 @@ describe('residualResolvabilityForcesContinuation', () => {
       wi as never,
     );
     expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('resolvable');
+    expect(reasons[0]).toContain('해결 가능');
   });
 
   test('user_decision (ungrounded) → a deferred_needs_user_ok reason, distinct wording', () => {
@@ -1302,7 +1302,7 @@ describe('residualResolvabilityForcesContinuation', () => {
       wi as never,
     );
     expect(reasons).toHaveLength(1);
-    expect(reasons[0]).toContain('deferred_needs_user_ok');
+    expect(reasons[0]).toContain('사용자 승인 대기');
   });
 
   test('no blockers => empty array', () => {
@@ -1410,7 +1410,7 @@ describe('stopHandler — yield precedence classifier (wi_260707loq §1)', () =>
     );
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('direction fork incomplete');
+    expect(out.stderr).toContain('방향 분기'); // fork-incomplete prefix Koreanized (#30); `direction fork` anchor kept
     expect(out.stderr).toContain('no_clear_advantage');
   });
 
@@ -1723,7 +1723,7 @@ describe('stopHandler — non-pass termination gate (ac-1) + no-progress (ac-5)'
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
     expect(out.stderr).toContain('ac-3');
-    expect(out.stderr).toContain('non_pass_status');
+    expect(out.stderr).toContain('정직한 부분완료');
   });
 
   test('a non-pass completion parking an in-scope FAIL AC without an honest declaration also blocks => exit 2', async () => {
@@ -1801,7 +1801,7 @@ describe('stopHandler — non-pass termination gate (ac-1) + no-progress (ac-5)'
     const out = await run({ stop_hook_active: false });
     expect(out.exitCode).toBe(2);
     expect(out.stderr).toContain('no completion.json');
-    expect(out.stderr ?? '').not.toContain('non_pass_status');
+    expect(out.stderr ?? '').not.toContain('정직한 부분완료');
   });
 });
 

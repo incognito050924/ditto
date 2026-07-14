@@ -379,8 +379,9 @@ const prismDivergeCommand = defineCommand({
       if (format === 'json') {
         writeJson({ work_item_id: args.wi, verdict, ...(decision ? { decision } : {}) });
       } else {
-        writeHuman(`판정: ${verdict.action} — ${verdict.reason}`);
-        if (decision) writeHuman(`기록됨(Record tier): ${decision.kind}`);
+        writeHuman(`판정: ${verdict.reason}`);
+        if (decision)
+          writeHuman(`기록으로 남겼어요(Record 계층 — 커밋되어 함께 공유되는 결정 기록): ${decision.kind}`);
       }
       // A flagged meaningless divergence is a STOP+escalate, never a green continue.
       if (verdict.diverged) process.exit(RUNTIME_ERROR_EXIT);
@@ -675,7 +676,7 @@ const prismTreeCommand = defineCommand({
           return;
         }
         writeHuman(
-          `아직 이슈맵이 없어요 (${args.wi}) — 먼저 \`ditto prism seed\`로 항목을 추가하세요.`,
+          `아직 정리한 항목이 없어요 (${args.wi}) — 먼저 \`ditto prism seed\`로 항목을 추가하세요.`,
         );
         return;
       }
@@ -730,13 +731,13 @@ const prismTreeCommand = defineCommand({
       walk(prism.tree.root_id, 0);
       // Any node not reachable from root (defensive completeness) — never drop a node.
       for (const node of prism.tree.nodes) walk(node.id, 0);
-      writeHuman(`이슈맵 (${args.wi}):`);
+      writeHuman(`정리한 항목 (${args.wi}):`);
       for (const line of lines) writeHuman(line);
       if (timestamps.length > 0) {
-        writeHuman('질문 라운드 시각:');
+        writeHuman('질문을 주고받은 시각:');
         for (const ts of timestamps) writeHuman(`  - ${ts}`);
       } else {
-        writeHuman('질문 라운드 기록 없음');
+        writeHuman('아직 질문을 주고받은 기록이 없어요');
       }
     } catch (err) {
       writeError(`prism tree failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -833,15 +834,15 @@ const prismOpponentCommand = defineCommand({
       }
       if (!outcome.host_available) {
         writeHuman(
-          `opponent host 없음 — 결정적 shell로 우아하게 강등했어요 (${concern}, host_absent). (ADR-0018)`,
+          `반대 검토 모델을 붙일 수 없어 이번엔 건너뛰었어요 (${concern}). 강제로 멈추지 않고 안전하게 넘어갑니다.`,
         );
       } else {
         writeHuman(
-          `opponent 실행 (${concern}): ${outcome.engaged.length}건 기록, ${outcome.degraded.length}건 강등.`,
+          `반대 검토 실행 (${concern}): ${outcome.engaged.length}건 기록, ${outcome.degraded.length}건 건너뜀.`,
         );
       }
       if (outcome.degraded.length > 0) {
-        writeHuman('강등된 노드(host_absent 스탬프):');
+        writeHuman('건너뛴 항목(반대 검토 모델 없음):');
         for (const id of outcome.degraded) writeHuman(`  - ${id}`);
       }
     } catch (err) {
@@ -1043,11 +1044,11 @@ const prismOpponentRecordCommand = defineCommand({
         writeJson({ work_item_id: args.wi, engaged, degraded, unanswered });
         return;
       }
-      writeHuman(`opponent-record: ${engaged.length}건 기록(engaged), ${degraded.length}건 강등.`);
-      if (engaged.length > 0) writeHuman(`  engaged: ${engaged.join(', ')}`);
-      if (degraded.length > 0) writeHuman(`  degraded(host_absent): ${degraded.join(', ')}`);
+      writeHuman(`반대 검토 반영: ${engaged.length}건 기록, ${degraded.length}건 건너뜀.`);
+      if (engaged.length > 0) writeHuman(`  기록됨: ${engaged.join(', ')}`);
+      if (degraded.length > 0) writeHuman(`  건너뜀(반대 검토 모델 없음): ${degraded.join(', ')}`);
       if (unanswered.length > 0) {
-        writeHuman(`  브리핑됐으나 미응답: ${unanswered.join(', ')}`);
+        writeHuman(`  안내했지만 답이 오지 않은 항목: ${unanswered.join(', ')}`);
       }
     } catch (err) {
       writeError(
@@ -1209,7 +1210,9 @@ const prismBacklogProposeCommand = defineCommand({
         writeJson({ work_item_id: args.wi, ok: true, proposed: result.items.length });
         return;
       }
-      writeHuman(`분할안을 제안했어요 (${result.items.length}건). 승인 후에만 물화됩니다:`);
+      writeHuman(
+        `분할안을 제안했어요 (${result.items.length}건). 승인해야만 물화(승인된 제안을 실제 작업 항목으로 만드는 것)됩니다:`,
+      );
       for (const item of result.items) writeHuman(`  - ${item.title}`);
       writeHuman('승인하려면: ditto prism backlog materialize --wi <wi> --statement "<원문 승인>"');
     } catch (err) {
@@ -1259,7 +1262,7 @@ const prismBacklogMaterializeCommand = defineCommand({
     // The approval primitive: a bare CLI call (no --statement) is NOT approval.
     if (!args.statement || args.statement.trim().length === 0) {
       writeError(
-        'prism backlog materialize requires --statement "<원문 승인>": bare 호출은 승인이 아닙니다 (사용자 원문 필요)',
+        'prism backlog materialize에는 --statement "<원문 승인>"이 필요해요: 명령만 실행하는 것으로는 승인으로 인정되지 않아요 (사용자가 직접 쓴 문장 필요)',
       );
       process.exit(USAGE_ERROR_EXIT);
       return;
@@ -1294,7 +1297,7 @@ const prismBacklogMaterializeCommand = defineCommand({
         return;
       }
       writeHuman(
-        `승인 확인 — ${result.materialized_wis.length}건을 draft 작업으로 물화했어요 (자동 착수 없음):`,
+        `승인 확인 — ${result.materialized_wis.length}건을 실제 작업 초안으로 만들었어요 (자동으로 시작하지는 않아요):`,
       );
       for (const id of result.materialized_wis) writeHuman(`  - ${id}`);
     } catch (err) {

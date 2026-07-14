@@ -360,24 +360,24 @@ const finalizeCmd = defineCommand({
         payload: parsed.data,
       });
       if (result.status === 'not_ready') {
-        writeError('interview is not ready; cannot finalize:');
+        writeError('인터뷰가 아직 준비되지 않아 확정(finalize)할 수 없습니다:');
         for (const r of result.gate.reasons) writeError(`  - ${r}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result.status === 'not_confirmed') {
         writeError(
-          'readiness gate passed (1차) but the user has not confirmed the intent (2차 게이트): ' +
-            'capture the user confirmation (user_confirmation.confirmed=true with their statement) and re-run finalize',
+          '1차(시스템 준비) 게이트는 통과했지만 2차(사용자 확인) 게이트가 아직 남았습니다: ' +
+            '사용자 확인(확정 표시와 그 원문)을 기록한 뒤 finalize를 다시 실행하세요',
         );
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result.status === 'blocked_by_dissent') {
         writeError(
-          'intent-dissent opponent flagged a critical dimension: the opponent found a ' +
-            'stronger/more-accurate reading of the intent. Review each dissent, then acknowledge it ' +
-            '(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) and re-run finalize:',
+          '의도 반론자(의도를 더 정확히 읽었는지 반박하는 검토자)가 핵심 항목 하나를 문제로 지목했습니다 — ' +
+            '의도를 더 강하거나 정확하게 읽은 반론입니다. 각 반론을 검토한 뒤 확인(acknowledge)하고 ' +
+            '(ditto deep-interview acknowledge-dissent --work-item <wi> --dimension <id>) finalize를 다시 실행하세요:',
         );
         for (const b of result.blocking) writeError(`  - [${b.dimension}] ${b.text}`);
         process.exit(RUNTIME_ERROR_EXIT);
@@ -544,7 +544,7 @@ const premortemCmd = defineCommand({
       // a contract violation — the items were recorded but the gate is not met.
       if (result.unpromoted.length > 0) {
         writeError(
-          `${result.unpromoted.length} critical pre-mortem item(s) require promotion (§5) but are promoted_to:'none' — promote each to ac | out_of_scope | user_owned_decision and re-run:`,
+          `되돌릴 수 없거나 파급이 큰 사전 부검(pre-mortem) 항목 ${result.unpromoted.length}건이 반드시 어딘가로 배정돼야 하는데 아직 배정되지 않았습니다 — 각 항목을 완료조건 | 범위밖 | 사용자결정 중 하나로 배정한 뒤 다시 실행하세요:`,
         );
         for (const item of result.unpromoted) {
           writeError(`  - [${item.reversibility}/blast:${item.blast_radius}] ${item.scenario}`);
@@ -625,7 +625,7 @@ const checkQuestionCmd = defineCommand({
     } else if (verdict.ok) {
       writeHuman('check-question: ok (presentation contract satisfied)');
     } else {
-      writeError('check-question: REJECTED — under-contextualized, do not ask as-is:');
+      writeError('check-question: 거절됨 — 맥락(왜 묻는지·무엇을 정하는지)이 부족한 질문입니다. 이대로 사용자에게 묻지 마세요:');
       for (const v of verdict.violations) {
         writeError(`  - ${v.field}: ${v.reason}`);
       }
@@ -1191,7 +1191,7 @@ const finalizeFromDocCmd = defineCommand({
     }
     if (!args.statement || args.statement.trim().length === 0) {
       writeError(
-        'finalize-from-doc requires --statement "<원문 확정>": the user confirmation is the 2차 gate half',
+        'finalize-from-doc에는 --statement "<원문 확정>"이 반드시 필요합니다: 이 사용자 확인이 2차(사용자 확인) 게이트를 채웁니다',
       );
       process.exit(USAGE_ERROR_EXIT);
       return;
@@ -1204,28 +1204,28 @@ const finalizeFromDocCmd = defineCommand({
         userConfirmation: { confirmed: true, statement: args.statement },
       });
       if (result.status === 'compile_rejected') {
-        writeError('design document did not compile — fix the compile-input sections and re-run:');
+        writeError('설계 문서를 의도(intent)로 변환하지 못했습니다 — 변환 입력이 되는 섹션을 고친 뒤 다시 실행하세요:');
         for (const r of result.reasons) writeError(`  - ${r}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result.status === 'not_ready') {
-        writeError('interview is not ready; cannot finalize:');
+        writeError('인터뷰가 아직 준비되지 않아 확정(finalize)할 수 없습니다:');
         for (const r of result.gate.reasons) writeError(`  - ${r}`);
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result.status === 'not_confirmed') {
         writeError(
-          'readiness gate passed (1차) but the user confirmation is missing (2차 게이트) — pass --statement',
+          '1차(시스템 준비) 게이트는 통과했으나 2차(사용자 확인) 게이트가 비었습니다 — --statement로 사용자 확인을 전달하세요',
         );
         process.exit(RUNTIME_ERROR_EXIT);
         return;
       }
       if (result.status === 'blocked_by_dissent') {
         writeError(
-          'intent-dissent opponent flagged a critical dimension: acknowledge each dissent ' +
-            '(ditto deep-interview acknowledge-dissent) and re-run:',
+          '의도 반론자(의도 해석을 반박하는 검토자)가 핵심 항목을 지목했습니다: 각 반론을 확인(acknowledge)한 뒤 ' +
+            '(ditto deep-interview acknowledge-dissent) 다시 실행하세요:',
         );
         for (const b of result.blocking) writeError(`  - [${b.dimension}] ${b.text}`);
         process.exit(RUNTIME_ERROR_EXIT);

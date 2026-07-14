@@ -201,7 +201,7 @@ describe('convergenceGate reads recorded fields only', () => {
     const c = convergence.parse(load('convergence/treadmill.json'));
     const r = convergenceGate(c);
     expect(r.pass).toBe(false);
-    expect(r.reasons.some((x) => x.includes('not converged'))).toBe(true);
+    expect(r.reasons.some((x) => x.includes('수렴 안 됨'))).toBe(true);
   });
 
   test('early-converge fixture fails (declares converged with open admissible)', () => {
@@ -398,7 +398,7 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     // review → surfaced as advisory, does NOT block (pass stays true).
     expect(r.pass).toBe(true);
     expect(r.reasons).toEqual([]);
-    expect(r.advisories.some((x) => x.startsWith('H1') && x.includes('goal'))).toBe(true);
+    expect(r.advisories.some((x) => x.startsWith('H1') && x.includes('목표'))).toBe(true);
   });
 
   test('H1: source_request divergence is ADVISORY (non-blocking)', () => {
@@ -408,7 +408,7 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
       graph: mkGraph(IDS),
     });
     expect(r.pass).toBe(true);
-    expect(r.advisories.some((x) => x.startsWith('H1') && x.includes('source_request'))).toBe(true);
+    expect(r.advisories.some((x) => x.startsWith('H1') && x.includes('원 요청'))).toBe(true);
   });
 
   test('H1: work-item adds an AC id not in intent → scope grow', () => {
@@ -448,7 +448,7 @@ describe('intentDriftGate (axis-2 intent conservation across the contract chain)
     });
     expect(r.pass).toBe(true);
     expect(r.reasons).toEqual([]);
-    expect(r.advisories.some((x) => x.startsWith('H2') && x.includes('root_goal'))).toBe(true);
+    expect(r.advisories.some((x) => x.startsWith('H2') && x.includes('최상위 목표'))).toBe(true);
   });
 
   test('H2: an intent AC addressed by no node → scope shrink', () => {
@@ -999,7 +999,7 @@ describe('passCloseResidualBlockers (ac-1: pass-close termination-completeness)'
     });
     const r = passCloseResidualBlockers(c, ['ac-1']);
     expect(r.length).toBe(1);
-    expect(r[0]).toContain('residual blocks pass-close');
+    expect(r[0]).toContain('잔여(residual) pass-close 차단');
   });
 
   test('an agent_resolvable remaining_risk_records entry BLOCKS a pass-close', () => {
@@ -1011,7 +1011,7 @@ describe('passCloseResidualBlockers (ac-1: pass-close termination-completeness)'
     });
     const r = passCloseResidualBlockers(c, ['ac-1']);
     expect(r.length).toBe(1);
-    expect(r[0]).toContain('residual-risk record blocks pass-close');
+    expect(r[0]).toContain('잔여 위험 기록(residual-risk record) pass-close 차단');
   });
 
   test('a resolvability-absent, non-AC-referencing out-of-scope note does NOT block (release path preserved)', () => {

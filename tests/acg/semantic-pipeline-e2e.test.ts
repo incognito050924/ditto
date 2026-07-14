@@ -81,7 +81,7 @@ describe('semantic pipeline e2e — seed → block → resolve → clear', () =>
     await writeSemantic(buildSemanticSeed({ ...seedInput, workItemId: wiId }));
     const out = await run();
     expect(out.exitCode).toBe(2);
-    expect(out.stderr).toContain('semantic: meaning compatibility unverified');
+    expect(out.stderr).toContain('semantic: 의미 호환성 미검증');
   });
 
   test('resolver verdict (declared intended break) clears the gate (exit 0)', async () => {

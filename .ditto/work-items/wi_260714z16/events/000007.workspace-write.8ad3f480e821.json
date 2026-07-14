@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714z16",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "8ad3f480e8216b0e44e18fc153a1d383f4ece93c303707ca0722f33573630efa",
+  "ts": "2026-07-14T08:49:30.027Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/charter.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

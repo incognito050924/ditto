@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714z16",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "d230e4ac34f820882874155ddee26515e6d552ae4eb4482210236754d8ded293",
+  "ts": "2026-07-14T08:26:31.520Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -f .ditto/local/runs/wi_260714z16/ac5-daejopyo.md && echo \"AC-5 human read complete: user confirmed the before/after 대조표 — force/polarity preserved across all prose cues; S1 (should->거쳐야 함) accepted as aligned with the exit-2 blocking gate; user directed the residual English gate strings be fully Koreanized (done+verified). Artifact: .ditto/local/runs/wi_260714z16/ac5-daejopyo.md\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -11,6 +11,7 @@ import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import {
+  type AttestationState,
   type ConflictDisposition,
   type RiskAxes,
   attestAcVerdicts,
@@ -96,7 +97,7 @@ export function dialecticForcesContinuation(d: Dialectic, repoRoot?: string): st
   const reasons: string[] = [];
   const verdict = d.synthesizer.verdict;
   if (verdict === 'reject' || verdict === 'blocked') {
-    reasons.push(`dialectic ${d.review_id} verdict=${verdict}; deliberation not resolved`);
+    reasons.push(`심의(dialectic) ${d.review_id} 판정=${verdict}; 심의가 해소되지 않음`);
   }
   // Multi-round convergence (wi_260606ezn): a `revise` verdict is NOT a close
   // while rounds remain. If round < max_rounds and required_edits are still open,
@@ -109,7 +110,7 @@ export function dialecticForcesContinuation(d: Dialectic, repoRoot?: string): st
     d.synthesizer.required_edits.length > 0
   ) {
     reasons.push(
-      `dialectic ${d.review_id}: verdict=revise at round ${d.round}/${d.input.constraints.max_rounds} with ${d.synthesizer.required_edits.length} required_edits open — re-deliberate next round`,
+      `심의(dialectic) ${d.review_id}: 라운드 ${d.round}/${d.input.constraints.max_rounds}에서 판정=revise, 아직 열린 required_edits ${d.synthesizer.required_edits.length}건 — 다음 라운드에서 재심의하라`,
     );
   }
   // Resolution is matched by an explicit echo in accepted/rejected_objections:
@@ -128,7 +129,7 @@ export function dialecticForcesContinuation(d: Dialectic, repoRoot?: string): st
     const admissible = obj.maps_to.trim().length > 0 && ADMISSIBLE_SEVERITIES.has(obj.severity);
     const idResolved = obj.id !== undefined && resolved.has(obj.id);
     if (admissible && !resolved.has(obj.claim) && !idResolved) {
-      reasons.push(`dialectic ${d.review_id}: admissible objection unresolved — ${obj.claim}`);
+      reasons.push(`심의(dialectic) ${d.review_id}: 유효한(admissible) 반론이 미해결 — ${obj.claim}`);
     }
     // ac-4 clause 2: backward-finding anchor existence. Additive to (not a
     // replacement for) the resolution check above — an admissible objection
@@ -138,7 +139,7 @@ export function dialecticForcesContinuation(d: Dialectic, repoRoot?: string): st
       const anchor = fileAnchorPath(obj.maps_to);
       if (anchor !== undefined && !existsSync(join(repoRoot, anchor))) {
         reasons.push(
-          `dialectic ${d.review_id}: objection maps_to '${obj.maps_to}' does not resolve to an existing file — backward-finding oracle unverifiable/stale`,
+          `심의(dialectic) ${d.review_id}: 반론의 maps_to '${obj.maps_to}'가 존재하는 파일로 확인되지 않음(does not resolve) — backward-finding 오라클이 검증 불가/오래됨`,
         );
       }
     }
@@ -293,7 +294,7 @@ export function autopilotBypassForcesContinuation(
   const changedCode = completion.data.changed_files.length > 0 || workItem.changed_files.length > 0;
   if (!changedCode) return [];
   return [
-    `work item ${workItem.id} changed code but is closing on completion.json alone, without going through autopilot (no real plan was ever run). Non-trivial work should run finalize → bootstrap → autopilot drive (ditto autopilot bootstrap ${workItem.id}, then the autopilot skill). To close without autopilot, run "ditto autopilot exempt ${workItem.id}" or transition the work item to done/abandoned.`,
+    `작업 항목 ${workItem.id}이(가) 코드를 바꿨는데 autopilot을 거치지 않고 completion.json만으로 닫히려 함(제대로 된 계획이 한 번도 실행되지 않음). 비단순 작업은 finalize → bootstrap → autopilot drive를 거쳐야 함(ditto autopilot bootstrap ${workItem.id} 실행 후 autopilot 스킬). autopilot 없이 닫으려면 "ditto autopilot exempt ${workItem.id}"를 실행하거나 작업 항목을 done/abandoned로 전환하라.`,
   ];
 }
 
@@ -317,7 +318,9 @@ export function acgReviewForcesContinuation(graph: AcgReviewGraph): string[] {
   for (const file of graph.files) {
     if (file.risk === 'high' && file.evidence === undefined) {
       const id = file.path ?? file.journey_id ?? '(unidentified)';
-      reasons.push(`acg review: high-risk change without evidence — ${id} (${file.risk_reason})`);
+      reasons.push(
+        `acg 리뷰: 증거 없는 고위험 변경(high-risk change without evidence) — ${id} (${file.risk_reason})`,
+      );
     }
   }
   return reasons;
@@ -335,7 +338,7 @@ export function assuranceSnapshotForcesContinuation(snapshot: AcgAssuranceSnapsh
   for (const r of snapshot.results) {
     if (r.outcome === 'fail') {
       const n = r.new_violations ?? r.violations ?? 0;
-      reasons.push(`fitness: ${r.function_id} failed — ${n} blocking violation(s)`);
+      reasons.push(`fitness: ${r.function_id} 실패 — 차단 위반 ${n}건`);
     }
   }
   return reasons;
@@ -351,7 +354,9 @@ export function assuranceSnapshotForcesContinuation(snapshot: AcgAssuranceSnapsh
  * the gate (same shape as `acgReviewForcesContinuation`).
  */
 export function impactForcesContinuation(graph: AcgImpactGraph): string[] {
-  return graph.unresolved.map((u) => `impact: unresolved ${u.kind} — ${u.path} (${u.reason})`);
+  return graph.unresolved.map(
+    (u) => `impact: unresolved ${u.kind}(미해결 영향) — ${u.path} (${u.reason})`,
+  );
 }
 
 /**
@@ -375,11 +380,13 @@ export function semanticForcesContinuation(sem: AcgSemanticCompatibility): strin
     const where = `${change.before} → ${change.after}`;
     if (v.semantic_safe === 'unverified') {
       return [
-        `semantic: meaning compatibility unverified for ${where} — verify or declare intended`,
+        `semantic: 의미 호환성 미검증 (${where}) — 검증하거나 의도된 변경으로 선언하라`,
       ];
     }
     if (v.semantic_safe === 'no' && v.intended_breaking !== true) {
-      return [`semantic: unintended meaning break ${where} (was: ${change.old_meaning})`];
+      return [
+        `semantic: 의도치 않은 의미 파손 (${where}) — 원래 의미: ${change.old_meaning}`,
+      ];
     }
     return [];
   });
@@ -412,7 +419,7 @@ export function knowledgeForcesContinuation(
   );
   if (!hasTerminalKnowledgeNode || carrier === undefined) return [];
   const g = knowledgeUpdateGate(carrier.triggers, carrier.delta);
-  return g.pass ? [] : g.reasons.map((r) => `knowledge update — ${r}`);
+  return g.pass ? [] : g.reasons.map((r) => `지식 업데이트(knowledge update) — ${r}`);
 }
 
 /**
@@ -436,8 +443,8 @@ export function residualResolvabilityForcesContinuation(
   const acceptanceIds = workItem.acceptance_criteria.map((c) => c.id);
   return resolvabilityBlockers(completion.unverified, acceptanceIds).map((b) =>
     b.userDecision
-      ? `residual deferred_needs_user_ok — ${b.item}: ${b.reason}`
-      : `residual blocks pass-close — ${b.item}: ${b.reason}`,
+      ? `잔여(residual) 사용자 승인 대기(사용자 결정 필요) — ${b.item}: ${b.reason}`
+      : `잔여(residual) pass-close 차단(통과-종료 차단) — ${b.item}: ${b.reason}`,
   );
 }
 
@@ -463,8 +470,8 @@ export function riskRecordForcesContinuation(
   const acceptanceIds = workItem.acceptance_criteria.map((c) => c.id);
   return riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b) =>
     b.userDecision
-      ? `residual-risk record deferred_needs_user_ok — ${b.item}: ${b.reason}`
-      : `residual-risk record blocks pass-close — ${b.item}: ${b.reason}`,
+      ? `잔여 위험 기록(residual-risk record) 사용자 승인 대기(사용자 결정 필요) — ${b.item}: ${b.reason}`
+      : `잔여 위험 기록(residual-risk record) pass-close 차단(통과-종료 차단) — ${b.item}: ${b.reason}`,
   );
 }
 
@@ -489,10 +496,13 @@ export function decisionConflictForcesContinuation(carrier: DecisionConflictCarr
     `${d.conflict.adr_id} (${d.conflict.kind}/${d.conflict.level}) → ${d.route}: ${d.conflict.basis}`;
   const blocks = (d: ConflictDisposition) => d.route === 'block' || d.route === 'ask_user';
   return {
-    reasons: dispositions.filter(blocks).map((d) => `decision conflict — ${line(d)}`),
+    reasons: dispositions.filter(blocks).map((d) => `의사결정 충돌(decision conflict) — ${line(d)}`),
     advisories: dispositions
       .filter((d) => !blocks(d))
-      .map((d) => `decision conflict (disclosed, agent followed ADR) — ${line(d)}`),
+      .map(
+        (d) =>
+          `decision conflict (disclosed, agent followed ADR) / 의사결정 충돌(공개됨, 에이전트가 ADR을 따름) — ${line(d)}`,
+      ),
   };
 }
 
@@ -684,6 +694,19 @@ async function maybeRecordProcedurePunt(
   }
 }
 
+/**
+ * Korean gloss for the per-AC attestation state (ac-6). The `AttestationState`
+ * VALUE is a structural enum consumed by code and string-matched by tests
+ * (gates.test.ts / autopilot-complete.test.ts / stop.test.ts), so it is KEPT
+ * verbatim as the anchor; this only adds the reader-facing Korean beside it, so the
+ * Stop attestation block reads as Korean rather than a bare English enum (#30).
+ */
+const ATTESTATION_STATE_GLOSS: Record<AttestationState, string> = {
+  'verified-by-evidence': '증거로 검증됨',
+  'reasoned-honest-partial': '정직한 부분완료(근거 있음)',
+  'blocked-for-user': '사용자 판단 필요(차단)',
+};
+
 export const stopHandler: HookHandler = async (input: HookInput) => {
   const raw = (input.raw ?? {}) as Record<string, unknown>;
 
@@ -697,7 +720,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     return {
       exitCode: 0,
       stderr:
-        'DITTO Stop completion gate did not run: no session_id was provided, so the completion/convergence gates could not be checked.\n',
+        'DITTO Stop 완료 게이트가 실행되지 않음(did not run): session_id가 없어 완료/수렴 게이트를 검사할 수 없음.\n',
     };
 
   const pointer = await new SessionPointerStore(input.repoRoot).get(sessionId);
@@ -802,7 +825,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   if (malformed && malformed.status === 'malformed') {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: ${malformed.name} is malformed (cannot verify completion). Fix or remove it before stopping.\n`,
+      stderr: `DITTO Stop gate: ${malformed.name} 파일이 malformed(형식 오류)라 완료를 검증할 수 없음. 멈추기 전에 고치거나 제거하라.\n`,
     };
   }
 
@@ -856,14 +879,14 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     // cascade) and RECORD the force once per node signature (ac-1, dedup-guarded).
     await maybeRecordProcedurePunt(input.repoRoot, pointer, pilot.data);
     reasons.push(
-      `autopilot approval is pending on a routine procedure-punt (no intent-conflict / high-risk / oracle-gap decision to yield for) — force-continuing; approve the plan ("ditto autopilot approve ${workItem.id}") to stop being re-prompted`,
+      `autopilot 승인이 일상적 절차 미루기(procedure-punt) 상태로 대기 중임 — 양보할 만한 결정(의도 충돌 / 고위험 / 완료 판정 근거 공백(oracle-gap))이 없음 — 계속 진행함; 다시 묻지 않게 하려면 계획을 승인하라("ditto autopilot approve ${workItem.id}")`,
     );
   }
 
   // P5: a direction-fork carrier is PRESENT but INCOMPLETE — force-continue (exit 2)
   // and NAME the missing / empty condition (ac-2 fail-closed).
   if (forkGate && forkGate.pass === false) {
-    reasons.push(...forkGate.reasons.map((r) => `direction fork incomplete — ${r}`));
+    reasons.push(...forkGate.reasons.map((r) => `방향 분기(direction fork)가 불완전함 — ${r}`));
   }
   // Whether the completion passes its OWN gates (so the work is actually closing,
   // not a partial/handoff checkpoint). Gates the (B) bypass check below.
@@ -907,7 +930,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     NON_TERMINAL_STATUSES.includes(workItem.status) &&
     workItem.autopilot_exempt !== true
   ) {
-    reasons.push('autopilot has runnable node(s); the work item is not complete yet');
+    reasons.push('autopilot에 실행 가능한 노드가 남아 있음 — 작업 항목이 아직 완료되지 않음');
   }
   // (B) plan→autopilot transition gate (中, wi_260615xby). A non-trivial work item
   // actually CLOSING on a completion.json (it passes its own gate) yet with no real
@@ -957,8 +980,8 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
       graph: pilot.data,
       ...(completion.status === 'ok' ? { completion: completion.data } : {}),
     });
-    if (!d.pass) reasons.push(...d.reasons.map((r) => `intent drift — ${r}`));
-    advisories.push(...d.advisories.map((r) => `intent drift (advisory) — ${r}`));
+    if (!d.pass) reasons.push(...d.reasons.map((r) => `의도 표류(intent drift) — ${r}`));
+    advisories.push(...d.advisories.map((r) => `의도 표류(intent drift, 참고) — ${r}`));
     // P3 side effect only — does not touch reasons/advisories/exit above.
     await recordIntentDriftMetric(input.repoRoot, pointer, {
       reasons: d.reasons,
@@ -1004,7 +1027,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   // so a non-blocking goal-divergence note reaches the user even on exit 0.
   const advisoryBlock =
     advisories.length > 0
-      ? `DITTO Stop advisory (non-blocking) — ${advisories.length} item(s):\n- ${advisories.join('\n- ')}\n`
+      ? `DITTO Stop advisory(비차단 참고) — ${advisories.length}건:\n- ${advisories.join('\n- ')}\n`
       : '';
 
   // (ac-6) Per-AC positive attestation. Built from the SAME per-AC verdicts the
@@ -1027,15 +1050,18 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
       : [];
   const attestationBlock =
     attestation.length > 0
-      ? `DITTO Stop attestation (per-AC) — ${attestation.length} criterion/criteria:\n${attestation
-          .map((a) => `- ${a.criterion_id}: ${a.state}${a.basis ? ` — ${a.basis}` : ''}`)
+      ? `DITTO Stop attestation(완료 조건별 증거 확인) — 완료 조건 ${attestation.length}건:\n${attestation
+          .map(
+            (a) =>
+              `- ${a.criterion_id}: ${a.state}(${ATTESTATION_STATE_GLOSS[a.state]})${a.basis ? ` — ${a.basis}` : ''}`,
+          )
           .join('\n')}\n`
       : '';
 
   if (reasons.length > 0) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: keep going — ${reasons.length} item(s) remain:\n- ${reasons.join('\n- ')}\n${advisoryBlock}${attestationBlock}`,
+      stderr: `DITTO Stop gate: 계속 진행 — 남은 항목 ${reasons.length}건:\n- ${reasons.join('\n- ')}\n${advisoryBlock}${attestationBlock}`,
     };
   }
 
@@ -1054,7 +1080,7 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   ) {
     return {
       exitCode: 2,
-      stderr: `DITTO Stop gate: work item ${workItem.id} is ${workItem.status} but has no real verification path (no completion.json / convergence.json, and no autopilot.json with a plan to run). Run /ditto:verify (writes completion.json) or transition the work item to done/abandoned before stopping.\n`,
+      stderr: `DITTO Stop gate: 작업 항목 ${workItem.id}이(가) ${workItem.status} 상태인데 실질적 검증 경로가 없음(no real verification path) — completion.json/convergence.json도 없고(no completion.json / convergence.json), 실행할 계획이 담긴 autopilot.json도 없음. 멈추기 전에 /ditto:verify를 실행하거나(completion.json 생성) 작업 항목을 done/abandoned로 전환하라.\n`,
     };
   }
 

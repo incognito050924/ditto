@@ -52,10 +52,10 @@ export function semanticScanNudge(input: SemanticNudgeInput): string | null {
   if (input.changedSourceFiles.length === 0) return null;
 
   if (input.observationChangeCount === null) {
-    return `DITTO semantic check: ${input.changedSourceFiles.length} changed source file(s) vs ${input.base} but no current semantic-scan-observation.json. Run \`ditto semantic observe --work-item ${input.workItemId} --base ${input.base}\` to check exported-signature changes.\n`;
+    return `DITTO 의미 검사: ${input.base} 대비 변경된 소스 파일 ${input.changedSourceFiles.length}건인데 현재 semantic-scan-observation.json이 없음. \`ditto semantic observe --work-item ${input.workItemId} --base ${input.base}\`를 실행해 내보낸 시그니처 변경을 점검하라.\n`;
   }
   if (input.observationChangeCount === 0) return null;
-  return `DITTO semantic check: ${input.observationChangeCount} observed exported-signature change(s) (semantic-scan-observation.json) not yet resolved. Promote any meaning-breaking change with \`ditto semantic detect\` + \`ditto semantic verdict\`, or declare it intended.\n`;
+  return `DITTO 의미 검사: 관측된 내보낸 시그니처 변경 ${input.observationChangeCount}건(semantic-scan-observation.json)이 아직 처리되지 않음. 의미를 바꾸는 변경은 \`ditto semantic detect\` + \`ditto semantic verdict\`로 승격하거나, 의도된 변경이라고 선언하라.\n`;
 }
 
 /**

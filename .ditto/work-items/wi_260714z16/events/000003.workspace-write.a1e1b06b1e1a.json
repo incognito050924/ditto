@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714z16",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "a1e1b06b1e1af2c00bd076eb2e1bf0ef60c9ecaa2b5e6b95b03da5f105779950",
+  "ts": "2026-07-14T08:26:31.299Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/gate-feedback-fidelity.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
