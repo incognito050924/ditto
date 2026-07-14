@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { recordTurn, startInterview } from '~/core/interview-driver';
+import { InterviewStore } from '~/core/interview-store';
+import { loadGlossaryVocab } from '~/core/knowledge-bridge';
 import {
   OPTION_DESCRIPTION_BUDGET,
   REVIEW_REGENERATE_CAP,
+  findUnexplainedIdentifiers,
   isBranchSeam,
   needsBriefing,
   orderByContinuity,
@@ -10,6 +17,8 @@ import {
   selectSingleFire,
   validateQuestionContext,
 } from '~/core/question-context';
+import { assertSelectedPresentationContract } from '~/core/question-round';
+import { WorkItemStore } from '~/core/work-item-store';
 
 // ac-2 (wi_260622ph8): the structural presentation-contract gate. A question may
 // only be ASKED when it carries comprehensible, decision-sufficient context. This
@@ -367,5 +376,259 @@ describe('orderByContinuity (ac-5, branch-walking continuity-ordering)', () => {
 
   test('empty input → empty output', () => {
     expect(orderByContinuity([], [])).toEqual([]);
+  });
+});
+
+// ── wi_260714aaq (#29): opaque internal-vocabulary leak detection ────────────────
+//
+// Beyond the shape-based IDENTIFIER_PATTERNS, findUnexplainedIdentifiers also flags a
+// CLOSED, CURATED opaque-vocab set surfaced un-glossed on the QUESTION face: a hardcoded
+// floor (axis names as EXACT literals; a small explicit set of coined compounds; curated
+// schema field names in UNDERSCORE form) UNION the glossary's forbidden_abbreviations
+// (RESOLVED BY THE CALLER, INJECTED — the detector stays pure). Membership is by CURATION,
+// not a broad matcher; the ±40-char gloss rule is reused; the glossary set is matched as
+// LITERAL substrings so a metachar-bearing entry can neither break nor backtrack the scan.
+describe('findUnexplainedIdentifiers opaque-vocab floor (ac-1, must-flag)', () => {
+  test('flags an un-glossed axis name (정합성 2축)', () => {
+    expect(findUnexplainedIdentifiers('정합성 2축을 어떻게 맞출까요?')).toContain('정합성 2축');
+  });
+
+  test('flags an un-glossed coined compound (supersedes chain)', () => {
+    expect(findUnexplainedIdentifiers('supersedes chain을 설명 없이 씁니다')).toContain(
+      'supersedes chain',
+    );
+  });
+
+  test('flags an un-glossed curated schema field in UNDERSCORE form (acceptance_criteria)', () => {
+    expect(findUnexplainedIdentifiers('acceptance_criteria를 어떻게 처리할까요?')).toContain(
+      'acceptance_criteria',
+    );
+  });
+
+  test('an opaque-vocab hit carrying a nearby gloss passes (reuses the ±40-char rule)', () => {
+    expect(findUnexplainedIdentifiers('정합성 2축(코드와 SoT의 두 관계)을 맞춥니다')).toEqual([]);
+  });
+});
+
+describe('findUnexplainedIdentifiers opaque-vocab — zero false positive (ac-2)', () => {
+  test('ordinary Korean prose does not flag', () => {
+    expect(
+      findUnexplainedIdentifiers('비밀번호를 안전하게 저장하는 방법을 정하는 질문이에요.'),
+    ).toEqual([]);
+  });
+
+  test('common words used in everyday sense (run / evidence / request) do not flag', () => {
+    expect(
+      findUnexplainedIdentifiers('run 결과와 evidence를 확인하고 request를 처리합니다'),
+    ).toEqual([]);
+  });
+
+  // These are glossary ALIASES (event→memory event, source→memory source,
+  // projection→memory projection, stem→stem) — deliberately NOT in the hard-reject list
+  // (coverage OBJ-1): treating them as leaks would invert the field contract and
+  // false-positive on ordinary prose.
+  test('alias-sourced common words (event / source / projection / stem) do not flag', () => {
+    expect(
+      findUnexplainedIdentifiers('event 와 source, projection, stem 모두 평범한 단어입니다'),
+    ).toEqual([]);
+  });
+
+  // The banner uses the SPACE form "acceptance criteria"; only the UNDERSCORE
+  // "acceptance_criteria" leaks. The space form must survive (keeps charter.test green).
+  test('banner space-form "acceptance criteria" (space ≠ underscore) does not flag', () => {
+    expect(findUnexplainedIdentifiers('모든 acceptance criteria를 증거와 함께 닫습니다')).toEqual(
+      [],
+    );
+  });
+});
+
+describe('findUnexplainedIdentifiers injected glossary vocab (ac-1, unit)', () => {
+  test('flags an injected forbidden_abbreviation via the vocab param', () => {
+    expect(findUnexplainedIdentifiers('zqx를 설명 없이 씁니다', ['zqx'])).toContain('zqx');
+  });
+
+  // Literal (non-regex) matching: 'a.c' as a REGEX would match 'abc'; as a LITERAL it
+  // must match only 'a.c'. Proves the glossary set is matched by literal substring
+  // (metachar entries are inert — no ReDoS, no injection).
+  test('literal matching: a metachar-bearing entry flags itself but NOT a regex-would-match string', () => {
+    expect(findUnexplainedIdentifiers('a.c를 설명 없이 씁니다', ['a.c'])).toContain('a.c');
+    expect(findUnexplainedIdentifiers('abc를 설명 없이 씁니다', ['a.c'])).toEqual([]);
+  });
+});
+
+// ac-3 asymmetry — the prism selected face is a HARD gate (like the deep-interview
+// question face): an un-glossed opaque-vocab hit rejects the round before persist.
+describe('assertSelectedPresentationContract opaque-vocab (ac-3, prism HARD)', () => {
+  test('rejects a selected question surfacing an un-glossed axis name (opaque-vocab floor)', () => {
+    const selected = [
+      {
+        text: '정합성 2축을 어떻게 정할까요?',
+        property: 'orientation' as const,
+        user_explanation: '왜 묻는지 쉬운 말로 설명하는 문장이에요',
+        scores: { consensus: 1, quality: 0.9, necessity: 0.9, answer_value: 0.9 },
+      },
+    ];
+    expect(() => assertSelectedPresentationContract(selected)).toThrow();
+  });
+});
+
+// ac-1 / ac-3 (HARD) — the CONSUMER path: recordTurn (the deep-interview QUESTION face)
+// resolves the glossary vocab at runtime and applies it. Proves the glossary is genuinely
+// READ (coverage OBJ-2 — not false-green), not a unit-only inline list.
+describe('recordTurn opaque-vocab consumer path (ac-1/ac-3, glossary READ at runtime)', () => {
+  async function makeRepo(forbidden: string[] | null): Promise<{ repo: string; wiId: string }> {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-qc-vocab-'));
+    if (forbidden !== null) {
+      await mkdir(join(repo, '.ditto', 'knowledge'), { recursive: true });
+      await writeFile(
+        join(repo, '.ditto', 'knowledge', 'glossary.json'),
+        JSON.stringify({
+          schema_version: '0.1.0',
+          project_name: 'test',
+          updated_at: '2026-07-14T00:00:00+09:00',
+          entries: [
+            { term: 'x-term', aliases: [], definition: 'd', forbidden_abbreviations: forbidden },
+          ],
+        }),
+      );
+    }
+    const wi = await new WorkItemStore(repo).create({
+      title: 't',
+      source_request: 'r',
+      goal: 'g',
+      acceptance_criteria: [{ id: 'ac-1', statement: 'TBD', verdict: 'unverified', evidence: [] }],
+    });
+    await startInterview(repo, { workItemId: wi.id });
+    return { repo, wiId: wi.id };
+  }
+
+  const question = {
+    text: 'zqx를 어떻게 정할까요?',
+    why_matters: '결과에 영향을 줍니다.',
+    user_explanation: '왜 묻는지 쉬운 말로 설명하는 문장이에요.',
+    recommended_answer: '추천하는 기본 답이에요.',
+    info_gain_estimate: 'high' as const,
+  };
+  const dimension = {
+    id: 'd1',
+    critical: false,
+    state: 'partial' as const,
+    ambiguity: 0.5,
+    notes: '',
+  };
+
+  test('rejects a question surfacing a glossary forbidden_abbreviation un-glossed', async () => {
+    const { repo, wiId } = await makeRepo(['zqx']);
+    try {
+      await expect(
+        recordTurn(repo, { workItemId: wiId, payload: { dimension, question } }),
+      ).rejects.toThrow();
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('does NOT reject the same question when no glossary is present (flag is glossary-sourced)', async () => {
+    const { repo, wiId } = await makeRepo(null);
+    try {
+      const state = await recordTurn(repo, { workItemId: wiId, payload: { dimension, question } });
+      expect(state.questions.length).toBe(1);
+      expect(await new InterviewStore(repo).exists(wiId)).toBe(true);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
+// The glossary loader (wi_260714aaq, #29): the fail-open READ that resolves the injected vocab.
+// Shaped like loadFarFieldTaxonomy — missing → [], malformed → warn + [] (no silent
+// zero-signal), version-skew tolerant, and the aliases/terms field contract preserved.
+describe('loadGlossaryVocab (ac-1 source / ac-2 field-contract / edge fail-open)', () => {
+  async function writeGlossary(body: unknown): Promise<string> {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-gloss-'));
+    await mkdir(join(repo, '.ditto', 'knowledge'), { recursive: true });
+    await writeFile(
+      join(repo, '.ditto', 'knowledge', 'glossary.json'),
+      typeof body === 'string' ? body : JSON.stringify(body),
+    );
+    return repo;
+  }
+
+  test('reads non-empty forbidden_abbreviations from a real glossary (consumer source, not inline)', async () => {
+    const repo = await writeGlossary({
+      schema_version: '0.1.0',
+      project_name: 't',
+      updated_at: '2026-07-14T00:00:00+09:00',
+      entries: [
+        { term: 'work item', aliases: [], definition: 'd', forbidden_abbreviations: ['wi'] },
+        { term: 'x', aliases: [], definition: 'd', forbidden_abbreviations: [] },
+      ],
+    });
+    try {
+      expect(await loadGlossaryVocab(repo)).toEqual(['wi']);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  // Field contract (coverage OBJ-1): aliases and terms are NOT vocab — a glossary whose
+  // entries carry only aliases (event/source/projection/stem) yields [].
+  test('excludes aliases and terms — a glossary with aliases but empty forbidden_abbreviations yields []', async () => {
+    const repo = await writeGlossary({
+      schema_version: '0.1.0',
+      project_name: 't',
+      updated_at: '2026-07-14T00:00:00+09:00',
+      entries: [
+        {
+          term: 'memory event',
+          aliases: ['event', 'source', 'projection', 'stem'],
+          definition: 'd',
+          forbidden_abbreviations: [],
+        },
+      ],
+    });
+    try {
+      expect(await loadGlossaryVocab(repo)).toEqual([]);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('missing glossary → [] (floor only), no throw', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-gloss-'));
+    try {
+      expect(await loadGlossaryVocab(repo)).toEqual([]);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('malformed glossary → onMalformed called + [], no throw (no silent zero-signal fail-open)', async () => {
+    const repo = await writeGlossary('{ this is not valid json');
+    try {
+      let warned = false;
+      const vocab = await loadGlossaryVocab(repo, () => {
+        warned = true;
+      });
+      expect(vocab).toEqual([]);
+      expect(warned).toBe(true);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  test('schema-version-skewed glossary still yields its forbidden_abbreviations (tolerant read)', async () => {
+    const repo = await writeGlossary({
+      schema_version: '9.9.9',
+      project_name: 't',
+      updated_at: '2026-07-14T00:00:00+09:00',
+      some_future_field: true,
+      entries: [{ term: 'a', aliases: [], definition: 'd', forbidden_abbreviations: ['zzz'] }],
+    });
+    try {
+      expect(await loadGlossaryVocab(repo)).toEqual(['zzz']);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
   });
 });

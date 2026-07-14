@@ -5,25 +5,43 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -20027,7 +20045,33 @@ var isGlossed = (text, start, end) => {
   }
   return false;
 };
-function findUnexplainedIdentifiers(s2) {
+var OPAQUE_VOCAB_FLOOR = [
+  "\uC815\uD569\uC131 2\uCD95",
+  "DITTO \uAE30\uB2A5 4\uCD95",
+  "supersedes chain",
+  "surface projection",
+  "follow-up materialization",
+  "acceptance_criteria",
+  "source_request",
+  "drifted_sources"
+];
+function findLiteralOpaqueVocab(text, vocab) {
+  const found = [];
+  for (const term of vocab) {
+    if (term.length === 0)
+      continue;
+    for (let idx = text.indexOf(term);idx !== -1; idx = text.indexOf(term, idx + 1)) {
+      const start = idx;
+      const end = idx + term.length;
+      if (!hasIdentifierBoundary(text, start, end))
+        continue;
+      if (!isGlossed(text, start, end))
+        found.push(term);
+    }
+  }
+  return found;
+}
+function findUnexplainedIdentifiers(s2, opaqueVocab = []) {
   if (s2 === undefined)
     return [];
   const text = stripCode(s2);
@@ -20043,9 +20087,11 @@ function findUnexplainedIdentifiers(s2) {
         found.push(m2[0]);
     }
   }
+  found.push(...findLiteralOpaqueVocab(text, OPAQUE_VOCAB_FLOOR));
+  found.push(...findLiteralOpaqueVocab(text, opaqueVocab));
   return found;
 }
-function validateQuestionContext(candidate) {
+function validateQuestionContext(candidate, opaqueVocab = []) {
   const violations = [];
   if (isBlank(candidate.user_explanation)) {
     violations.push({
@@ -20066,8 +20112,8 @@ function validateQuestionContext(candidate) {
     });
   }
   const leaked = [
-    ...findUnexplainedIdentifiers(candidate.text),
-    ...findUnexplainedIdentifiers(candidate.user_explanation)
+    ...findUnexplainedIdentifiers(candidate.text, opaqueVocab),
+    ...findUnexplainedIdentifiers(candidate.user_explanation, opaqueVocab)
   ];
   if (leaked.length > 0) {
     violations.push({
@@ -34781,6 +34827,9 @@ var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})
 var glossarySummarySchema = exports_external.object({
   entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
 });
+var glossaryVocabSchema = exports_external.object({
+  entries: exports_external.array(exports_external.object({ forbidden_abbreviations: exports_external.array(exports_external.string()).default([]) })).default([])
+});
 var KNOWLEDGE_DIR = join45(".ditto", "knowledge");
 function adrHeadline(filename, body) {
   const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
@@ -34822,6 +34871,25 @@ async function loadKnowledgeSources(repoRoot) {
   }
   adrHeadlines.sort();
   return { contextPath, glossaryPath, adrDir, adrHeadlines, termHeadlines };
+}
+async function loadGlossaryVocab(repoRoot, onMalformed) {
+  const file = Bun.file(join45(repoRoot, KNOWLEDGE_DIR, "glossary.json"));
+  if (!await file.exists())
+    return [];
+  try {
+    const parsed = glossaryVocabSchema.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return [];
+    }
+    return parsed.data.entries.flatMap((e2) => e2.forbidden_abbreviations).map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+  } catch {
+    onMalformed?.();
+    return [];
+  }
+}
+function warnMalformedGlossary(repoRoot) {
+  console.warn(`ditto: malformed ${join45(repoRoot, KNOWLEDGE_DIR, "glossary.json")} \u2014 ignoring glossary-sourced opaque vocabulary and applying only the built-in floor (fix the file to re-enable it)`);
 }
 function renderKnowledgeSummary(sources) {
   const lines = [];
@@ -38950,15 +39018,16 @@ async function recordTurn(repoRoot, input) {
   const current = await store.get(input.workItemId);
   const nowIso = (input.now ?? new Date).toISOString();
   const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
+  const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
   const surfaceVerdict = validateQuestionContext({
     text: question.text,
     why_matters: question.why_matters,
     user_explanation: question.user_explanation,
     recommended_answer: question.recommended_answer
-  });
+  }, opaqueVocab);
   const leakedIdentifiers = [
-    ...findUnexplainedIdentifiers(question.text),
-    ...findUnexplainedIdentifiers(question.user_explanation)
+    ...findUnexplainedIdentifiers(question.text, opaqueVocab),
+    ...findUnexplainedIdentifiers(question.user_explanation, opaqueVocab)
   ];
   if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
     const violations = surfaceVerdict.violations.map((v2) => `${v2.field}: ${v2.reason}`).join("; ");
@@ -39517,14 +39586,14 @@ init_question_round();
 init_question_round();
 init_work_item_store();
 var ROUND_SURFACE_FIELDS = new Set(["user_explanation", "unexplained_identifier"]);
-function assertSelectedPresentationContract(selected) {
+function assertSelectedPresentationContract(selected, opaqueVocab = []) {
   const lines = [];
   selected.forEach((q2, i2) => {
     const verdict2 = validateQuestionContext({
       text: q2.text,
       why_matters: q2.why_matters ?? "",
       user_explanation: q2.user_explanation
-    });
+    }, opaqueVocab);
     for (const v2 of verdict2.violations) {
       if (ROUND_SURFACE_FIELDS.has(v2.field)) {
         lines.push(`  - selected[${i2}] "${q2.text.slice(0, 80)}" ${v2.field}: ${v2.reason}`);
@@ -57619,4 +57688,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=de20d7b35cb1c502f307ca3850123aeccbd5853d4d2244bb0af7e3d982b258ae
+//# ditto-src-stamp=575039fab254c3ebf017cc965535323a1186714cb22fef237a10ee66dd0a9e16

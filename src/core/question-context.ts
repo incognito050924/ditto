@@ -97,11 +97,66 @@ const isGlossed = (text: string, start: number, end: number): boolean => {
   return false;
 };
 
+// --- ac-1 (wi_260714aaq, #29): curated opaque-vocab leak detection ------------
+//
+// Beyond the shape-based IDENTIFIER_PATTERNS, a CLOSED, CURATED list of opaque internal
+// vocabulary is also flagged when surfaced un-glossed on the question face. Membership is by
+// CURATION, never a broad matcher ("opaque to a fresh user"): this hardcoded FLOOR is
+// UNION'd with the glossary's `forbidden_abbreviations`, which are RESOLVED BY THE CALLER and
+// INJECTED (this module stays PURE — no file read; the doc contract above is the ac-1 unit of
+// evidence). The FLOOR holds (1) axis names as EXACT-LITERAL phrases — never broad-token/`\w+`,
+// which regressed on Korean (see IDENTIFIER_PATTERNS note above); (2) a small EXPLICIT set of
+// coined compounds (NOT open-ended); (3) curated schema field names in their UNDERSCORE form.
+// The underscore form matters: the per-turn banner uses the SPACE form ("acceptance criteria")
+// which must NOT be caught — only the schema/code form "acceptance_criteria" leaks.
+//
+// Glossary `aliases` and the glossary `term`s are DELIBERATELY EXCLUDED (coverage OBJ-1):
+// aliases are "surface forms users/agents have USED" and include common words
+// (event/source/projection/stem); terms include common words (run/evidence/request) — either
+// would invert the field contract and false-positive on ordinary prose.
+export const OPAQUE_VOCAB_FLOOR: readonly string[] = [
+  // (1) axis names — EXACT-LITERAL phrases (Korean-safe; never a broad token match).
+  '정합성 2축',
+  'DITTO 기능 4축',
+  // (2) coined compounds — a small explicit list, NOT open-ended.
+  'supersedes chain',
+  'surface projection',
+  'follow-up materialization',
+  // (3) curated schema field names in UNDERSCORE form (the space form must NOT match).
+  'acceptance_criteria',
+  'source_request',
+  'drifted_sources',
+];
+
+// Scan for LITERAL opaque-vocab occurrences via indexOf — never a regex, so a metachar-bearing
+// glossary entry can neither break the pattern nor backtrack (ReDoS/injection sidestepped
+// entirely). A hit must satisfy the same identifier-boundary + ±40-char gloss rules as the
+// shape-based patterns, so a nearby gloss lets it pass just like an identifier.
+function findLiteralOpaqueVocab(text: string, vocab: readonly string[]): string[] {
+  const found: string[] = [];
+  for (const term of vocab) {
+    if (term.length === 0) continue;
+    for (let idx = text.indexOf(term); idx !== -1; idx = text.indexOf(term, idx + 1)) {
+      const start = idx;
+      const end = idx + term.length;
+      if (!hasIdentifierBoundary(text, start, end)) continue;
+      if (!isGlossed(text, start, end)) found.push(term);
+    }
+  }
+  return found;
+}
+
 /**
- * Returns the unglossed internal identifiers surfaced in `s` (after stripping code).
- * Pure and deterministic — the unit of evidence for ac-1.
+ * Returns the unglossed internal identifiers surfaced in `s` (after stripping code): the
+ * shape-based IDENTIFIER_PATTERNS PLUS the curated opaque-vocab — the hardcoded
+ * {@link OPAQUE_VOCAB_FLOOR} unioned with the caller-injected `opaqueVocab` (the glossary's
+ * forbidden_abbreviations, resolved by the caller so this stays pure). Pure and deterministic —
+ * the unit of evidence for ac-1.
  */
-export function findUnexplainedIdentifiers(s: string | undefined): string[] {
+export function findUnexplainedIdentifiers(
+  s: string | undefined,
+  opaqueVocab: readonly string[] = [],
+): string[] {
   if (s === undefined) return [];
   const text = stripCode(s);
   const found: string[] = [];
@@ -114,6 +169,9 @@ export function findUnexplainedIdentifiers(s: string | undefined): string[] {
       if (!isGlossed(text, start, end)) found.push(m[0]);
     }
   }
+  // Curated opaque vocabulary: the hardcoded floor + the caller-resolved glossary set.
+  found.push(...findLiteralOpaqueVocab(text, OPAQUE_VOCAB_FLOOR));
+  found.push(...findLiteralOpaqueVocab(text, opaqueVocab));
   return found;
 }
 
@@ -123,6 +181,9 @@ export function findUnexplainedIdentifiers(s: string | undefined): string[] {
  */
 export function validateQuestionContext(
   candidate: QuestionContextCandidate,
+  // Caller-resolved glossary opaque-vocab (forbidden_abbreviations), unioned with the
+  // hardcoded floor inside findUnexplainedIdentifiers. Default [] = floor-only.
+  opaqueVocab: readonly string[] = [],
 ): QuestionContextVerdict {
   const violations: ContextViolation[] = [];
   if (isBlank(candidate.user_explanation)) {
@@ -149,8 +210,8 @@ export function validateQuestionContext(
   // un-glossed internal identifier. background/grounding/self_answer_attempts are not
   // user-default surfaces, so they are excluded from this check.
   const leaked = [
-    ...findUnexplainedIdentifiers(candidate.text),
-    ...findUnexplainedIdentifiers(candidate.user_explanation),
+    ...findUnexplainedIdentifiers(candidate.text, opaqueVocab),
+    ...findUnexplainedIdentifiers(candidate.user_explanation, opaqueVocab),
   ];
   if (leaked.length > 0) {
     violations.push({

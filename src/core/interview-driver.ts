@@ -27,6 +27,7 @@ import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGa
 import { IntentStore } from './intent-store';
 import { engageIntentDissent, mergeDissent } from './interview-dissent';
 import { InterviewStore } from './interview-store';
+import { loadGlossaryVocab, warnMalformedGlossary } from './knowledge-bridge';
 import { type IntentFragment, fragmentKeywords } from './prism/engine';
 import { OPPONENT_FANOUT_CAP, type OpponentSeamConfig } from './prism/opponent';
 import {
@@ -383,15 +384,23 @@ export async function recordTurn(
   // NOT checked — they legitimately carry internal vocabulary (wi_/ac-). The thrown Error
   // NAMES what tripped it (violation field+reason AND the leaked identifiers), never a bare
   // "rejected", so the caller can fix the exact surface.
-  const surfaceVerdict = validateQuestionContext({
-    text: question.text,
-    why_matters: question.why_matters,
-    user_explanation: question.user_explanation,
-    recommended_answer: question.recommended_answer,
-  });
+  // Resolve the glossary opaque-vocab (forbidden_abbreviations) ONCE at this consumer site
+  // (wi_260714aaq, #29) — this recordTurn call IS the deep-interview QUESTION face, the HARD
+  // gate. Unioned with the detector's hardcoded floor; a bad glossary fails open to floor-only
+  // WITH a warning (never silent, never a crash of the interview gate).
+  const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
+  const surfaceVerdict = validateQuestionContext(
+    {
+      text: question.text,
+      why_matters: question.why_matters,
+      user_explanation: question.user_explanation,
+      recommended_answer: question.recommended_answer,
+    },
+    opaqueVocab,
+  );
   const leakedIdentifiers = [
-    ...findUnexplainedIdentifiers(question.text),
-    ...findUnexplainedIdentifiers(question.user_explanation),
+    ...findUnexplainedIdentifiers(question.text, opaqueVocab),
+    ...findUnexplainedIdentifiers(question.user_explanation, opaqueVocab),
   ];
   if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
     const violations = surfaceVerdict.violations.map((v) => `${v.field}: ${v.reason}`).join('; ');

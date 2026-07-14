@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { type CharterContext, charterProjection } from '~/core/charter';
-import { findUnexplainedIdentifiers } from '~/core/question-context';
+import { OPAQUE_VOCAB_FLOOR, findUnexplainedIdentifiers } from '~/core/question-context';
 
 describe('charterProjection (D8)', () => {
   test('base case: prime directive only when ctx is empty', () => {
@@ -119,6 +119,30 @@ describe('charterProjection (D8)', () => {
       ];
       for (const s of surfaces) {
         expect(findUnexplainedIdentifiers(s)).toEqual([]);
+      }
+    });
+
+    // wi_260714aaq (#29) ac-3: the new opaque-vocab class is HARD on the deep-interview
+    // QUESTION face but ADVISORY at the per-turn banner (#30 has not rewritten these strings
+    // yet). Concretely, no OPAQUE_VOCAB_FLOOR entry raw-leaks into any banner surface — the
+    // banner uses the SPACE form ("acceptance criteria") while the floor uses the UNDERSCORE
+    // form ("acceptance_criteria"), and no axis name / coined compound appears — so the banner
+    // is never hard-blocked by the new class. Regression guard: a future banner edit that
+    // surfaces an axis name / schema field un-glossed trips here.
+    test('no OPAQUE_VOCAB_FLOOR entry raw-leaks into any banner surface (ac-3: banner advisory)', () => {
+      const surfaces = [
+        charterProjection(),
+        charterProjection({
+          workItemGuide: true,
+          placeholderAcceptanceCriteria: true,
+          deepInterviewDirective: true,
+          selfAnswerHint: true,
+        }),
+      ];
+      for (const s of surfaces) {
+        for (const entry of OPAQUE_VOCAB_FLOOR) {
+          expect(s).not.toContain(entry);
+        }
       }
     });
 

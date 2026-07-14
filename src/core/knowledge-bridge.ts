@@ -30,6 +30,16 @@ const glossarySummarySchema = z.object({
   entries: z.array(z.object({ term: z.string(), status: z.string().optional() })).default([]),
 });
 
+// Deliberately lenient (wi_260714aaq, #29): reads ONLY `entries[].forbidden_abbreviations`,
+// ignoring every other field. A schema-version-skewed or otherwise-evolved glossary still
+// yields its forbidden_abbreviations (tolerant read), so a version bump never silently drops
+// the opaque-vocab signal.
+const glossaryVocabSchema = z.object({
+  entries: z
+    .array(z.object({ forbidden_abbreviations: z.array(z.string()).default([]) }))
+    .default([]),
+});
+
 export interface KnowledgeSources {
   contextPath: string;
   glossaryPath: string;
@@ -106,6 +116,53 @@ export async function loadKnowledgeSources(repoRoot: string): Promise<KnowledgeS
   adrHeadlines.sort();
 
   return { contextPath, glossaryPath, adrDir, adrHeadlines, termHeadlines };
+}
+
+/**
+ * Read the glossary's `forbidden_abbreviations` (the schema field designed to be REJECTED in
+ * user-facing output — glossary.ts:30-33) as the caller-injected opaque-vocab set for the
+ * question-face leak detector (wi_260714aaq, #29 — `findUnexplainedIdentifiers`'s injected
+ * param). Shaped like {@link loadFarFieldTaxonomy} (coverage-taxonomy.ts): missing file → `[]`
+ * (the detector's hardcoded OPAQUE_VOCAB_FLOOR still applies, so the effective vocab is
+ * floor-only); `try/catch` + `safeParse`; on malformed → `onMalformed()` + `[]` — NO silent
+ * zero-signal fail-open. This loader is FAIL-OPEN by construction (a bad glossary can never
+ * crash the interview gate), unlike the unguarded `JSON.parse` in loadKnowledgeSources (:86).
+ *
+ * Only NON-EMPTY (trimmed) forbidden_abbreviations are returned. Glossary `aliases` and `term`s
+ * are DELIBERATELY excluded (coverage OBJ-1): they include common words that would invert the
+ * field contract and false-positive on ordinary prose.
+ */
+export async function loadGlossaryVocab(
+  repoRoot: string,
+  onMalformed?: () => void,
+): Promise<string[]> {
+  const file = Bun.file(join(repoRoot, KNOWLEDGE_DIR, 'glossary.json'));
+  if (!(await file.exists())) return [];
+  try {
+    const parsed = glossaryVocabSchema.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return [];
+    }
+    return parsed.data.entries
+      .flatMap((e) => e.forbidden_abbreviations)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  } catch {
+    onMalformed?.();
+    return [];
+  }
+}
+
+/**
+ * Default `onMalformed` for {@link loadGlossaryVocab} (wi_260714aaq, #29 — the glossary twin of
+ * {@link warnMalformedTaxonomy}): a malformed glossary fails open to the floor WITH a signal,
+ * never silently, so a broken file does not look like it "did nothing".
+ */
+export function warnMalformedGlossary(repoRoot: string): void {
+  console.warn(
+    `ditto: malformed ${join(repoRoot, KNOWLEDGE_DIR, 'glossary.json')} — ignoring glossary-sourced opaque vocabulary and applying only the built-in floor (fix the file to re-enable it)`,
+  );
 }
 
 /** Build the summary body (the text inside the managed block). */

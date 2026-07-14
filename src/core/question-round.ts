@@ -25,16 +25,27 @@ import { WorkItemStore } from './work-item-store';
  */
 const ROUND_SURFACE_FIELDS = new Set(['user_explanation', 'unexplained_identifier']);
 
-export function assertSelectedPresentationContract(selected: readonly ScoredQuestion[]): void {
+// wi_260714aaq (#29): `opaqueVocab` = the caller-resolved glossary forbidden_abbreviations,
+// unioned with the detector's hardcoded floor. The hardcoded floor is enforced here
+// UNCONDITIONALLY (validateQuestionContext applies it even for the default []), so the prism
+// selected face already rejects floor opaque-vocab; the glossary half is threaded through for
+// the caller (PrismStore, which holds repoRoot) to resolve via `loadGlossaryVocab`.
+export function assertSelectedPresentationContract(
+  selected: readonly ScoredQuestion[],
+  opaqueVocab: readonly string[] = [],
+): void {
   const lines: string[] = [];
   selected.forEach((q, i) => {
-    const verdict = validateQuestionContext({
-      text: q.text,
-      // why_matters is out of the user-reaching surface here; pass it through when
-      // present, but its absence is filtered out below (not an ac-1 violation).
-      why_matters: q.why_matters ?? '',
-      user_explanation: q.user_explanation,
-    });
+    const verdict = validateQuestionContext(
+      {
+        text: q.text,
+        // why_matters is out of the user-reaching surface here; pass it through when
+        // present, but its absence is filtered out below (not an ac-1 violation).
+        why_matters: q.why_matters ?? '',
+        user_explanation: q.user_explanation,
+      },
+      opaqueVocab,
+    );
     for (const v of verdict.violations) {
       if (ROUND_SURFACE_FIELDS.has(v.field)) {
         lines.push(`  - selected[${i}] "${q.text.slice(0, 80)}" ${v.field}: ${v.reason}`);
