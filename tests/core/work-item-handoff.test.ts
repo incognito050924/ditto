@@ -77,6 +77,34 @@ describe('writeWorkItemHandoff', () => {
     expect(handoffText).not.toContain('ditto work resume');
   });
 
+  // wi_2607148yg (ac-9): a fail/partial handoff leaves the workspace UNCOMMITTED.
+  // writeWorkItemHandoff only READS git (rev-parse/diff/status) to collect
+  // changed_files — it never commits/stashes/rolls back. This pins that invariant
+  // against a real git repo: after the handoff, HEAD is unchanged (no new commit)
+  // and the dirty change is still uncommitted.
+  test('fail/partial handoff leaves the workspace uncommitted — no commit/stash/rollback', async () => {
+    const git = (args: string[]) =>
+      Bun.spawnSync(['git', ...args], { cwd: workDir, stdout: 'pipe', stderr: 'pipe' });
+    git(['init', '-q']);
+    git(['config', 'user.email', 't@t']);
+    git(['config', 'user.name', 't']);
+    await Bun.write(join(workDir, 'a.txt'), 'base\n');
+    git(['add', 'a.txt']);
+    git(['commit', '-q', '-m', 'base']);
+    const created = await store.create(makeInput()); // ac-1 unverified → partial
+    // dirty the tree with an uncommitted change
+    await Bun.write(join(workDir, 'a.txt'), 'changed\n');
+    const before = git(['rev-list', '--count', 'HEAD']).stdout.toString().trim();
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    expect(result.completion.final_verdict).toBe('partial');
+    // no new commit was created
+    const after = git(['rev-list', '--count', 'HEAD']).stdout.toString().trim();
+    expect(after).toBe(before);
+    // the change is still uncommitted in the working tree
+    const status = git(['status', '--porcelain']).stdout.toString();
+    expect(status).toContain('a.txt');
+  });
+
   test('changed_files: when work item has runs/evidence but no diff base, unverified entry is added in-scope', async () => {
     const created = await store.create(makeInput());
     // mark ac-1 pass and add an evidence entry so the item has "evidence"

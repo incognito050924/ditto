@@ -339,6 +339,175 @@ export function passCloseResidualBlockers(
   ];
 }
 
+// ── condition-b classifier (wi_2607148yg ac-4: fail-closed protected-intent decision) ─
+
+/**
+ * The four protected intent axes condition(b) guards: a decision adverse to (반하거나
+ * 위협하는) one of these must NOT be auto-driven — it yields to a fail-closed user
+ * handoff. Typed to exactly these axes so a decision outside them is simply not a
+ * `ConditionBDecision` (it never reaches this gate).
+ */
+export type ConditionBDomain = 'security' | 'system' | 'project' | 'feature_design';
+
+/**
+ * A candidate decision the loop must make, tagged with the protected axis it touches
+ * and whether it is ADVERSE to that axis's intent. WHETHER a decision touches an axis
+ * and is adverse is the LLM layer's judgement (like `DecisionConflict`'s kind/level);
+ * this gate is the pure fail-closed routing over the already-classified fact.
+ */
+export interface ConditionBDecision {
+  /** The protected axis this decision touches. */
+  domain: ConditionBDomain;
+  /** Does the decision go against / threaten that axis's intent? (반하거나 위협) */
+  adverse: boolean;
+  /** Evidence for WHY this is condition-b — carried into the handoff (transparency, ac-9). */
+  basis: string;
+}
+
+/**
+ * Is this a condition-b decision (fail-closed)? A decision is condition-b iff it is
+ * ADVERSE to a protected axis — merely touching an axis (a non-adverse change) does
+ * not fail-close (else routine work in these areas would never be autonomous). The
+ * `domain` is already one of the four protected axes by type; `adverse` is the fail
+ * signal. Pure and deterministic (D5: 결정론 1차).
+ */
+export function isConditionB(d: ConditionBDecision): boolean {
+  return d.adverse;
+}
+
+/**
+ * Does driving a discovered defect's FIX require a condition-b decision? If so, the
+ * loop must BLOCK (fail-closed handoff) instead of auto-driving — condition-b
+ * DOMINATES the defect-drive: a reproduced `discovered_defect` is normally
+ * materialize+drive, but the instant its fix needs a security/system/project/
+ * feature-design ADVERSE decision, autonomy yields. AND-able: the loop gates its
+ * can-drive on `reproduced && !defectFixRequiresConditionB(fixDecisions)`. Empty ⇒
+ * no condition-b decision needed ⇒ does not block the drive.
+ */
+export function defectFixRequiresConditionB(fixDecisions: readonly ConditionBDecision[]): boolean {
+  return fixDecisions.some(isConditionB);
+}
+
+// ── fail-handoff condition guard (wi_2607148yg ac-7: only the two conditions fail) ──
+
+/**
+ * Why the loop reached a potential user-handoff point. fail·user-handoff (ac-7) fires
+ * on ONLY the two sanctioned conditions — (1) 정초 계획·방향 반전 or 진행 불가, and (2)
+ * a condition-b decision is required — every other pause reason force-continues rather
+ * than punting a procedure decision to the user (charter §4-8). A routine
+ * `procedure_punt` (진행확인/플랜승인/AB선택) is explicitly NOT a fail.
+ */
+export type HandoffReason =
+  | 'direction_reversed' // (1) 정초 계획·방향 반전
+  | 'progress_impossible' // (1) 충돌로 진행 불가
+  | 'condition_b_required' // (2) 보안·시스템·프로젝트·기능설계 결정 필요
+  | 'procedure_punt'; // 진행확인/플랜승인/AB선택 — routine, NOT a fail
+
+const FAIL_HANDOFF_REASONS: ReadonlySet<HandoffReason> = new Set([
+  'direction_reversed',
+  'progress_impossible',
+  'condition_b_required',
+]);
+
+/**
+ * Does this pause reason justify a fail·user-handoff? True ONLY for the two sanctioned
+ * conditions; anything else (notably `procedure_punt`) is non-fail → the loop
+ * force-continues. Default-non-fail toward autonomy: a reason not in the sanctioned set
+ * keeps the run going (the intent's goal is "멈추지 않고 자율 완수" except the two
+ * conditions), so a future pause reason not added to the set will not silently start
+ * punting to the user. Pure and deterministic.
+ */
+export function isFailHandoffReason(reason: HandoffReason): boolean {
+  return FAIL_HANDOFF_REASONS.has(reason);
+}
+
+// ── lightweight-close discovered-defect gate (wi_2607148yg ac-10: materialize releases) ─
+
+/** Work-item id shape (mirrors src/schemas/common workItemId regex, id-only, global). */
+const WORK_ITEM_ID_RE = /wi_[a-z0-9]{8,}/g;
+
+/**
+ * Work-item id CANDIDATES carried in a discovered-defect grounding. The grounding is a
+ * free-text lossless channel (ADR-20260628), so it may read `materialized as wi_… (backlog)`
+ * rather than a bare id — extract every `wi_…` token so the caller can resolve each against
+ * the real store. Absent/empty grounding yields none (⇒ unmaterialized).
+ */
+function groundingWorkItemIds(grounding: string | undefined): string[] {
+  if (typeof grounding !== 'string') return [];
+  return grounding.match(WORK_ITEM_ID_RE) ?? [];
+}
+
+/**
+ * All work-item id candidates referenced by discovered-defect groundings across the two
+ * residual surfaces (deduped). The CLI resolves each against the store's `exists` and feeds
+ * the resulting predicate to `discoveredDefectCloseBlockers` — keeping that gate pure while
+ * still keying the close on a REAL materialized work item, not a free-text claim.
+ */
+export function discoveredDefectGroundings(completion: CompletionContract): string[] {
+  const ids = new Set<string>();
+  for (const u of completion.unverified) {
+    if (u.resolvability === 'discovered_defect')
+      for (const id of groundingWorkItemIds(u.grounding)) ids.add(id);
+  }
+  for (const r of completion.remaining_risk_records ?? []) {
+    if (r.resolvability === 'discovered_defect')
+      for (const id of groundingWorkItemIds(r.grounding)) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
+ * Lightweight-path (`work done`) close gate for DISCOVERED DEFECTS, a sibling of the
+ * `passCloseResidualBlockers` family. A `discovered_defect` residual is a real-behavior
+ * bug found mid-work that must NOT be silently left ("mentioned but not persisted is
+ * worthless", source intent). On the lightweight path this gate does NOT drive the fix
+ * (that is the autopilot loop's job) — it only requires the defect be MATERIALIZED into a
+ * REAL work item before the close. Materialization is proven by a `grounding` that carries
+ * a work-item pointer (`wi_…`) which `wiExists` resolves to an actually-persisted record —
+ * a fabricated/nonexistent pointer (a free-text claim, e.g. `wi_defect0001` never created)
+ * does NOT release the close (ac-10, the claim-not-proof fix).
+ *
+ *  - UNMATERIALIZED discovered_defect (no grounding / no `wi_…` token) → BLOCKS the close.
+ *  - FABRICATED grounding (a `wi_…` token that does NOT resolve via `wiExists`) → BLOCKS.
+ *  - MATERIALIZED discovered_defect (≥1 grounding `wi_…` resolves) → RELEASES. GATE ONLY —
+ *    never drives, never hard-blocks-until-user (the loop/backlog owns the drive).
+ *
+ * `wiExists` is the existence predicate the caller resolves from the store (async I/O stays
+ * out of this pure gate). It reads ONLY the two residual surfaces and keys on
+ * `resolvability==='discovered_defect'`, so a non-defect `out_of_scope` follow-up is
+ * untouched and still releases — capture≠drive (ADR-20260627) and the ac-5 release path are
+ * preserved. Returns one formatted reason per unmaterialized/fabricated defect (empty ⇒ clean).
+ */
+export function discoveredDefectCloseBlockers(
+  completion: CompletionContract,
+  wiExists: (workItemId: string) => boolean,
+): string[] {
+  const blockers: string[] = [];
+  const check = (text: string, grounding: string | undefined): void => {
+    const ids = groundingWorkItemIds(grounding);
+    if (ids.length === 0) {
+      blockers.push(
+        `lightweight close blocked — discovered defect not materialized into a work item: ${text} — materialize it (backlog/work item) before closing 'work done' (a materialized defect releases the close)`,
+      );
+      return;
+    }
+    if (!ids.some((id) => wiExists(id))) {
+      blockers.push(
+        `lightweight close blocked — discovered defect grounding points to a work item that does not exist (${ids.join(
+          ', ',
+        )}): ${text} — the pointer must resolve to a REALLY materialized work item, not a fabricated id`,
+      );
+    }
+  };
+  for (const u of completion.unverified) {
+    if (u.resolvability === 'discovered_defect') check(u.item, u.grounding);
+  }
+  for (const r of completion.remaining_risk_records ?? []) {
+    if (r.resolvability === 'discovered_defect') check(r.risk, r.grounding);
+  }
+  return blockers;
+}
+
 // ── per-AC oracle satisfaction (ADR-0024 §3 ③ JUDGE; consumed by deriveAcVerdicts) ─
 
 /**

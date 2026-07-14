@@ -28,6 +28,12 @@ export const resolvability = z
     'multiple_comparable_solutions',
     'out_of_scope',
     'genuinely_dangerous',
+    // wi_2607148yg (ac-1/ac-2): a re-run-reproduced real-behavior defect discovered
+    // mid-run — agent-resolvable AND in-scope to DRIVE (materialize+drive), distinct
+    // from `out_of_scope`'s backlog-only materialization. Additive enum value: a
+    // legacy completion.json / decision log never uses it and parses unchanged. Kept
+    // in lockstep with the inline union in `autopilot-store.ts` (one label space, R11).
+    'discovered_defect',
   ])
   .describe('Declared class of why an item is unverified or a risk is surfaced; read by the gate');
 

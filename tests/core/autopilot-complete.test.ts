@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { AssembleOptions } from '~/core/autopilot-complete';
 import {
+  NO_DISCRETIONARY_DECISIONS,
   assembleCompletionFromGraph,
   attestCompletion,
+  decisionDisclosureReconciles,
   deriveAcVerdicts,
   projectAutoHandling,
   projectDirectionDecisions,
+  reconcileDecisionDisclosure,
 } from '~/core/autopilot-complete';
 import { type AutopilotDecision, synthesizeDecisionId } from '~/core/autopilot-store';
 import { attestAcVerdicts, nonPassTerminationGate } from '~/core/gates';
@@ -1098,6 +1101,143 @@ describe('projectDirectionDecisions (ac-4: expose autonomous direction forks wit
     ]);
     // distinct fork nodes → distinct ids (append-position discriminates, not just content).
     expect(entries[0]?.decision_id).not.toBe(entries[1]?.decision_id);
+  });
+});
+
+// ── ac-8 full-ledger disclosure reconciliation (no silent drop) ──────────────
+// The auto-handling ledger (projectAutoHandling) and the direction ledger
+// (projectDirectionDecisions) each render only ONE slice of the append-only decision
+// log — auto_fix/surface/batch_escalate, and well-formed `direction` forks. Every
+// OTHER decision kind (escalate, loop_terminated, defect_chain_driven, e2e_*, reopen,
+// procedure_punt_continued) and a MALFORMED record-less `direction` fell through both,
+// vanishing silently — a violation of ac-8 (every internal autonomous decision must be
+// disclosed; no silent drop). reconcileDecisionDisclosure reconciles the disclosed set
+// against the FULL ledger: each entry is either surfaced individually or ACCOUNTED in a
+// residual bucket (with its reason), so a reader can verify the count reconciles vs the
+// ledger length. An empty run emits the EXPLICIT no-decision token, not a bare [].
+describe('reconcileDecisionDisclosure (ac-8: full-ledger reconciliation, no silent drop)', () => {
+  const dec = (over: Partial<AutopilotDecision> & Pick<AutopilotDecision, 'decision'>) =>
+    ({ ts: '2026-06-02T00:00:00.000Z', node_id: 'N1', reason: 'r', ...over }) as AutopilotDecision;
+
+  // (a) a defect_chain_driven + a record-less direction + an escalate — all
+  // disclosed/accounted, none dropped, and the count reconciles vs the ledger length.
+  test('discloses/accounts every decision kind (defect_chain_driven, record-less direction, escalate) and the count reconciles vs the ledger', () => {
+    const decisions: AutopilotDecision[] = [
+      dec({
+        decision: 'defect_chain_driven',
+        resolvability: 'discovered_defect',
+        node_id: 'D1',
+        reason: 'materialized + drove a reproduced null-deref to done',
+      }),
+      // record-less `direction`: projectDirectionDecisions SKIPS it → it would vanish.
+      dec({
+        decision: 'direction',
+        node_id: 'D2',
+        reason: 'autonomous fork, no structured record',
+      }),
+      dec({
+        decision: 'escalate',
+        failure_class: 'user_decision_needed',
+        node_id: 'D3',
+        reason: 'cap reached — handoff',
+      }),
+    ];
+    const disc = reconcileDecisionDisclosure(decisions);
+    expect(disc.ledger_size).toBe(3);
+
+    // the new defect_chain_driven kind is surfaced with its rationale (not dropped).
+    expect(disc.defect_chains).toHaveLength(1);
+    expect(disc.defect_chains[0]?.node_id).toBe('D1');
+    expect(disc.defect_chains[0]?.resolvability).toBe('discovered_defect');
+    expect(disc.defect_chains[0]?.reason).toContain('null-deref');
+
+    // the record-less direction AND the escalate are ACCOUNTED (disclosed, not vanished).
+    const accountedKinds = disc.accounted.map((a) => a.kind);
+    expect(accountedKinds).toContain('direction');
+    expect(accountedKinds).toContain('escalate');
+    for (const a of disc.accounted) {
+      expect(a.decision_id.length).toBeGreaterThan(0);
+      expect(a.reason.length).toBeGreaterThan(0); // carries free-text rationale
+    }
+
+    // RECONCILIATION: the disclosed bucket total equals the ledger length — a silently
+    // dropped decision would make this fail (the ac-8 guarantee).
+    expect(decisionDisclosureReconciles(disc)).toBe(true);
+    const disclosedCount =
+      disc.auto_handling.auto_fixed.length +
+      disc.auto_handling.surfaced.length +
+      disc.auto_handling.materialized.length +
+      disc.direction_decisions.length +
+      disc.defect_chains.length +
+      disc.accounted.length;
+    expect(disclosedCount).toBe(disc.ledger_size);
+
+    // a discretionary decision WAS made → no 'no decision' token.
+    expect(disc.no_decision).toBeNull();
+  });
+
+  // (b) an empty run emits the EXPLICIT 'no decision' token — distinct from a bare [],
+  // which would read as "decisions were dropped".
+  test('an empty run emits the explicit no-decision token, not a bare empty list', () => {
+    const disc = reconcileDecisionDisclosure([]);
+    expect(disc.ledger_size).toBe(0);
+    expect(disc.no_decision).toBe(NO_DISCRETIONARY_DECISIONS);
+    expect(disc.auto_handling).toEqual({ auto_fixed: [], surfaced: [], materialized: [] });
+    expect(disc.direction_decisions).toEqual([]);
+    expect(disc.defect_chains).toEqual([]);
+    expect(disc.accounted).toEqual([]);
+    expect(decisionDisclosureReconciles(disc)).toBe(true); // 0 === 0
+  });
+
+  // A ledger of only NON-discretionary records (loop_terminated is a terminal disposition
+  // record, not an autonomous choice) still emits the no-decision token — yet the record
+  // is ACCOUNTED (disclosed, never silently dropped).
+  test('a ledger of only non-discretionary records (loop_terminated) emits the no-decision token yet still accounts the record', () => {
+    const disc = reconcileDecisionDisclosure([
+      dec({ decision: 'loop_terminated', disposition: 'converged', reason: 'converged' }),
+    ]);
+    expect(disc.no_decision).toBe(NO_DISCRETIONARY_DECISIONS);
+    expect(disc.accounted.map((a) => a.kind)).toContain('loop_terminated');
+    expect(decisionDisclosureReconciles(disc)).toBe(true);
+  });
+
+  // (c) the existing auto_fixed/surfaced/materialized + well-formed direction projections
+  // still flow through unchanged (regression) and fully account the ledger (empty residual).
+  test('existing auto_fix/surface/batch_escalate + a well-formed direction still project (regression)', () => {
+    const decisions: AutopilotDecision[] = [
+      dec({ decision: 'auto_fix', resolvability: 'agent_resolvable', reason: 'auto-fix risk x' }),
+      dec({ decision: 'surface', resolvability: 'blocked_external', reason: 'surface x in-flow' }),
+      dec({
+        decision: 'batch_escalate',
+        resolvability: 'out_of_scope',
+        reason: 'batch follow-ups',
+      }),
+      {
+        ts: '2026-06-02T00:00:00.000Z',
+        node_id: 'N2',
+        decision: 'direction',
+        reason: 'autonomous direction fork',
+        direction_record: {
+          fork_node_id: 'N1',
+          trigger: 't',
+          options: ['A', 'B'],
+          choice: 'A',
+          intent_basis: 'b',
+          blast_radius: 'r',
+          reverse_cost: 'c',
+        },
+      } as AutopilotDecision,
+    ];
+    const disc = reconcileDecisionDisclosure(decisions);
+    expect(disc.auto_handling.auto_fixed).toHaveLength(1);
+    expect(disc.auto_handling.surfaced).toHaveLength(1);
+    expect(disc.auto_handling.materialized).toHaveLength(1);
+    expect(disc.direction_decisions).toHaveLength(1);
+    expect(disc.direction_decisions[0]?.choice).toBe('A');
+    // fully accounted by the individual projections → residual is empty.
+    expect(disc.accounted).toHaveLength(0);
+    expect(disc.no_decision).toBeNull();
+    expect(decisionDisclosureReconciles(disc)).toBe(true);
   });
 });
 

@@ -49,6 +49,39 @@ export const handoff = z
       )
       .default([])
       .describe('Risks whose substance is non-recoverable — kept inline, not pointer-only'),
+    // wi_2607148yg (ac-9): the user-decision block for a fail / condition-(b)
+    // (보안·시스템·프로젝트·기능설계 의도) blocked handoff — each entry pairs the
+    // concrete decision the user must make with its options and the agent's CURRENT
+    // interpretation (its lean + reading), so the handoff hands off a decision to
+    // make, not just a dead end. Additive + OPTIONAL at the schema level (`.default([])`):
+    // a legacy handoff written before this change omits it and parses unchanged.
+    //
+    // The required-WHEN-blocked enforcement (reject an EMPTY block on a fail/blocked
+    // handoff) is n2-handoff's to wire via `.superRefine`, NOT here — mirroring the
+    // conditional-require precedent: `completion-contract.ts` keeps `non_pass_status`
+    // additive/optional and pushes the required-on-non-pass check to the gate
+    // (`gates.ts` non_pass_status) so a legacy on-disk artifact is never retro-rejected
+    // and fail-closed. n2-handoff should refine on ITS chosen blocked-handoff
+    // discriminator (this schema has no status field today), requiring
+    // `user_decision_block` non-empty only for a condition-(b)/fail handoff.
+    user_decision_block: z
+      .array(
+        z.object({
+          decision: z.string().min(1).describe('The decision the user must make'),
+          options: z
+            .array(z.string().min(1))
+            .min(1)
+            .describe('Concrete options/choices offered to the user'),
+          agent_interpretation: z
+            .string()
+            .min(1)
+            .describe("The agent's current reading / lean on the decision"),
+        }),
+      )
+      .default([])
+      .describe(
+        'Decisions the user must make on a fail/condition-(b) handoff; enforced non-empty when blocked by n2-handoff superRefine (additive/optional here)',
+      ),
     changed_files: z.array(relativePath).default([]),
     evidence_refs: z
       .array(evidenceRef)

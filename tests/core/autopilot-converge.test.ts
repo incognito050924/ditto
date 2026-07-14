@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { planForwardReexpansion, totalForwardRounds } from '~/core/autopilot-converge';
+import {
+  classifyDiscoveredDefect,
+  planForwardReexpansion,
+  totalForwardRounds,
+} from '~/core/autopilot-converge';
 import { buildInitialNodes, validateNodeAddition } from '~/core/autopilot-graph';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopilot';
@@ -72,7 +76,7 @@ describe('planForwardReexpansion parameterized triggers (ONE planner, three forw
   // kind is deliberately NOT `verify` here so the test proves the parameterized
   // recheck kind OVERRIDES the seed kind (otherwise a verify seed would pass for
   // the wrong reason). reviewNode has kind `review`.
-  const triggers = ['reverify', 'risk_fix', 'follow_up'] as const;
+  const triggers = ['reverify', 'risk_fix', 'follow_up', 'defect_fix'] as const;
 
   for (const trigger of triggers) {
     test(`${trigger}: same fix→recheck shape — fix(implementer) + re-verify(verifier), forward-only acyclic edges`, () => {
@@ -160,6 +164,27 @@ describe('planForwardReexpansion parameterized triggers (ONE planner, three forw
     if (r.decision !== 'expand') throw new Error('expected expand');
     // no trigger ⇒ the existing convergence loop ⇒ same lifecycle lane (security).
     expect(r.nodes[1]?.kind).toBe('security');
+  });
+});
+
+describe('classifyDiscoveredDefect (wi_2607148yg ac-2: conservative reproduction gate)', () => {
+  test('a reproduced current-harm bug (no exclusions) is drive-eligible', () => {
+    expect(classifyDiscoveredDefect({ reproduced: true })).toBe('drive');
+  });
+
+  test('a NOT-reproduced / uncertain finding is backlog-only, never driven', () => {
+    expect(classifyDiscoveredDefect({ reproduced: false })).toBe('backlog');
+  });
+
+  test('a reproduced but LATENT bug (no current harm) is backlog-only', () => {
+    expect(classifyDiscoveredDefect({ reproduced: true, latent: true })).toBe('backlog');
+  });
+
+  test('reproduced tech-debt / unrelated pre-existing failure is backlog-only', () => {
+    expect(classifyDiscoveredDefect({ reproduced: true, tech_debt: true })).toBe('backlog');
+    expect(classifyDiscoveredDefect({ reproduced: true, unrelated_preexisting: true })).toBe(
+      'backlog',
+    );
   });
 });
 

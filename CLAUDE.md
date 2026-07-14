@@ -343,7 +343,7 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
-<!-- ditto:knowledge:start sha256=0d5a8871628bde5376cbb8ef31f6243cc5b4f6cfe71d97cecc838524b8d916e6 -->
+<!-- ditto:knowledge:start sha256=baa3af9716c1b5e10986191e3a2addc055f49425c1cbd451293a6814512a2f9a -->
 # DITTO Knowledge (projected — do not edit by hand)
 
 Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.
@@ -442,6 +442,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260710-intent-single-unit-and-termination-completeness · accepted · 종료 완전성 게이트 + 하나의 의도=하나의 단위 불변식 — pass-close에서 in-scope agent-owned 잔여 무단 축소 차단·slice/phase 단위 부재 (ADR-20260627 materialize≠drive 보존, ADR-20260706 정합)
 - ADR-20260713-directive-fidelity-banner-gate · accepted · 사용자향 배너이면서 동작 지시인 문자열의 리라이트는 operative-cue 충실도로 게이트한다 (가독성만으로는 불충분)
 - ADR-20260713-dogfood-not-purpose-user-project-value · accepted · ditto의 목적은 도그푸딩이 아니라 사용자 프로젝트에서 발현되는 가치다 — 도그푸딩은 검증 수단
+- ADR-20260714-autopilot-defect-class-drive-carveout · accepted · 발견된 실동작 버그(분류기-키드)만 no-auto-pick 예외로 same-run chain-drive — 비-결함은 materialize≠drive 불변 (ADR-20260627·ADR-20260710 클래스-한정 부분 supersede)
 - ADR-20260714-language-axis-followups-terminated · accepted · 언어 축(#29) 후속 종결 — (b) 미합의-용어 검출·all-CLI self-check "구현 안 함" + 철회조건; 배너 하드 승격 → #30 소관
 
 <!-- ditto:knowledge:end -->

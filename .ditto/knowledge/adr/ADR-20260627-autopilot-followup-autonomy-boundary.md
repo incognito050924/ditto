@@ -3,6 +3,8 @@
 - 상태: accepted
 - 결정 일자: 2026-06-27
 - 결정자: hskim, claude (claude-opus-4-8)
+
+> **클래스-한정 부분 supersede (2026-07-14, wi_2607148yg)** — **ADR-20260714-autopilot-defect-class-drive-carveout**가 이 ADR의 change_condition("진짜 same-session auto-drive는 명시 신호 뒤에서만 허용")을 **재현되는 실동작 버그 한 클래스에 한해** 발동한다: autopilot은 보수적 분류기(ac-2)가 "재현되는 실동작 버그"로 판정한 것을 자기 work item으로 물질화한 뒤 같은 run에서 done까지 체인 구동한다(각자 자기 커밋). **비-결함(아이디어·기능·기술부채·잠복버그) 후속의 `materialize≠drive` / `no-auto-pick` / `single-active-pointer`는 전부 불변** — 예외는 결함 클래스로 봉인되고, 자유-텍스트 라벨이 아니라 분류기 판정에 키드된다(relabel 저항). 두 fail-stop 조건도 예외 중 불변.
 - 관련: ADR-0011 (Distribution 횡단 배포계약 축 + session-rooting invariant — 이 결정이 그 D2 "cross-root unsupported"를 same-root 후속에까지 일관 확장; supersede 아님), ADR-0010 (기능 4축 — 축2 autopilot 무거운 경로의 의도잠금이 통제 경계), ADR-20260626-work-lifecycle-lightweight-path (`work follow-up` 물질화·`work stem` 줄기 — 이 결정은 그 물질화가 *구동*으로 번지지 않음을 못박는다). **supersede 없음.** 발의: wi_2606264rm 후속 논의. dialectic 결정(Producer=Claude / Opponent=Codex cross-model / Synthesizer, verdict=revise → 초안 기각). 구현 WI: wi_2606278qa (autopilot complete의 follow_ups_to_pick_up 표면화). 코드(권위): `src/cli/commands/work.ts:1035-1037`·`:1099-1106`, `src/cli/commands/autopilot.ts:119-126`, `src/core/interview-driver.ts` finalize, `src/hooks/user-prompt-submit.ts:106-115`, `src/core/autopilot-loop.ts` (in-scope follow_up forward round), `tests/cli/work-follow-up-batch.test.ts`.
 
 ## 컨텍스트

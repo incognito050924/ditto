@@ -3,6 +3,8 @@
 - 상태: accepted
 - 결정 일자: 2026-07-10
 - 결정자: hskim, claude (claude-opus-4-8)
+
+> **클래스-한정 부분 supersede (2026-07-14, wi_2607148yg)** — **ADR-20260714-autopilot-defect-class-drive-carveout**가 D4의 "capture≠drive는 통과 조건 / out-of-scope 후속은 물질화만"과 same-run 단일 승인단위 경계를, **재현되는 실동작 버그 한 클래스에 한해** "물질화→구동(각자 자기 커밋)"으로 확장한다. 그 버그는 분류기(ac-2) 판정에 키드되어 자기 work item으로 물질화된 뒤 같은 run에서 done까지 구동된다. **D1 종료 완전성 게이트, 비-결함 슬라이스 금지, priority advisory-only, 두 fail-stop 조건은 전부 불변** — 종료 완전성은 오히려 강화된다(in-scope 잔여를 out-of-scope 후속으로 개명해 도망치는 경로가 좁아진다). 비-결함 후속의 capture≠drive는 온전.
 - 관련: ADR-20260627-autopilot-followup-autonomy-boundary (materialize≠drive / no-auto-pick 불변식 — 이 ADR은 그 불변식을 **보존**한다; supersede 아님. capture≠drive가 종료 게이트의 통과 조건이 된다), ADR-20260706-work-item-record-run-split (work-item Record/Run 2-tier — 동적 task 단위에 **새 tier를 도입하지 않는다**, 정합), ADR-0024 (완료=per-AC oracle 수렴 — 종료 완전성 게이트는 그 수렴 위에 얹히는 잔여-처분 검사이지 oracle 대체가 아님), 진단 배경 wi_260710676/#18 ("완료-판정 채널 갭" — terminal flip이 Stop 게이트를 우회하는 패턴). 코드(권위): `src/core/gates.ts`(`passCloseResidualBlockers`:323 — 기존 `resolvabilityBlockers`:214 [unverified[]] + `riskRecordBlockers`:289 [remaining_risk_records[]] 재사용, R11 단일 라벨공간), `src/core/autopilot-complete.ts`(`deriveNonPassStatus`:480 · `loopStuckBlocked`:472 — non-terminal 교착 그래프에 `state:'blocked'` 방출), `src/cli/commands/work.ts`(`work done` close 경로 `passCloseResidualBlockers` 배선:2134 · `work follow-up --priority` 스탬프:2525), `src/cli/commands/autopilot.ts`(`autopilot complete` close 경로:534 · `follow_ups_to_pick_up` priority 정렬:675/:725), `src/schemas/work-item.ts`(`followUp.priority`:181 — additive optional int 1..5). 회귀 락: `tests/core/intent-single-unit-invariant.test.ts`. 구현 WI: wi_260710tjd (이슈 #19). 전 결정 landed + verified.
 
 ## 컨텍스트

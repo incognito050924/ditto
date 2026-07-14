@@ -197,6 +197,9 @@ describe('charterProjection (D8)', () => {
         '원래 요청을 그대로 지킨다', // preserve original request (internal name dropped, wi_260713nlg iter)
         '범위를 넓히지도, 줄이거나 쪼개지도 않는다', // no grow, no shrink/split
         '사용자 승인 없이', // without user approval
+        '딱 하나의 예외 — 실행 중 발견한 버그', // defect-class carve-out marker (wi_2607148yg ac-11)
+        '분류기가 "재현되는 실동작 버그"로 판정한 것만', // keyed to classifier verdict, not self-label
+        '별도 work item으로 물질화해 같은 run 안에서 고칠 때까지 구동한다', // materialize + chain-drive to done
         '딱 두 갈래 표준 경로로만', // TWO standard paths only
         '/ditto:deep-interview', // heavy path entry
         'autopilot',
@@ -221,6 +224,39 @@ describe('charterProjection (D8)', () => {
         '스스로 점검(minimal-increment)', // self-check projected verbatim
       ];
       for (const cue of cues) expect(out).toContain(cue);
+    });
+
+    // wi_2607148yg ac-11: the defect-class carve-out is a SEPARATE operative cue,
+    // added BESIDE the base scope-freeze prohibition — NOT a single reworded line.
+    // The base prohibition must survive with UNDIMINISHED force (a reword that
+    // softens "does not widen scope without approval" into a mere suggestion, or
+    // that folds the carve-out into the base line, fails here). The carve-out is
+    // keyed to the CLASSIFIER verdict (relabel resistance), never opens for
+    // non-defects, and never waives the two fail-stop conditions.
+    test('defect-class carve-out is a separate cue; base prohibition undiminished', () => {
+      const out = charterProjection();
+      // (1) Base scope-freeze prohibition intact, full hard polarity (not softened
+      //     to a suggestion). The whole prohibition string must be present verbatim.
+      expect(out).toContain('사용자 승인 없이 범위를 넓히지도, 줄이거나 쪼개지도 않는다');
+      // (2) Carve-out present as its OWN cue (own bullet), not merged into the base.
+      expect(out).toContain('딱 하나의 예외 — 실행 중 발견한 버그');
+      // The base line and the carve-out line are DISTINCT bullets (separate cues):
+      const baseLine = out.split('\n').find((l) => l.includes('원래 요청을 그대로 지킨다'));
+      expect(baseLine).toBeDefined();
+      // the base bullet must NOT itself carry the carve-out (they are separate cues).
+      expect(baseLine).not.toContain('딱 하나의 예외');
+      // (3) Keyed to the classifier verdict, not a self-declared label.
+      expect(out).toContain('분류기가 "재현되는 실동작 버그"로 판정한 것만');
+      expect(out).toContain('스스로 "버그"라고 이름 붙였다고 열리지 않는다');
+      // (4) Materialize + chain-drive to done within the same run (drive, not just mention).
+      expect(out).toContain('별도 work item으로 물질화해 같은 run 안에서 고칠 때까지 구동한다');
+      // (5) Does NOT open for non-defects; those are materialize-only, no scope widen.
+      expect(out).toContain('비-결함');
+      expect(out).toContain('물질화만 하고 구동하지 않으며');
+      expect(out).toContain('요청 범위를 넓히지 않는다');
+      // (6) The two fail-stop conditions still hold during the autonomous drive.
+      expect(out).toContain('정초 계획·방향이 뒤집히거나 진행이 막힐 때');
+      expect(out).toContain('보안·시스템·프로젝트·기능설계 의도를 위협하는 결정이 필요할 때');
     });
 
     // Check #1: snapshot-fix — pin the reworded advisory strings so a future edit

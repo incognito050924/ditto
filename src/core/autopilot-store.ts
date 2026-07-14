@@ -56,7 +56,20 @@ export interface AutopilotDecision {
     // (the same decision-log-derived discipline `sameOracleFailureCount` uses). Scoped
     // to this `reopen` decision kind so the user-reopen cap never collides with the
     // wrong-fixpoint `oracle-unsatisfied` count on the same node.
-    | 'reopen';
+    | 'reopen'
+    // wi_2607148yg (ac-1): a discovered real-behavior DEFECT that the loop
+    // MATERIALIZED into its own work item AND chain-drove to done in the same run.
+    // This is the materialize-AND-drive fact — deliberately DISTINCT from
+    // `batch_escalate`, which is signal-only (materialize≠drive: the loop only emits
+    // the out-of-scope follow-up signal and never drives it). Recorded so the ac-8
+    // disclosure projection and the ac-1 loop can attest "this defect was materialized
+    // AND driven" (not merely mentioned/surfaced). Like `direction`/`auto_fix` it is
+    // autonomous IN-FLOW progress, NOT a user-owned escalation: `isDecisivePost` is
+    // false for it by construction (it is absent from the decisive-post predicate), so
+    // it never posts to GitHub — it is disclosed in the completion digest + retro
+    // instead. The materialized child carries its OWN commit (ac-3, two intents never
+    // merge into one commit); classification/drive/gates land in later nodes.
+    | 'defect_chain_driven';
   reason: string;
   // wi_260713wxq (#31): present ONLY on a `reopen` decision. `actor` = who triggered the
   // reopen (the user-action origin), `feedback` = the user's free-text correction, threaded
@@ -79,7 +92,16 @@ export interface AutopilotDecision {
     | 'decision_or_adr_conflict'
     | 'multiple_comparable_solutions'
     | 'out_of_scope'
-    | 'genuinely_dangerous';
+    | 'genuinely_dangerous'
+    // wi_2607148yg (ac-1/ac-2): the resolvability class of a re-run-REPRODUCED
+    // real-behavior defect discovered mid-run — agent-resolvable AND in-scope to
+    // DRIVE (the class routed to `defect_chain_driven`, materialize+drive). Kept
+    // DISTINCT from `out_of_scope` (which routes latent bugs / tech-debt / unrelated
+    // pre-existing failures to backlog-only materialization, no drive) so the ac-8
+    // disclosure can tell a driven defect from a backlog-parked one. This inline
+    // union stays the SAME one label space as `completion-contract.ts`'s
+    // `resolvability` zod enum (R11) — the value is added to BOTH so they never drift.
+    | 'discovered_defect';
   // ADR-0024 Decision 7 (ac-6): the whole-graph loop-termination disposition,
   // present ONLY on a `loop_terminated` decision. `converged` = the loop closed on
   // oracle satisfaction; `capped` = a loop-level iteration cap forced the close

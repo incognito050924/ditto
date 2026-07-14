@@ -4,7 +4,12 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import * as fsp from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HandoffStore, buildHandoff } from '~/core/handoff-store';
+import {
+  BlockedHandoffMissingDecisionError,
+  HandoffStore,
+  buildHandoff,
+  renderHandoff,
+} from '~/core/handoff-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import { handoff as handoffSchema } from '~/schemas/handoff';
 
@@ -40,6 +45,116 @@ describe('buildHandoff', () => {
     expect(h.original_intent).toBe('add a password strength endpoint');
     expect(h.autopilot_id).toBe('orch_handoff01');
     expect(h.evidence_refs).toHaveLength(1);
+  });
+});
+
+// wi_2607148yg (ac-9): the additive/optional user-decision block on the handoff
+// schema. Field shape only here (the required-when-blocked superRefine lands in
+// n2-handoff); these tests pin the shape + backward-compat.
+describe('handoff schema user_decision_block (wi_2607148yg ac-9)', () => {
+  const baseHandoff = {
+    schema_version: '0.1.0',
+    work_item_id: 'wi_2607148yg',
+    from_context: 'autopilot loop, condition-(b) blocked',
+    original_intent: 'do the thing',
+    current_state: 'blocked on a design-intent decision',
+    next_first_check: 'read the decision block',
+    created_at: '2026-07-14T00:00:00.000Z',
+  };
+
+  test('accepts a fail/condition-(b) handoff carrying a user_decision_block and round-trips it', () => {
+    const parsed = handoffSchema.parse({
+      ...baseHandoff,
+      user_decision_block: [
+        {
+          decision: 'Which auth boundary to weaken?',
+          options: ['A: relax at gateway', 'B: relax at service'],
+          agent_interpretation: 'A is smaller-blast but touches a security seam — leaning defer',
+        },
+      ],
+    });
+    expect(parsed.user_decision_block).toHaveLength(1);
+    expect(parsed.user_decision_block[0]?.decision).toBe('Which auth boundary to weaken?');
+    expect(parsed.user_decision_block[0]?.options).toEqual([
+      'A: relax at gateway',
+      'B: relax at service',
+    ]);
+    expect(parsed.user_decision_block[0]?.agent_interpretation).toContain('leaning defer');
+  });
+
+  test('a legacy handoff WITHOUT user_decision_block still parses (backward-compat, defaults to [])', () => {
+    const parsed = handoffSchema.parse(baseHandoff);
+    expect(parsed.user_decision_block).toEqual([]);
+  });
+});
+
+// wi_2607148yg (ac-9): buildHandoff render + required-when-blocked guard.
+// Discriminator = the build-input `blocked` flag (a fail / condition-(b) handoff);
+// the persisted schema stays statusless so a legacy on-disk handoff is never
+// retro-rejected. Guard = guardBlockedHandoffDecision (throws
+// BlockedHandoffMissingDecisionError). See handoff-store.ts.
+describe('buildHandoff blocked user_decision_block (wi_2607148yg ac-9)', () => {
+  test('a fail/condition-(b) blocked handoff renders the decision block with options + interpretation', async () => {
+    const wi = await workItem();
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'autopilot loop, condition-(b)',
+      currentState: 'blocked on a design-intent decision',
+      nextFirstCheck: 'read the decision block',
+      blocked: true,
+      userDecisionBlock: [
+        {
+          decision: 'Weaken the auth boundary?',
+          options: ['A: relax at gateway', 'B: relax at service'],
+          agent_interpretation: 'leaning defer — touches a security seam',
+        },
+      ],
+    });
+    expect(h.user_decision_block).toHaveLength(1);
+    const body = renderHandoff(h);
+    // the block surfaces the decision the USER must make — distinct from a resume pointer
+    expect(body).toContain('사용자 결정 필요');
+    expect(body).toContain('Weaken the auth boundary?');
+    expect(body).toContain('A: relax at gateway');
+    expect(body).toContain('B: relax at service');
+    expect(body).toContain('leaning defer');
+  });
+
+  test('building a fail/condition-(b) blocked handoff with an EMPTY user_decision_block is rejected', async () => {
+    const wi = await workItem();
+    expect(() =>
+      buildHandoff({
+        workItem: wi,
+        fromContext: 'autopilot loop, condition-(b)',
+        currentState: 'blocked',
+        nextFirstCheck: 'x',
+        blocked: true,
+        // no userDecisionBlock supplied
+      }),
+    ).toThrow(BlockedHandoffMissingDecisionError);
+    // an explicit empty array is rejected the same way
+    expect(() =>
+      buildHandoff({
+        workItem: wi,
+        fromContext: 'autopilot loop, condition-(b)',
+        currentState: 'blocked',
+        nextFirstCheck: 'x',
+        blocked: true,
+        userDecisionBlock: [],
+      }),
+    ).toThrow(BlockedHandoffMissingDecisionError);
+  });
+
+  test('a normal (non-blocked) handoff without a user_decision_block still builds (backward-compat)', async () => {
+    const wi = await workItem();
+    const h = buildHandoff({
+      workItem: wi,
+      fromContext: 'c',
+      currentState: 's',
+      nextFirstCheck: 'c',
+    });
+    expect(h.user_decision_block).toEqual([]);
+    expect(renderHandoff(h)).not.toContain('사용자 결정 필요');
   });
 });
 

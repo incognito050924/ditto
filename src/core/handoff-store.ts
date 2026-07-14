@@ -41,10 +41,52 @@ export interface HandoffBuildInput {
   forbiddenScopeCreep?: string[];
   artifactAvailable?: boolean;
   changedFiles?: string[];
+  // wi_2607148yg (ac-4/ac-9): marks this as a fail / condition-(b) BLOCKED handoff
+  // — a direction-reversal / 진행불가 or a 보안·시스템·프로젝트·기능설계-의도 decision
+  // that autopilot must NOT auto-drive. This is the blocked-handoff DISCRIMINATOR:
+  // when true, `userDecisionBlock` MUST be non-empty (guardBlockedHandoffDecision),
+  // so a blocked handoff hands off a decision to MAKE, not just a dead end. It is a
+  // build-time input, NOT a persisted field — the handoff schema stays statusless so
+  // a legacy on-disk handoff (which never runs through buildHandoff) is never
+  // retro-rejected. Absent/false ⇒ a normal pass/partial handoff, no requirement.
+  blocked?: boolean;
+  // The concrete decision(s) the user must make: each option set + the agent's
+  // CURRENT interpretation/lean. Rendered as a distinct block by renderHandoff.
+  userDecisionBlock?: { decision: string; options: string[]; agent_interpretation: string }[];
   now?: Date;
 }
 
+/**
+ * Thrown when a BLOCKED (fail / condition-(b)) handoff is built without a
+ * user_decision_block. A blocked handoff whose only content is a dead end pushes
+ * the procedural decision back on the user with nothing to act on; the guard
+ * forces the concrete options + the agent's current interpretation to be present.
+ */
+export class BlockedHandoffMissingDecisionError extends Error {
+  constructor() {
+    super(
+      'blocked (fail / condition-(b)) handoff requires a non-empty user_decision_block — surface the concrete options + the agent current interpretation, not just a dead end',
+    );
+    this.name = 'BlockedHandoffMissingDecisionError';
+  }
+}
+
+/**
+ * ac-9 required-WHEN-blocked guard. Mirrors the conditional-require precedent
+ * (completion-contract `non_pass_status` → the gate): the persisted schema keeps
+ * `user_decision_block` additive/optional (`.default([])`) so a legacy on-disk
+ * handoff parses unchanged, and the "required when blocked" check lives here at
+ * BUILD time keyed on the `blocked` discriminator — it therefore rejects only a
+ * NEW blocked handoff and never retro-rejects a handoff that predates the field.
+ */
+function guardBlockedHandoffDecision(input: HandoffBuildInput): void {
+  if (input.blocked && (input.userDecisionBlock?.length ?? 0) === 0) {
+    throw new BlockedHandoffMissingDecisionError();
+  }
+}
+
 export function buildHandoff(input: HandoffBuildInput): Handoff {
+  guardBlockedHandoffDecision(input);
   return handoffSchema.parse({
     schema_version: '0.1.0',
     work_item_id: input.workItem.id,
@@ -57,6 +99,7 @@ export function buildHandoff(input: HandoffBuildInput): Handoff {
     // ac-6: re-fetch-impossible substance preserved INLINE (tier rule).
     critical_decisions: input.criticalDecisions ?? [],
     irreversible_risks: input.irreversibleRisks ?? [],
+    user_decision_block: input.userDecisionBlock ?? [],
     changed_files: input.changedFiles ?? input.workItem.changed_files,
     evidence_refs: input.evidenceRefs ?? [],
     failed_or_unverified: input.failedOrUnverified ?? [],
@@ -78,6 +121,19 @@ export function renderHandoff(h: Handoff): string {
   lines.push(h.original_intent, '');
   lines.push('## 현재 상태');
   lines.push(h.current_state, '');
+  // ac-9: a fail / condition-(b) blocked handoff surfaces the decision the USER
+  // must make as a distinct block — concrete options + the agent's current lean —
+  // placed high so it is not mistaken for a resume pointer. Empty on a normal
+  // pass/partial handoff (the section is then skipped).
+  if (h.user_decision_block.length > 0) {
+    lines.push('## 사용자 결정 필요 (blocked handoff)');
+    for (const d of h.user_decision_block) {
+      lines.push(`- 결정: ${d.decision}`);
+      for (const o of d.options) lines.push(`  - 선택지: ${o}`);
+      lines.push(`  - agent 현재 해석: ${d.agent_interpretation}`);
+    }
+    lines.push('');
+  }
   if (h.decisions_made.length > 0) {
     lines.push('## 내려진 결정');
     for (const d of h.decisions_made) lines.push(`- ${d}`);

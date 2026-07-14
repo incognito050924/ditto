@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -20695,6 +20677,62 @@ function passCloseResidualBlockers(completion, acceptanceIds) {
     ...riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b2) => label(b2, "\uC794\uC5EC \uC704\uD5D8 \uAE30\uB85D(residual-risk record)"))
   ];
 }
+function isConditionB(d2) {
+  return d2.adverse;
+}
+function defectFixRequiresConditionB(fixDecisions) {
+  return fixDecisions.some(isConditionB);
+}
+var FAIL_HANDOFF_REASONS = new Set([
+  "direction_reversed",
+  "progress_impossible",
+  "condition_b_required"
+]);
+function isFailHandoffReason(reason) {
+  return FAIL_HANDOFF_REASONS.has(reason);
+}
+var WORK_ITEM_ID_RE = /wi_[a-z0-9]{8,}/g;
+function groundingWorkItemIds(grounding) {
+  if (typeof grounding !== "string")
+    return [];
+  return grounding.match(WORK_ITEM_ID_RE) ?? [];
+}
+function discoveredDefectGroundings(completion) {
+  const ids = new Set;
+  for (const u3 of completion.unverified) {
+    if (u3.resolvability === "discovered_defect")
+      for (const id of groundingWorkItemIds(u3.grounding))
+        ids.add(id);
+  }
+  for (const r3 of completion.remaining_risk_records ?? []) {
+    if (r3.resolvability === "discovered_defect")
+      for (const id of groundingWorkItemIds(r3.grounding))
+        ids.add(id);
+  }
+  return [...ids];
+}
+function discoveredDefectCloseBlockers(completion, wiExists) {
+  const blockers = [];
+  const check = (text, grounding) => {
+    const ids = groundingWorkItemIds(grounding);
+    if (ids.length === 0) {
+      blockers.push(`lightweight close blocked \u2014 discovered defect not materialized into a work item: ${text} \u2014 materialize it (backlog/work item) before closing 'work done' (a materialized defect releases the close)`);
+      return;
+    }
+    if (!ids.some((id) => wiExists(id))) {
+      blockers.push(`lightweight close blocked \u2014 discovered defect grounding points to a work item that does not exist (${ids.join(", ")}): ${text} \u2014 the pointer must resolve to a REALLY materialized work item, not a fabricated id`);
+    }
+  };
+  for (const u3 of completion.unverified) {
+    if (u3.resolvability === "discovered_defect")
+      check(u3.item, u3.grounding);
+  }
+  for (const r3 of completion.remaining_risk_records ?? []) {
+    if (r3.resolvability === "discovered_defect")
+      check(r3.risk, r3.grounding);
+  }
+  return blockers;
+}
 var STATIC_SCAN_KINDS = new Set([
   "file",
   "artifact",
@@ -21324,7 +21362,8 @@ var resolvability = exports_external.enum([
   "decision_or_adr_conflict",
   "multiple_comparable_solutions",
   "out_of_scope",
-  "genuinely_dangerous"
+  "genuinely_dangerous",
+  "discovered_defect"
 ]).describe("Declared class of why an item is unverified or a risk is surfaced; read by the gate");
 var acceptanceVerdict = exports_external.object({
   criterion_id: exports_external.string().min(1),
@@ -21801,6 +21840,66 @@ function projectDirectionDecisions(decisions) {
     });
   });
   return entries;
+}
+var NO_DISCRETIONARY_DECISIONS = "no-discretionary-decisions";
+var DISCRETIONARY_DECISIONS = new Set([
+  "retry",
+  "switch_approach",
+  "escalate",
+  "auto_fix",
+  "surface",
+  "batch_escalate",
+  "direction",
+  "defect_chain_driven",
+  "procedure_punt_continued"
+]);
+function reconcileDecisionDisclosure(decisions) {
+  const auto_handling = projectAutoHandling(decisions);
+  const direction_decisions = projectDirectionDecisions(decisions);
+  const defect_chains = [];
+  const accounted = [];
+  decisions.forEach((d2, index) => {
+    switch (d2.decision) {
+      case "auto_fix":
+      case "surface":
+      case "batch_escalate":
+        return;
+      case "direction":
+        if (d2.direction_record)
+          return;
+        accounted.push({
+          decision_id: synthesizeDecisionId(d2, index),
+          node_id: d2.node_id,
+          kind: d2.decision,
+          reason: d2.reason
+        });
+        return;
+      case "defect_chain_driven":
+        defect_chains.push({
+          decision_id: synthesizeDecisionId(d2, index),
+          node_id: d2.node_id,
+          ...d2.resolvability ? { resolvability: d2.resolvability } : {},
+          reason: d2.reason
+        });
+        return;
+      default:
+        accounted.push({
+          decision_id: synthesizeDecisionId(d2, index),
+          node_id: d2.node_id,
+          kind: d2.decision,
+          reason: d2.reason
+        });
+    }
+  });
+  const anyDiscretionary = decisions.some((d2) => DISCRETIONARY_DECISIONS.has(d2.decision));
+  return {
+    ledger_size: decisions.length,
+    auto_handling,
+    direction_decisions,
+    defect_chains,
+    accounted,
+    no_decision: anyDiscretionary ? null : NO_DISCRETIONARY_DECISIONS
+  };
 }
 
 // src/core/autopilot-loop.ts
@@ -22713,6 +22812,13 @@ function globMatch(glob, path) {
 }
 
 // src/core/autopilot-converge.ts
+function classifyDiscoveredDefect(d2) {
+  if (!d2.reproduced)
+    return "backlog";
+  if (d2.latent || d2.tech_debt || d2.unrelated_preexisting)
+    return "backlog";
+  return "drive";
+}
 var FORWARD_FIX_MARKER = ".fix.r";
 var FORWARD_REVIEW_MARKER = ".rev.r";
 function forwardRound(reviewNodeId) {
@@ -22754,6 +22860,12 @@ function forwardShape(trigger, seed, round, fixId) {
         recheckKind: "verify",
         fixPurpose: `Address the in-scope follow-up surfaced by ${seed.id} (round ${round})`,
         reviewPurpose: `Re-verify after ${fixId}; close only when the follow-up is verified done`
+      };
+    case "defect_fix":
+      return {
+        recheckKind: "verify",
+        fixPurpose: `Fix the reproduced real-behavior defect discovered by ${seed.id} as its OWN work item/commit (never merged into the origin diff), chain-driven in the same run (round ${round})`,
+        reviewPurpose: `Re-verify after ${fixId}; close only when the discovered defect is verified fixed`
       };
     default:
       return {
@@ -23016,6 +23128,55 @@ function planTidyOnImplementPass(input) {
   return { classification, nodes };
 }
 
+// src/core/charter.ts
+var MINIMAL_INCREMENT_SELF_CHECK = {
+  id: "minimal-increment",
+  question: "\uC774\uAC8C \uC758\uB3C4\uB97C \uB2EC\uC131\uD558\uB294 \uAC00\uC7A5 \uC791\uACE0 \uBA85\uB8CC\uD55C \uC99D\uBD84\uC778\uAC00? \uCD94\uC0C1\uD654\uAC00 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uC5D0 \uBE44\uB840\uD558\uB098 \u2014 \uC694\uCCAD\uB418\uC9C0 \uC54A\uC740 \uAE30\uB2A5\xB7\uC124\uC815\xB7\uD655\uC7A5\uC131\uC774\uB098 \uB2E8\uC77C \uC0AC\uC6A9\xB7\uC595\uC740 \uCD94\uC0C1\uD654\uB85C \uACFC\uD558\uC9C0 \uC54A\uACE0(\uD754\uD55C \uC2E4\uD328), \uAC70\uAFB8\uB85C \uC0C8\uB85C \uC0DD\uAE30\uB294 \uC911\uBCF5\uC744 \uBC29\uCE58\uD574 \uBAA8\uC790\uB77C\uC9C0\uB3C4 \uC54A\uB098? \uBCC0\uACBD\uD55C \uBAA8\uB4E0 \uC904\uC774 \uC694\uCCAD\uACFC \uC5F0\uACB0\uB418\uACE0, \uBB34\uAD00\uD55C \uB9AC\uD329\uD130\xB7\uD3EC\uB9F7 \uC815\uB9AC\uAC00 \uC11E\uC774\uC9C0 \uC54A\uC558\uB098?",
+  origin: "far-field taxonomy floor \u2192 charter self-check (wi_260706n4w \u2014 \uC124\uACC4-\uBA54\uD0C0 \uD488\uC9C8\uC774\uB77C \uBA3C \uC704\uD5D8 sweep\uC774 \uC544\uB2C8\uB77C \uB9E4 \uD134 \uC7AC\uC8FC\uC785\uB418\uB294 charter\uAC00 \uC9D1\uD589\uD55C\uB2E4)"
+};
+var CHARTER_SELF_CHECKS = [MINIMAL_INCREMENT_SELF_CHECK];
+var PRIME_DIRECTIVE = [
+  "DITTO \uAE30\uBCF8 \uC9C0\uCE68(prime directive):",
+  "- \uC6D0\uB798 \uC694\uCCAD\uC744 \uADF8\uB300\uB85C \uC9C0\uD0A8\uB2E4: \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uC5C6\uC774 \uBC94\uC704\uB97C \uB113\uD788\uC9C0\uB3C4, \uC904\uC774\uAC70\uB098 \uCABC\uAC1C\uC9C0\uB3C4 \uC54A\uB294\uB2E4.",
+  '- \uB531 \uD558\uB098\uC758 \uC608\uC678 \u2014 \uC2E4\uD589 \uC911 \uBC1C\uACAC\uD55C \uBC84\uADF8: autopilot\uC774 \uC790\uC728 \uC2E4\uD589 \uB3C4\uC911 \uC7AC\uD604\uB418\uB294 \uC2E4\uB3D9\uC791 \uBC84\uADF8\uB97C \uBC1C\uACAC\uD558\uBA74(\uBD84\uB958\uAE30\uAC00 "\uC7AC\uD604\uB418\uB294 \uC2E4\uB3D9\uC791 \uBC84\uADF8"\uB85C \uD310\uC815\uD55C \uAC83\uB9CC \uD574\uB2F9\uD55C\uB2E4 \u2014 \uB124\uAC00 \uC2A4\uC2A4\uB85C "\uBC84\uADF8"\uB77C\uACE0 \uC774\uB984 \uBD99\uC600\uB2E4\uACE0 \uC5F4\uB9AC\uC9C0 \uC54A\uB294\uB2E4), \uBABB \uBCF8 \uCC99 \uB0A8\uAE30\uC9C0 \uB9D0\uACE0 \uADF8 \uBC84\uADF8\uB97C \uBCC4\uB3C4 work item\uC73C\uB85C \uBB3C\uC9C8\uD654\uD574 \uAC19\uC740 run \uC548\uC5D0\uC11C \uACE0\uCE60 \uB54C\uAE4C\uC9C0 \uAD6C\uB3D9\uD55C\uB2E4. \uC774 \uC608\uC678\uB294 \uBE44-\uACB0\uD568(\uC544\uC774\uB514\uC5B4\xB7\uAE30\uB2A5\xB7\uAE30\uC220\uBD80\uCC44\xB7\uC544\uC9C1 \uC544\uBB34 \uD53C\uD574 \uC5C6\uB294 \uC7A0\uBCF5\uBC84\uADF8)\uC5D0\uB294 \uC5F4\uB9AC\uC9C0 \uC54A\uB294\uB2E4 \u2014 \uADF8\uB7F0 \uD6C4\uC18D\uC740 \uBB3C\uC9C8\uD654\uB9CC \uD558\uACE0 \uAD6C\uB3D9\uD558\uC9C0 \uC54A\uC73C\uBA70, \uADF8\uAC78 \uD551\uACC4\uB85C \uC694\uCCAD \uBC94\uC704\uB97C \uB113\uD788\uC9C0 \uC54A\uB294\uB2E4. \uC774 \uC790\uC728 \uAD6C\uB3D9 \uC911\uC5D0\uB3C4 \uB450 \uACBD\uC6B0 \u2014 \uC815\uCD08 \uACC4\uD68D\xB7\uBC29\uD5A5\uC774 \uB4A4\uC9D1\uD788\uAC70\uB098 \uC9C4\uD589\uC774 \uB9C9\uD790 \uB54C, \uADF8\uB9AC\uACE0 \uBCF4\uC548\xB7\uC2DC\uC2A4\uD15C\xB7\uD504\uB85C\uC81D\uD2B8\xB7\uAE30\uB2A5\uC124\uACC4 \uC758\uB3C4\uB97C \uC704\uD611\uD558\uB294 \uACB0\uC815\uC774 \uD544\uC694\uD560 \uB54C \u2014 \uC5D0\uB294 \uC5EC\uC804\uD788 \uBA48\uCD94\uACE0 \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uC778\uACC4\uD55C\uB2E4.',
+  "- \uCF54\uB4DC\uBCA0\uC774\uC2A4\uB97C \uBC14\uAFB8\uB294 \uBAA8\uB4E0 \uC791\uC5C5\uC740 work item \uC548\uC5D0\uC11C, \uB531 \uB450 \uAC08\uB798 \uD45C\uC900 \uACBD\uB85C\uB85C\uB9CC \uC9C4\uD589\uD55C\uB2E4 \u2014 \uBB34\uAC70\uC6B4 \uACBD\uB85C(`/ditto:deep-interview` \u2192 autopilot) \uB610\uB294 \uAC00\uBCBC\uC6B4 \uACBD\uB85C(`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`). \uC774 \uB450 \uACBD\uB85C \uBC16\uC5D0\uC11C work item \uC5C6\uC774 \uC989\uD765\uC801\uC73C\uB85C \uCF54\uB4DC\uB97C \uACE0\uCE58\uB294 \uAC83(\uCF58\uC194\uC5D0\uC11C \uBC14\uB85C TDD\uB85C \uD3B8\uC9D1)\uC740 \uD5C8\uC6A9\uB418\uC9C0 \uC54A\uB294\uB2E4. TDD\uB294 \uACBD\uB85C \uC548\uC5D0\uC11C \uAD6C\uD604\uD558\uB294 \uBC29\uBC95\uC774\uC9C0, \uACBD\uB85C\uB97C \uB300\uC2E0\uD558\uB294 \uC218\uB2E8\uC774 \uC544\uB2C8\uB2E4.",
+  "- \uC774 \uC694\uCCAD\uC5D0 work item\uC774 \uD544\uC694\uD55C\uC9C0, \uADF8\uB9AC\uACE0 \uC5B4\uB290 \uACBD\uB85C\uB85C \uAC08\uC9C0\uB294 \uB124\uAC00 \uD310\uB2E8\uD55C\uB2E4(\uBB34\uAC8C\uB85C \uB77C\uC6B0\uD305, \uAD8C\uACE0): \uC791\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \u2192 \uAC00\uBCBC\uC6B4 \uACBD\uB85C; \uBAA8\uD638\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uAC70\uB098 \uC5EC\uB7EC \uD45C\uBA74\uC5D0 \uAC78\uCE58\uAC70\uB098 \uC704\uD5D8\uC774 \uC120\uC5B8\uB418\uBA74 \u2192 \uBB34\uAC70\uC6B4 \uACBD\uB85C. \uD6C5\uC740 \uC808\uB300 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E4\uC9C0 \uC54A\uB294\uB2E4. \uD544\uC694\uD558\uB2E4\uACE0 \uBCF4\uBA74 \uB124\uAC00 \uC9C1\uC811 \uB4F1\uB85D\uD55C\uB2E4: `ditto work start`.",
+  "- \uC0AC\uC6A9\uC790\uB9CC \uB2F5\uD560 \uC218 \uC788\uB294 \uAC83\uB9CC \uBB3B\uB294\uB2E4. \uB098\uBA38\uC9C0\uB294 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uC2A4\uC2A4\uB85C \uB2F5\uD55C\uB2E4.",
+  "- \uC644\uB8CC\uB294 \uC99D\uAC70\uB85C\uB9CC \uC778\uC815\uB41C\uB2E4: \uC644\uB8CC(\uD1B5\uACFC)\uB85C \uD310\uC815\uD558\uAE30 \uC804\uC5D0 \uBAA8\uB4E0 acceptance criterion\uC744 \uC99D\uAC70\uC640 \uD568\uAED8 \uB2EB\uB294\uB2E4. \uAE30\uC900\uC740 work item \uC804\uCCB4\uC774\uC9C0 \uC911\uAC04 \uCCB4\uD06C\uD3EC\uC778\uD2B8\uAC00 \uC544\uB2C8\uB2E4.",
+  ...CHARTER_SELF_CHECKS.map((c3) => `- \uC2A4\uC2A4\uB85C \uC810\uAC80(${c3.id}): ${c3.question}`)
+].join(`
+`);
+var PLACEHOLDER_AC_STATEMENT = "TBD \u2014 derive observable criteria during interview/planning";
+var WORK_ITEM_GUIDE_ADVISORY = '\uD65C\uC131 work item\uC774 \uC5C6\uB2E4. 1\uCC28 \uD310\uB2E8\uC744 \uB124\uAC00 \uC9C1\uC811 \uD55C\uB2E4: \uC774 \uC694\uCCAD\uC774 \uC0B0\uCD9C\uBB3C\uC744 \uB9CC\uB4E4\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uCF54\uB4DC\uBCA0\uC774\uC2A4 \uBCC0\uACBD\uC744 \uC77C\uC73C\uD0A8\uB2E4\uBA74 work item\uC73C\uB85C \uB4F1\uB85D\uD574\uC57C \uD55C\uB2E4(\uAC04\uB2E8\uD55C \uC791\uC5C5\xB7\uD578\uB4DC\uC624\uD504\xB7git \uC870\uC791\uC740 \uC608\uC678). \uADF8\uB807\uB2E4\uBA74 \uC0AC\uC6A9\uC790\uC640 \uC758\uB3C4\uB97C \uD655\uC778\uD55C \uB4A4, \uB124\uAC00 \uC9C1\uC811 `ditto work start "<\uBAA9\uD45C>" --request "<\uC694\uCCAD \uC6D0\uBB38>"`\uC744 \uC2E4\uD589\uD574 \uB4F1\uB85D\uD55C\uB2E4 \u2014 \uC0AC\uC6A9\uC790\uAC00 \uBA85\uB839\uC744 \uC785\uB825\uD558\uB294 \uAC8C \uC544\uB2C8\uB77C \uB124\uAC00 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E0\uB2E4. \uC544\uB2C8\uBA74 \uD3C9\uC18C\uCC98\uB7FC \uC9C4\uD589\uD55C\uB2E4.';
+var PLACEHOLDER_AC_ADVISORY = "acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uB2E4 \u2014 \uD589\uB3D9\uD558\uAE30 \uC804\uC5D0 /ditto:deep-interview\uB85C \uAD6C\uCCB4\uD654\uD558\uB77C";
+var DEEP_INTERVIEW_DIRECTIVE = "\uC9C0\uAE08 /ditto:deep-interview\uB97C \uC2E4\uD589\uD558\uB77C \u2014 acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uC774\uACE0 \uC2E4\uD589 \uC758\uB3C4\uAC00 \uAC10\uC9C0\uB410\uB2E4. \uBCF5\uC7A1\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uC791\uC5C5\uC5D0\uB294 \uAD8C\uC7A5\uD55C\uB2E4; \uC694\uCCAD\uC774 \uC791\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \uAC74\uB108\uB6F0\uC5B4\uB3C4 \uB41C\uB2E4. \uAC04\uB2E8\uD558\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uB294 \uC791\uC5C5\uC758 \uAC00\uBCBC\uC6B4 \uACBD\uB85C: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`(deep-interview\xB7autopilot \uC5C6\uC774).";
+var SELF_ANSWER_HINT = "\uBB3B\uAE30 \uC804\uC5D0 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uBA3C\uC800 \uC2A4\uC2A4\uB85C \uB2F5\uD558\uB77C \u2014 \uC774 \uD504\uB86C\uD504\uD2B8\uB294 \uC0AC\uC6A9\uC790 \uC785\uB825 \uC5C6\uC774\uB3C4 \uB2F5\uD560 \uC218 \uC788\uC5B4 \uBCF4\uC778\uB2E4.";
+function charterProjection(ctx = {}) {
+  const lines = [PRIME_DIRECTIVE];
+  if (ctx.workItemId) {
+    const head = `Active work item: ${ctx.workItemId}`;
+    const detail = [
+      ctx.workItemTitle ? `title="${ctx.workItemTitle}"` : null,
+      ctx.workItemStatus ? `status=${ctx.workItemStatus}` : null
+    ].filter(Boolean).join(", ");
+    lines.push("", detail ? `${head} (${detail})` : head);
+  }
+  if (ctx.pendingHandoff)
+    lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
+  if (ctx.placeholderAcceptanceCriteria)
+    lines.push("", `\u26A0 ${PLACEHOLDER_AC_ADVISORY}`);
+  if (ctx.deepInterviewDirective)
+    lines.push("", `\u25B6 ${DEEP_INTERVIEW_DIRECTIVE}`);
+  if (ctx.selfAnswerHint)
+    lines.push("", `\u26A0 ${SELF_ANSWER_HINT}`);
+  if (ctx.workItemGuide)
+    lines.push("", `\u26A0 ${WORK_ITEM_GUIDE_ADVISORY}`);
+  if (ctx.advisory)
+    lines.push("", `\u26A0 ${ctx.advisory}`);
+  return lines.join(`
+`);
+}
+
 // src/core/completion-coverage-doctor.ts
 import { readdir as readdir8 } from "fs/promises";
 import { join as join21 } from "path";
@@ -23147,56 +23308,6 @@ init_coverage();
 
 // src/core/coverage-taxonomy.ts
 init_coverage();
-
-// src/core/charter.ts
-var MINIMAL_INCREMENT_SELF_CHECK = {
-  id: "minimal-increment",
-  question: "\uC774\uAC8C \uC758\uB3C4\uB97C \uB2EC\uC131\uD558\uB294 \uAC00\uC7A5 \uC791\uACE0 \uBA85\uB8CC\uD55C \uC99D\uBD84\uC778\uAC00? \uCD94\uC0C1\uD654\uAC00 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uC5D0 \uBE44\uB840\uD558\uB098 \u2014 \uC694\uCCAD\uB418\uC9C0 \uC54A\uC740 \uAE30\uB2A5\xB7\uC124\uC815\xB7\uD655\uC7A5\uC131\uC774\uB098 \uB2E8\uC77C \uC0AC\uC6A9\xB7\uC595\uC740 \uCD94\uC0C1\uD654\uB85C \uACFC\uD558\uC9C0 \uC54A\uACE0(\uD754\uD55C \uC2E4\uD328), \uAC70\uAFB8\uB85C \uC0C8\uB85C \uC0DD\uAE30\uB294 \uC911\uBCF5\uC744 \uBC29\uCE58\uD574 \uBAA8\uC790\uB77C\uC9C0\uB3C4 \uC54A\uB098? \uBCC0\uACBD\uD55C \uBAA8\uB4E0 \uC904\uC774 \uC694\uCCAD\uACFC \uC5F0\uACB0\uB418\uACE0, \uBB34\uAD00\uD55C \uB9AC\uD329\uD130\xB7\uD3EC\uB9F7 \uC815\uB9AC\uAC00 \uC11E\uC774\uC9C0 \uC54A\uC558\uB098?",
-  origin: "far-field taxonomy floor \u2192 charter self-check (wi_260706n4w \u2014 \uC124\uACC4-\uBA54\uD0C0 \uD488\uC9C8\uC774\uB77C \uBA3C \uC704\uD5D8 sweep\uC774 \uC544\uB2C8\uB77C \uB9E4 \uD134 \uC7AC\uC8FC\uC785\uB418\uB294 charter\uAC00 \uC9D1\uD589\uD55C\uB2E4)"
-};
-var CHARTER_SELF_CHECKS = [MINIMAL_INCREMENT_SELF_CHECK];
-var PRIME_DIRECTIVE = [
-  "DITTO \uAE30\uBCF8 \uC9C0\uCE68(prime directive):",
-  "- \uC6D0\uB798 \uC694\uCCAD\uC744 \uADF8\uB300\uB85C \uC9C0\uD0A8\uB2E4: \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uC5C6\uC774 \uBC94\uC704\uB97C \uB113\uD788\uC9C0\uB3C4, \uC904\uC774\uAC70\uB098 \uCABC\uAC1C\uC9C0\uB3C4 \uC54A\uB294\uB2E4.",
-  "- \uCF54\uB4DC\uBCA0\uC774\uC2A4\uB97C \uBC14\uAFB8\uB294 \uBAA8\uB4E0 \uC791\uC5C5\uC740 work item \uC548\uC5D0\uC11C, \uB531 \uB450 \uAC08\uB798 \uD45C\uC900 \uACBD\uB85C\uB85C\uB9CC \uC9C4\uD589\uD55C\uB2E4 \u2014 \uBB34\uAC70\uC6B4 \uACBD\uB85C(`/ditto:deep-interview` \u2192 autopilot) \uB610\uB294 \uAC00\uBCBC\uC6B4 \uACBD\uB85C(`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`). \uC774 \uB450 \uACBD\uB85C \uBC16\uC5D0\uC11C work item \uC5C6\uC774 \uC989\uD765\uC801\uC73C\uB85C \uCF54\uB4DC\uB97C \uACE0\uCE58\uB294 \uAC83(\uCF58\uC194\uC5D0\uC11C \uBC14\uB85C TDD\uB85C \uD3B8\uC9D1)\uC740 \uD5C8\uC6A9\uB418\uC9C0 \uC54A\uB294\uB2E4. TDD\uB294 \uACBD\uB85C \uC548\uC5D0\uC11C \uAD6C\uD604\uD558\uB294 \uBC29\uBC95\uC774\uC9C0, \uACBD\uB85C\uB97C \uB300\uC2E0\uD558\uB294 \uC218\uB2E8\uC774 \uC544\uB2C8\uB2E4.",
-  "- \uC774 \uC694\uCCAD\uC5D0 work item\uC774 \uD544\uC694\uD55C\uC9C0, \uADF8\uB9AC\uACE0 \uC5B4\uB290 \uACBD\uB85C\uB85C \uAC08\uC9C0\uB294 \uB124\uAC00 \uD310\uB2E8\uD55C\uB2E4(\uBB34\uAC8C\uB85C \uB77C\uC6B0\uD305, \uAD8C\uACE0): \uC791\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \u2192 \uAC00\uBCBC\uC6B4 \uACBD\uB85C; \uBAA8\uD638\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uAC70\uB098 \uC5EC\uB7EC \uD45C\uBA74\uC5D0 \uAC78\uCE58\uAC70\uB098 \uC704\uD5D8\uC774 \uC120\uC5B8\uB418\uBA74 \u2192 \uBB34\uAC70\uC6B4 \uACBD\uB85C. \uD6C5\uC740 \uC808\uB300 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E4\uC9C0 \uC54A\uB294\uB2E4. \uD544\uC694\uD558\uB2E4\uACE0 \uBCF4\uBA74 \uB124\uAC00 \uC9C1\uC811 \uB4F1\uB85D\uD55C\uB2E4: `ditto work start`.",
-  "- \uC0AC\uC6A9\uC790\uB9CC \uB2F5\uD560 \uC218 \uC788\uB294 \uAC83\uB9CC \uBB3B\uB294\uB2E4. \uB098\uBA38\uC9C0\uB294 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uC2A4\uC2A4\uB85C \uB2F5\uD55C\uB2E4.",
-  "- \uC644\uB8CC\uB294 \uC99D\uAC70\uB85C\uB9CC \uC778\uC815\uB41C\uB2E4: \uC644\uB8CC(\uD1B5\uACFC)\uB85C \uD310\uC815\uD558\uAE30 \uC804\uC5D0 \uBAA8\uB4E0 acceptance criterion\uC744 \uC99D\uAC70\uC640 \uD568\uAED8 \uB2EB\uB294\uB2E4. \uAE30\uC900\uC740 work item \uC804\uCCB4\uC774\uC9C0 \uC911\uAC04 \uCCB4\uD06C\uD3EC\uC778\uD2B8\uAC00 \uC544\uB2C8\uB2E4.",
-  ...CHARTER_SELF_CHECKS.map((c3) => `- \uC2A4\uC2A4\uB85C \uC810\uAC80(${c3.id}): ${c3.question}`)
-].join(`
-`);
-var PLACEHOLDER_AC_STATEMENT = "TBD \u2014 derive observable criteria during interview/planning";
-var WORK_ITEM_GUIDE_ADVISORY = '\uD65C\uC131 work item\uC774 \uC5C6\uB2E4. 1\uCC28 \uD310\uB2E8\uC744 \uB124\uAC00 \uC9C1\uC811 \uD55C\uB2E4: \uC774 \uC694\uCCAD\uC774 \uC0B0\uCD9C\uBB3C\uC744 \uB9CC\uB4E4\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uCF54\uB4DC\uBCA0\uC774\uC2A4 \uBCC0\uACBD\uC744 \uC77C\uC73C\uD0A8\uB2E4\uBA74 work item\uC73C\uB85C \uB4F1\uB85D\uD574\uC57C \uD55C\uB2E4(\uAC04\uB2E8\uD55C \uC791\uC5C5\xB7\uD578\uB4DC\uC624\uD504\xB7git \uC870\uC791\uC740 \uC608\uC678). \uADF8\uB807\uB2E4\uBA74 \uC0AC\uC6A9\uC790\uC640 \uC758\uB3C4\uB97C \uD655\uC778\uD55C \uB4A4, \uB124\uAC00 \uC9C1\uC811 `ditto work start "<\uBAA9\uD45C>" --request "<\uC694\uCCAD \uC6D0\uBB38>"`\uC744 \uC2E4\uD589\uD574 \uB4F1\uB85D\uD55C\uB2E4 \u2014 \uC0AC\uC6A9\uC790\uAC00 \uBA85\uB839\uC744 \uC785\uB825\uD558\uB294 \uAC8C \uC544\uB2C8\uB77C \uB124\uAC00 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E0\uB2E4. \uC544\uB2C8\uBA74 \uD3C9\uC18C\uCC98\uB7FC \uC9C4\uD589\uD55C\uB2E4.';
-var PLACEHOLDER_AC_ADVISORY = "acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uB2E4 \u2014 \uD589\uB3D9\uD558\uAE30 \uC804\uC5D0 /ditto:deep-interview\uB85C \uAD6C\uCCB4\uD654\uD558\uB77C";
-var DEEP_INTERVIEW_DIRECTIVE = "\uC9C0\uAE08 /ditto:deep-interview\uB97C \uC2E4\uD589\uD558\uB77C \u2014 acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uC774\uACE0 \uC2E4\uD589 \uC758\uB3C4\uAC00 \uAC10\uC9C0\uB410\uB2E4. \uBCF5\uC7A1\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uC791\uC5C5\uC5D0\uB294 \uAD8C\uC7A5\uD55C\uB2E4; \uC694\uCCAD\uC774 \uC791\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \uAC74\uB108\uB6F0\uC5B4\uB3C4 \uB41C\uB2E4. \uAC04\uB2E8\uD558\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uB294 \uC791\uC5C5\uC758 \uAC00\uBCBC\uC6B4 \uACBD\uB85C: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`(deep-interview\xB7autopilot \uC5C6\uC774).";
-var SELF_ANSWER_HINT = "\uBB3B\uAE30 \uC804\uC5D0 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uBA3C\uC800 \uC2A4\uC2A4\uB85C \uB2F5\uD558\uB77C \u2014 \uC774 \uD504\uB86C\uD504\uD2B8\uB294 \uC0AC\uC6A9\uC790 \uC785\uB825 \uC5C6\uC774\uB3C4 \uB2F5\uD560 \uC218 \uC788\uC5B4 \uBCF4\uC778\uB2E4.";
-function charterProjection(ctx = {}) {
-  const lines = [PRIME_DIRECTIVE];
-  if (ctx.workItemId) {
-    const head = `Active work item: ${ctx.workItemId}`;
-    const detail = [
-      ctx.workItemTitle ? `title="${ctx.workItemTitle}"` : null,
-      ctx.workItemStatus ? `status=${ctx.workItemStatus}` : null
-    ].filter(Boolean).join(", ");
-    lines.push("", detail ? `${head} (${detail})` : head);
-  }
-  if (ctx.pendingHandoff)
-    lines.push(`Pending handoff/re-entry: ${ctx.pendingHandoff}`);
-  if (ctx.placeholderAcceptanceCriteria)
-    lines.push("", `\u26A0 ${PLACEHOLDER_AC_ADVISORY}`);
-  if (ctx.deepInterviewDirective)
-    lines.push("", `\u25B6 ${DEEP_INTERVIEW_DIRECTIVE}`);
-  if (ctx.selfAnswerHint)
-    lines.push("", `\u26A0 ${SELF_ANSWER_HINT}`);
-  if (ctx.workItemGuide)
-    lines.push("", `\u26A0 ${WORK_ITEM_GUIDE_ADVISORY}`);
-  if (ctx.advisory)
-    lines.push("", `\u26A0 ${ctx.advisory}`);
-  return lines.join(`
-`);
-}
-
-// src/core/coverage-taxonomy.ts
 init_ditto_paths();
 init_fs();
 var FAR_FIELD_TAXONOMY_FLOOR = [
@@ -23951,6 +24062,11 @@ var handoff = exports_external.object({
     risk: exports_external.string().min(1),
     why_irreversible: exports_external.string().min(1).describe("Why this risk cannot be undone (preserved inline)")
   })).default([]).describe("Risks whose substance is non-recoverable \u2014 kept inline, not pointer-only"),
+  user_decision_block: exports_external.array(exports_external.object({
+    decision: exports_external.string().min(1).describe("The decision the user must make"),
+    options: exports_external.array(exports_external.string().min(1)).min(1).describe("Concrete options/choices offered to the user"),
+    agent_interpretation: exports_external.string().min(1).describe("The agent's current reading / lean on the decision")
+  })).default([]).describe("Decisions the user must make on a fail/condition-(b) handoff; enforced non-empty when blocked by n2-handoff superRefine (additive/optional here)"),
   changed_files: exports_external.array(relativePath).default([]),
   evidence_refs: exports_external.array(evidenceRef).default([]).describe("Inline summaries/hashes/commands, not raw artifacts"),
   failed_or_unverified: exports_external.array(exports_external.string()).default([]),
@@ -23965,7 +24081,20 @@ var handoff = exports_external.object({
 init_ditto_paths();
 init_fs();
 init_work_item_store();
+
+class BlockedHandoffMissingDecisionError extends Error {
+  constructor() {
+    super("blocked (fail / condition-(b)) handoff requires a non-empty user_decision_block \u2014 surface the concrete options + the agent current interpretation, not just a dead end");
+    this.name = "BlockedHandoffMissingDecisionError";
+  }
+}
+function guardBlockedHandoffDecision(input) {
+  if (input.blocked && (input.userDecisionBlock?.length ?? 0) === 0) {
+    throw new BlockedHandoffMissingDecisionError;
+  }
+}
 function buildHandoff(input) {
+  guardBlockedHandoffDecision(input);
   return handoff.parse({
     schema_version: "0.1.0",
     work_item_id: input.workItem.id,
@@ -23977,6 +24106,7 @@ function buildHandoff(input) {
     decisions_made: input.decisionsMade ?? [],
     critical_decisions: input.criticalDecisions ?? [],
     irreversible_risks: input.irreversibleRisks ?? [],
+    user_decision_block: input.userDecisionBlock ?? [],
     changed_files: input.changedFiles ?? input.workItem.changed_files,
     evidence_refs: input.evidenceRefs ?? [],
     failed_or_unverified: input.failedOrUnverified ?? [],
@@ -23997,6 +24127,16 @@ function renderHandoff(h2) {
   lines.push(h2.original_intent, "");
   lines.push("## \uD604\uC7AC \uC0C1\uD0DC");
   lines.push(h2.current_state, "");
+  if (h2.user_decision_block.length > 0) {
+    lines.push("## \uC0AC\uC6A9\uC790 \uACB0\uC815 \uD544\uC694 (blocked handoff)");
+    for (const d2 of h2.user_decision_block) {
+      lines.push(`- \uACB0\uC815: ${d2.decision}`);
+      for (const o3 of d2.options)
+        lines.push(`  - \uC120\uD0DD\uC9C0: ${o3}`);
+      lines.push(`  - agent \uD604\uC7AC \uD574\uC11D: ${d2.agent_interpretation}`);
+    }
+    lines.push("");
+  }
   if (h2.decisions_made.length > 0) {
     lines.push("## \uB0B4\uB824\uC9C4 \uACB0\uC815");
     for (const d2 of h2.decisions_made)
@@ -26773,6 +26913,18 @@ var recordResultPayload = exports_external.object({
     grounding: exports_external.string().min(1).optional()
   })).optional().describe("A node's structured residual-risk records (ac-3); agent_resolvable auto-fixes, the four " + "surface classes surface in-flow. Each route is disclosed in the decision-log ledger."),
   follow_ups: exports_external.array(exports_external.object({ item: exports_external.string().min(1), in_scope: exports_external.boolean() })).optional().describe("A node's surfaced follow-ups (ac-4); in-scope ones are driven as graph nodes, out-of-scope " + "ones emit a single batch-escalate signal (materialize \u2260 drive, R9)."),
+  discovered_defects: exports_external.array(exports_external.object({
+    item: exports_external.string().min(1),
+    reproduced: exports_external.boolean(),
+    latent: exports_external.boolean().optional(),
+    tech_debt: exports_external.boolean().optional(),
+    unrelated_preexisting: exports_external.boolean().optional(),
+    condition_b: exports_external.array(exports_external.object({
+      domain: exports_external.enum(["security", "system", "project", "feature_design"]),
+      adverse: exports_external.boolean(),
+      basis: exports_external.string().min(1)
+    })).optional()
+  })).optional().describe("A node's discovered real-behavior defects (ac-1/ac-2). A reproduced current-harm bug is " + "materialized into its own work item AND chain-driven in the same run (shared run budget); " + "latent/tech-debt/unrelated/uncertain \u21D2 backlog-only; a condition-b fix \u21D2 fail-closed block."),
   blocked_by_tool: exports_external.object({ tool: exports_external.string().min(1), grounding: exports_external.string().min(1) }).optional().describe("R5/ADR-0018: an auto-resolve item blocked only by an optional tool absence; surface " + "blocked_external rather than splice an endless re-verify."),
   direction_fork: exports_external.object({
     trigger: exports_external.string().min(1),
@@ -27066,6 +27218,18 @@ async function recordResult(repoRoot, input) {
   } catch {
     return outcome;
   }
+}
+async function materializeDiscoveredDefect(repoRoot, originWorkItemId, item, now) {
+  const child = await new WorkItemStore(repoRoot).create({
+    title: `defect: ${item}`.slice(0, 200),
+    source_request: `Discovered mid-run while working on ${originWorkItemId}: ${item}`,
+    goal: `Fix: ${item}`,
+    acceptance_criteria: [
+      { id: "ac-1", statement: PLACEHOLDER_AC_STATEMENT, verdict: "unverified", evidence: [] }
+    ],
+    discovered_by: originWorkItemId
+  }, now);
+  return child.id;
 }
 async function recordResultCore(repoRoot, input) {
   const aps = new AutopilotStore(repoRoot);
@@ -27405,6 +27569,84 @@ async function recordResultCore(repoRoot, input) {
               decision: "auto_fix",
               resolvability: "agent_resolvable",
               reason: `auto-fix residual risk: ${r3.risk}`
+            });
+          }
+        }
+        return outcome2;
+      }
+    }
+    const discoveredDefects = input.payload.discovered_defects ?? [];
+    if (discoveredDefects.length > 0) {
+      const now = input.now ?? new Date;
+      const driveEligible = discoveredDefects.filter((d2) => classifyDiscoveredDefect(d2) === "drive");
+      const backlogOnly = discoveredDefects.filter((d2) => classifyDiscoveredDefect(d2) !== "drive");
+      for (const d2 of backlogOnly) {
+        const materializedWi = await materializeDiscoveredDefect(repoRoot, input.workItemId, d2.item, now);
+        await aps.appendDecision(input.workItemId, {
+          ts: now.toISOString(),
+          node_id: node2.id,
+          decision: "surface",
+          resolvability: "discovered_defect",
+          reason: `discovered defect materialized to backlog ONLY \u2014 not a reproduced current-harm bug (conservative, ac-2), so persisted into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven: ${d2.item}`
+        });
+      }
+      const conditionBDefect = driveEligible.find((d2) => defectFixRequiresConditionB(d2.condition_b ?? []));
+      if (conditionBDefect) {
+        const handoffReason = "condition_b_required";
+        const reason = isFailHandoffReason(handoffReason) ? `condition-b required \u2014 fixing the discovered defect needs a security/system/project/feature-design ADVERSE decision; fail-closed handoff instead of auto-drive (ac-4/ac-7): ${conditionBDefect.item}` : `discovered defect fix \u2014 non-fail reason, continuing: ${conditionBDefect.item}`;
+        if (isFailHandoffReason(handoffReason)) {
+          await aps.updateNode(input.workItemId, node2.id, (n2) => ({
+            ...n2,
+            status: nodeTransition(n2.status, "block")
+          }));
+          await aps.appendDecision(input.workItemId, {
+            ts: now.toISOString(),
+            node_id: node2.id,
+            failure_class: "user_decision_needed",
+            decision: "escalate",
+            reason,
+            attempts: node2.attempts
+          });
+          return {
+            node_id: node2.id,
+            status: "blocked",
+            outcome: "fail",
+            guard_contentful: true,
+            decision: "escalate",
+            failure_class: "user_decision_needed",
+            cap_exceeded: false,
+            reason,
+            promoted_node_ids: [],
+            superseded_node_ids: []
+          };
+        }
+      }
+      if (driveEligible.length > 0) {
+        const groundingByDefect = new Map;
+        for (const d2 of driveEligible) {
+          groundingByDefect.set(d2, await materializeDiscoveredDefect(repoRoot, input.workItemId, d2.item, now));
+        }
+        const outcome2 = await applyAutoResolveSplice({
+          aps,
+          workItemId: input.workItemId,
+          node: node2,
+          graph,
+          trigger: "defect_fix",
+          evidenceRefs: input.payload.evidence_refs,
+          guardReason,
+          now,
+          allowedAcceptanceIds,
+          ...input.payload.blocked_by_tool ? { blockedByOptionalTool: input.payload.blocked_by_tool } : {}
+        });
+        if (outcome2.status === "passed" && outcome2.promoted_node_ids.length > 0) {
+          for (const d2 of driveEligible) {
+            const materializedWi = groundingByDefect.get(d2);
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node2.id,
+              decision: "defect_chain_driven",
+              resolvability: "discovered_defect",
+              reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) and chain-driven to done in the SAME run via a same-graph forward splice \u2014 shares the originating run's loop_rounds budget, its fix lands as its OWN commit/node (never merged into the origin diff, ac-3): ${d2.item}`
             });
           }
         }
@@ -32069,6 +32311,18 @@ var workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
+      const groundingIds = discoveredDefectGroundings(completion);
+      const existingGroundings = new Set;
+      await Promise.all(groundingIds.map(async (id) => {
+        if (await store.exists(id))
+          existingGroundings.add(id);
+      }));
+      const defectBlockers = discoveredDefectCloseBlockers(completion, (id) => existingGroundings.has(id));
+      if (defectBlockers.length > 0) {
+        writeError(`work ${args.workId} cannot close: ${defectBlockers.length} discovered defect(s) not materialized \u2014 ${defectBlockers.join("; ")}.`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       await store.update(args.workId, (cur) => mirrorAcceptanceVerdicts(cur, completion));
       const closed = await store.close(args.workId, "done");
       const closeIssue = args["close-issue"] === true;
@@ -33417,6 +33671,7 @@ var autopilotComplete = defineCommand({
       const attestation = attestCompletion(completion);
       const autoHandling = projectAutoHandling(decisions);
       const directionDecisions = projectDirectionDecisions(decisions);
+      const decisionDisclosure = reconcileDecisionDisclosure(decisions);
       const followUpsToPickUp = (workItem2.follow_ups ?? []).filter((f3) => !f3.resolved && f3.materialized_wi).sort((a2, b2) => (a2.priority ?? Number.POSITIVE_INFINITY) - (b2.priority ?? Number.POSITIVE_INFINITY)).map((f3) => ({ work_item_id: f3.materialized_wi, note: f3.note }));
       if (format === "json") {
         writeJson2({
@@ -33444,6 +33699,7 @@ var autopilotComplete = defineCommand({
           attestation,
           auto_handling: autoHandling,
           direction_decisions: directionDecisions,
+          decision_disclosure: decisionDisclosure,
           cite_gate: {
             verdict: cite.verdict,
             pushed_node_ids: cite.pushed_node_ids,
@@ -33510,6 +33766,17 @@ var autopilotComplete = defineCommand({
             writeHuman(`      \uC120\uD0DD\uC9C0: ${d2.options.join("; ")}`);
             writeHuman(`      \uC120\uD0DD+\uC758\uB3C4\uADFC\uAC70: ${d2.choice} \u2014 ${d2.intent_basis}`);
             writeHuman(`      \uD30C\uAE09/\uB418\uB3CC\uB9AC\uAE30\uBE44\uC6A9: ${d2.blast_radius} / ${d2.reverse_cost}`);
+          }
+        }
+        if (decisionDisclosure.no_decision) {
+          writeHuman(`  \uACB0\uC815 \uACF5\uAC1C (decision disclosure, ac-8): \uACB0\uC815 \uC5C6\uC74C \u2014 ${decisionDisclosure.no_decision} (ledger ${decisionDisclosure.ledger_size}\uAC74)`);
+        } else {
+          writeHuman(`  \uACB0\uC815 \uACF5\uAC1C (decision disclosure, ac-8): ledger ${decisionDisclosure.ledger_size}\uAC74 \uC804\uC218 \uC815\uD569`);
+          for (const d2 of decisionDisclosure.defect_chains) {
+            writeHuman(`    [defect_chain_driven] ${d2.node_id}${d2.resolvability ? ` (${d2.resolvability})` : ""} (decision ${d2.decision_id}): ${d2.reason}`);
+          }
+          for (const a2 of decisionDisclosure.accounted) {
+            writeHuman(`    [${a2.kind}] ${a2.node_id} (decision ${a2.decision_id}): ${a2.reason}`);
           }
         }
         if (completion.final_verdict !== "pass") {
@@ -57880,4 +58147,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=8dc1665e77aab11ecde0072161975c51682d532107c819102e0c3f2d332fe2a4
+//# ditto-src-stamp=794f321074bad81e4fb233fd62b01f58bc2d2441b8f71251c82c29fe970b5205

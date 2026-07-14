@@ -26,10 +26,55 @@ import { kindToOwner } from './autopilot-graph';
  *  - `reverify`  — ac-2: re-verify an evidence-collectable unverified in-scope AC.
  *  - `risk_fix`  — ac-3: fix an in-scope agent_resolvable residual risk.
  *  - `follow_up` — ac-4: do an in-scope follow-up.
- * The three new triggers converge through a `verify` recheck (the verifier
- * collects fresh evidence and judges the item resolved).
+ *  - `defect_fix` — wi_2607148yg ac-1: fix a REPRODUCED real-behavior defect discovered
+ *                   mid-run, materialized into its own back-linked work item and
+ *                   chain-driven to done in the SAME run. It is a same-graph forward
+ *                   splice ON PURPOSE (ac-6): the drive rounds carry the `.rev.r` marker
+ *                   so `totalForwardRounds` counts them against the ORIGINATING run's
+ *                   `loop_rounds` — the derived defect shares the run's budget instead of
+ *                   spinning up a fresh per-WI caps block (which would let N nested defects
+ *                   run N×loop_rounds, unbounded).
+ * The new triggers converge through a `verify` recheck (the verifier collects fresh
+ * evidence and judges the item resolved).
  */
-export type ForwardTrigger = 'review' | 'reverify' | 'risk_fix' | 'follow_up';
+export type ForwardTrigger = 'review' | 'reverify' | 'risk_fix' | 'follow_up' | 'defect_fix';
+
+/**
+ * The conservative discovered-defect classification (wi_2607148yg ac-2). A discovered
+ * real-behavior defect is DRIVE-eligible (materialize + chain-drive in the same run) ONLY
+ * when it is a re-run-REPRODUCED CURRENT-harm bug. Every other shape — a not-reproduced /
+ * uncertain finding, a LATENT bug (no current harm), tech-debt, or an UNRELATED pre-existing
+ * failure — routes to BACKLOG-only materialization (persisted so it is never silently
+ * dropped, but NOT driven). This is the reproduction gate the drive route keys on — the
+ * VERDICT, not a self-declared free-text label, so an in-scope idea relabeled "defect" that
+ * is not reproduced never gets auto-driven (relabel resistance, ac-5).
+ */
+export type DefectDriveVerdict = 'drive' | 'backlog';
+
+/** Inputs a node reports about one discovered defect; the classifier reads only these facts. */
+export interface DiscoveredDefectSignal {
+  /** Was CURRENT harm actually reproduced by a re-run (the drive precondition)? */
+  reproduced: boolean;
+  /** Latent bug — real but no current harm. Any of these exclusions ⇒ backlog, never drive. */
+  latent?: boolean | undefined;
+  /** Pre-existing tech-debt, not a regression this run caused. */
+  tech_debt?: boolean | undefined;
+  /** An unrelated pre-existing test/behavior failure not caused by this change. */
+  unrelated_preexisting?: boolean | undefined;
+}
+
+/**
+ * Reproduction-gated, CONSERVATIVE (ac-2): `drive` iff the defect is reproduced AND carries
+ * no backlog-only exclusion (latent / tech-debt / unrelated pre-existing). Not reproduced or
+ * uncertain ⇒ `backlog` (never drive on uncertainty). Pure and deterministic — condition-b
+ * (a security/system/project/feature-design ADVERSE fix decision) is a SEPARATE fail-closed
+ * gate ANDed at the drive site (gates.defectFixRequiresConditionB), not folded in here.
+ */
+export function classifyDiscoveredDefect(d: DiscoveredDefectSignal): DefectDriveVerdict {
+  if (!d.reproduced) return 'backlog';
+  if (d.latent || d.tech_debt || d.unrelated_preexisting) return 'backlog';
+  return 'drive';
+}
 
 export interface ReviewOutcome {
   /** The review/verify/security node that just ran (the loop's current tail). */
@@ -154,6 +199,12 @@ function forwardShape(
         recheckKind: 'verify',
         fixPurpose: `Address the in-scope follow-up surfaced by ${seed.id} (round ${round})`,
         reviewPurpose: `Re-verify after ${fixId}; close only when the follow-up is verified done`,
+      };
+    case 'defect_fix':
+      return {
+        recheckKind: 'verify',
+        fixPurpose: `Fix the reproduced real-behavior defect discovered by ${seed.id} as its OWN work item/commit (never merged into the origin diff), chain-driven in the same run (round ${round})`,
+        reviewPurpose: `Re-verify after ${fixId}; close only when the discovered defect is verified fixed`,
       };
     default: // 'review' — existing convergence loop, lane-preserving (unchanged)
       return {

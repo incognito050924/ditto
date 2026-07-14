@@ -754,7 +754,9 @@ export interface AutoHandlingLedger {
  * `batch_escalate`, each carrying its resolvability category) into the completion's
  * auto-handling ledger. The loop (n1i-loop) already WRITES these entries; this only
  * reads and groups them (charter §4-11: do not duplicate / re-derive). Every other
- * decision kind (e.g. `loop_terminated`, `escalate`, `e2e_*`) is ignored.
+ * decision kind (e.g. `loop_terminated`, `escalate`, `e2e_*`, `defect_chain_driven`) is
+ * NOT rendered here — but it is NOT dropped either: reconcileDecisionDisclosure accounts
+ * for the full ledger so nothing is silently lost (ac-8).
  */
 export function projectAutoHandling(decisions: readonly AutopilotDecision[]): AutoHandlingLedger {
   const ledger: AutoHandlingLedger = { auto_fixed: [], surfaced: [], materialized: [] };
@@ -819,6 +821,9 @@ export function projectDirectionDecisions(
   decisions.forEach((d, index) => {
     if (d.decision !== 'direction') return;
     const record = d.direction_record;
+    // A record-less `direction` cannot fill the structured entry, so it is NOT rendered
+    // here — but it is NOT dropped either: reconcileDecisionDisclosure ACCOUNTS it in the
+    // residual bucket so the malformed fork is still disclosed (ac-8, no silent drop).
     if (!record) return;
     entries.push({
       decision_id: synthesizeDecisionId(d, index),
@@ -834,4 +839,167 @@ export function projectDirectionDecisions(
     });
   });
   return entries;
+}
+
+/**
+ * ac-8 disclosure: an explicit marker that the run made NO discretionary autonomous
+ * decision. Distinct from a bare empty list — an empty `[]` reads as "decisions were
+ * dropped", whereas this token positively states "there was nothing discretionary to
+ * disclose" (charter §4-5: absence must be asserted, not inferred from silence).
+ */
+export const NO_DISCRETIONARY_DECISIONS = 'no-discretionary-decisions' as const;
+
+/**
+ * The DISCRETIONARY decision kinds — an autonomous choice the loop MADE (how to handle a
+ * failure, whether to auto-route / fork / materialize+drive / force-continue). The
+ * non-discretionary records — `e2e_accept`/`e2e_decline` (the USER's answer),
+ * `loop_terminated` (a terminal disposition record), `reopen` (a USER action) — are still
+ * ACCOUNTED in the disclosure (never dropped) but do NOT count toward "a discretionary
+ * decision was made", so a run whose ledger holds only such records still emits the
+ * explicit `NO_DISCRETIONARY_DECISIONS` token.
+ */
+const DISCRETIONARY_DECISIONS: ReadonlySet<AutopilotDecision['decision']> = new Set([
+  'retry',
+  'switch_approach',
+  'escalate',
+  'auto_fix',
+  'surface',
+  'batch_escalate',
+  'direction',
+  'defect_chain_driven',
+  'procedure_punt_continued',
+]);
+
+/**
+ * One `defect_chain_driven` disclosure (ac-8, wi_2607148yg). A discovered real-behavior
+ * defect the loop MATERIALIZED into its own work item AND chain-drove to done in the same
+ * run — the materialize-AND-drive fact, distinct from the signal-only `batch_escalate`
+ * (auto-handling ledger). Surfaced with its `resolvability` (`discovered_defect`) and the
+ * free-text `reason` verbatim from the ledger — NOT re-derived (charter §4-11).
+ */
+export interface DefectChainEntry {
+  /** Append-positional decision handle (synthesizeDecisionId). */
+  decision_id: string;
+  node_id: string;
+  /** The resolvability class the loop attributed (`discovered_defect` for a driven defect). */
+  resolvability?: AutopilotDecision['resolvability'];
+  reason: string;
+}
+
+/**
+ * A ledger entry NOT individually rendered by the auto-handling / direction / defect-chain
+ * projections, ACCOUNTED so it is disclosed rather than silently dropped (ac-8). Carries
+ * the decision `kind` and its free-text `reason` verbatim — enough for a reader to see WHAT
+ * was decided and WHY without a per-kind structured schema (ADR-20260628: the decisive
+ * channel is lossless free-text, not per-class fields).
+ */
+export interface AccountedDecisionEntry {
+  /** Append-positional decision handle (synthesizeDecisionId). */
+  decision_id: string;
+  node_id: string;
+  kind: AutopilotDecision['decision'];
+  reason: string;
+}
+
+/**
+ * The full-ledger disclosure (ac-8). The auto-handling ledger and the direction ledger
+ * each render one slice of the append-only decision log; this reconciles the WHOLE ledger
+ * so every entry is either surfaced individually (`auto_handling` / `direction_decisions`
+ * / `defect_chains`) or ACCOUNTED (`accounted`) — never silently dropped. `ledger_size`
+ * is the reconciliation denominator (see decisionDisclosureReconciles). `no_decision`
+ * carries the explicit `NO_DISCRETIONARY_DECISIONS` token when no discretionary decision
+ * was made (distinct from an empty list), else null.
+ */
+export interface DecisionDisclosure {
+  /** Total entries in the append-only ledger — the reconciliation denominator. */
+  ledger_size: number;
+  auto_handling: AutoHandlingLedger;
+  direction_decisions: DirectionDecisionEntry[];
+  defect_chains: DefectChainEntry[];
+  accounted: AccountedDecisionEntry[];
+  no_decision: typeof NO_DISCRETIONARY_DECISIONS | null;
+}
+
+/**
+ * Reconcile the loop's append-only decision ledger into a disclosure where EVERY entry is
+ * accounted for (ac-8, wi_2607148yg — no silent drop). A pure projection of the log, NOT a
+ * re-derivation (charter §4-11): it composes the existing auto-handling / direction
+ * projections and routes every remaining kind — including the new `defect_chain_driven` and
+ * a MALFORMED record-less `direction` (which projectDirectionDecisions cannot render) — into
+ * an explicit bucket. The partition is complete and disjoint, so the disclosed count always
+ * reconciles against `ledger_size` (decisionDisclosureReconciles): a decision that vanished
+ * would break that equality and be detectable. An empty (or all-non-discretionary) ledger
+ * yields the explicit `NO_DISCRETIONARY_DECISIONS` token, never a bare empty list.
+ */
+export function reconcileDecisionDisclosure(
+  decisions: readonly AutopilotDecision[],
+): DecisionDisclosure {
+  const auto_handling = projectAutoHandling(decisions);
+  const direction_decisions = projectDirectionDecisions(decisions);
+  const defect_chains: DefectChainEntry[] = [];
+  const accounted: AccountedDecisionEntry[] = [];
+  decisions.forEach((d, index) => {
+    switch (d.decision) {
+      // Rendered by projectAutoHandling — already accounted.
+      case 'auto_fix':
+      case 'surface':
+      case 'batch_escalate':
+        return;
+      case 'direction':
+        // A well-formed fork is rendered by projectDirectionDecisions; a record-less one
+        // cannot be, so ACCOUNT it here (disclosed, not vanished).
+        if (d.direction_record) return;
+        accounted.push({
+          decision_id: synthesizeDecisionId(d, index),
+          node_id: d.node_id,
+          kind: d.decision,
+          reason: d.reason,
+        });
+        return;
+      case 'defect_chain_driven':
+        defect_chains.push({
+          decision_id: synthesizeDecisionId(d, index),
+          node_id: d.node_id,
+          ...(d.resolvability ? { resolvability: d.resolvability } : {}),
+          reason: d.reason,
+        });
+        return;
+      default:
+        // Every other kind (retry, switch_approach, escalate, e2e_*, loop_terminated,
+        // procedure_punt_continued, reopen) is accounted with its reason.
+        accounted.push({
+          decision_id: synthesizeDecisionId(d, index),
+          node_id: d.node_id,
+          kind: d.decision,
+          reason: d.reason,
+        });
+    }
+  });
+  const anyDiscretionary = decisions.some((d) => DISCRETIONARY_DECISIONS.has(d.decision));
+  return {
+    ledger_size: decisions.length,
+    auto_handling,
+    direction_decisions,
+    defect_chains,
+    accounted,
+    no_decision: anyDiscretionary ? null : NO_DISCRETIONARY_DECISIONS,
+  };
+}
+
+/**
+ * The ac-8 reconciliation invariant: the disclosed bucket total equals the ledger length,
+ * so no decision was silently dropped. n2-cli / n2-review can assert this on the assembled
+ * disclosure — a violation means a ledger entry escaped every bucket.
+ */
+export function decisionDisclosureReconciles(disclosure: DecisionDisclosure): boolean {
+  const autoCount =
+    disclosure.auto_handling.auto_fixed.length +
+    disclosure.auto_handling.surfaced.length +
+    disclosure.auto_handling.materialized.length;
+  const disclosed =
+    autoCount +
+    disclosure.direction_decisions.length +
+    disclosure.defect_chains.length +
+    disclosure.accounted.length;
+  return disclosed === disclosure.ledger_size;
 }

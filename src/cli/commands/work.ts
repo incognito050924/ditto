@@ -19,6 +19,8 @@ import {
   acceptanceTestable,
   completionEvidenceGate,
   completionGate,
+  discoveredDefectCloseBlockers,
+  discoveredDefectGroundings,
   passCloseResidualBlockers,
 } from '~/core/gates';
 import {
@@ -2219,6 +2221,35 @@ const workDone = defineCommand({
           `work ${args.workId} cannot close: ${residualBlockers.length} in-scope agent-owned residual(s) block a pass-close — ${residualBlockers.join(
             '; ',
           )}. Resolve/ground each (or move it out of scope), then re-run.`,
+        );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      // ac-10 (wi_2607148yg) DISCOVERED-DEFECT lightweight-close gate. A real-behavior
+      // bug found mid-work must not be left "mentioned but not persisted" — the close is
+      // blocked until it is MATERIALIZED into a REAL work item (grounding = the wi pointer).
+      // Each `wi_…` carried in a discovered-defect grounding is resolved against the store
+      // (async) HERE and the resulting existence predicate is fed to the pure gate, so a
+      // FABRICATED pointer (a claim-not-proof id that was never created) does NOT release
+      // the close. GATE ONLY: the lightweight path never drives the fix (that is the
+      // autopilot loop's job) and never hard-blocks-until-user — a materialized defect
+      // RELEASES the close. Sibling of passCloseResidualBlockers; keys on
+      // resolvability=discovered_defect over the SAME two residual surfaces (no drive).
+      const groundingIds = discoveredDefectGroundings(completion);
+      const existingGroundings = new Set<string>();
+      await Promise.all(
+        groundingIds.map(async (id) => {
+          if (await store.exists(id)) existingGroundings.add(id);
+        }),
+      );
+      const defectBlockers = discoveredDefectCloseBlockers(completion, (id) =>
+        existingGroundings.has(id),
+      );
+      if (defectBlockers.length > 0) {
+        writeError(
+          `work ${args.workId} cannot close: ${defectBlockers.length} discovered defect(s) not materialized — ${defectBlockers.join(
+            '; ',
+          )}.`,
         );
         process.exit(USAGE_ERROR_EXIT);
         return;

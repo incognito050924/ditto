@@ -60,6 +60,14 @@ export const CHARTER_SELF_CHECKS: readonly CharterSelfCheck[] = [MINIMAL_INCREME
 const PRIME_DIRECTIVE = [
   'DITTO 기본 지침(prime directive):',
   '- 원래 요청을 그대로 지킨다: 사용자 승인 없이 범위를 넓히지도, 줄이거나 쪼개지도 않는다.',
+  // Defect-class carve-out (wi_2607148yg ac-11): a SEPARATE operative cue, added
+  // BESIDE the base prohibition above (which keeps its full force for every
+  // non-defect scope change — do NOT fold the two into one softened line). The
+  // carve-out is keyed to the CLASSIFIER verdict ("재현되는 실동작 버그"), not a
+  // free-text self-label (relabel resistance), and it never opens for non-defects
+  // nor waives the two fail-stop conditions. ADR: supersedes ADR-20260627
+  // (materialize≠drive) / ADR-20260710 (one-intent=one-unit) for this class only.
+  '- 딱 하나의 예외 — 실행 중 발견한 버그: autopilot이 자율 실행 도중 재현되는 실동작 버그를 발견하면(분류기가 "재현되는 실동작 버그"로 판정한 것만 해당한다 — 네가 스스로 "버그"라고 이름 붙였다고 열리지 않는다), 못 본 척 남기지 말고 그 버그를 별도 work item으로 물질화해 같은 run 안에서 고칠 때까지 구동한다. 이 예외는 비-결함(아이디어·기능·기술부채·아직 아무 피해 없는 잠복버그)에는 열리지 않는다 — 그런 후속은 물질화만 하고 구동하지 않으며, 그걸 핑계로 요청 범위를 넓히지 않는다. 이 자율 구동 중에도 두 경우 — 정초 계획·방향이 뒤집히거나 진행이 막힐 때, 그리고 보안·시스템·프로젝트·기능설계 의도를 위협하는 결정이 필요할 때 — 에는 여전히 멈추고 사용자에게 인계한다.',
   '- 코드베이스를 바꾸는 모든 작업은 work item 안에서, 딱 두 갈래 표준 경로로만 진행한다 — 무거운 경로(`/ditto:deep-interview` → autopilot) 또는 가벼운 경로(`ditto work set-criteria` → `ditto verify` → `ditto work done`). 이 두 경로 밖에서 work item 없이 즉흥적으로 코드를 고치는 것(콘솔에서 바로 TDD로 편집)은 허용되지 않는다. TDD는 경로 안에서 구현하는 방법이지, 경로를 대신하는 수단이 아니다.',
   '- 이 요청에 work item이 필요한지, 그리고 어느 경로로 갈지는 네가 판단한다(무게로 라우팅, 권고): 작고 되돌릴 수 있으면 → 가벼운 경로; 모호하거나 되돌릴 수 없거나 여러 표면에 걸치거나 위험이 선언되면 → 무거운 경로. 훅은 절대 자동으로 만들지 않는다. 필요하다고 보면 네가 직접 등록한다: `ditto work start`.',
   '- 사용자만 답할 수 있는 것만 묻는다. 나머지는 코드·문서·웹에서 스스로 답한다.',

@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deriveAcVerdicts } from '~/core/autopilot-complete';
 import {
+  type ConditionBDecision,
   type DecisionConflict,
+  type HandoffReason,
   acceptanceTestable,
   attestAcVerdicts,
   completionEvidenceGate,
@@ -11,13 +13,18 @@ import {
   convergenceGate,
   decisionConflictGate,
   decisionConflictRequiresApproval,
+  defectFixRequiresConditionB,
   deriveClosureMode,
   deterministicFloor,
   directionForkGate,
+  discoveredDefectCloseBlockers,
+  discoveredDefectGroundings,
   highRiskAssumption,
   intentDriftGate,
   interfaceBaselineDriftGate,
   interviewReadinessGate,
+  isConditionB,
+  isFailHandoffReason,
   knowledgeTriggerFired,
   knowledgeUpdateGate,
   landGate,
@@ -1041,6 +1048,197 @@ describe('passCloseResidualBlockers (ac-1: pass-close termination-completeness)'
   test('a clean pass (no unverified[], no remaining_risk_records) → no blockers', () => {
     const c = completionContract.parse({ ...passBase });
     expect(passCloseResidualBlockers(c, ['ac-1'])).toEqual([]);
+  });
+});
+
+describe('condition-b classifier (wi_2607148yg ac-4: security/system/project/feature-design fail-closed)', () => {
+  const D = (o: Partial<ConditionBDecision> = {}): ConditionBDecision => ({
+    domain: 'security',
+    adverse: true,
+    basis: 'the fix would loosen an auth check',
+    ...o,
+  });
+
+  test('an adverse decision touching a protected domain IS condition-b', () => {
+    expect(isConditionB(D({ domain: 'security', adverse: true }))).toBe(true);
+    expect(isConditionB(D({ domain: 'system', adverse: true }))).toBe(true);
+    expect(isConditionB(D({ domain: 'project', adverse: true }))).toBe(true);
+    expect(isConditionB(D({ domain: 'feature_design', adverse: true }))).toBe(true);
+  });
+
+  test('a non-adverse decision on a protected domain is NOT condition-b (touch alone does not fail-close)', () => {
+    expect(isConditionB(D({ adverse: false }))).toBe(false);
+  });
+
+  test('condition-b DOMINATES defect-drive: a reproduced defect whose FIX needs a condition-b decision BLOCKS (no auto-drive)', () => {
+    // A reproduced discovered_defect is normally materialize+drive, but the moment its
+    // fix requires a security/system/project/feature-design adverse decision, autonomy
+    // yields to fail-closed handoff — the loop ANDs !defectFixRequiresConditionB into
+    // its can-drive gate.
+    const fixNeeds = [D({ domain: 'security', adverse: true })];
+    expect(defectFixRequiresConditionB(fixNeeds)).toBe(true);
+    const reproduced = true;
+    const canAutoDrive = reproduced && !defectFixRequiresConditionB(fixNeeds);
+    expect(canAutoDrive).toBe(false);
+  });
+
+  test('a defect fix with no condition-b decision does NOT block the drive (AND-able releases)', () => {
+    expect(defectFixRequiresConditionB([])).toBe(false);
+    expect(defectFixRequiresConditionB([D({ adverse: false })])).toBe(false);
+    const reproduced = true;
+    expect(reproduced && !defectFixRequiresConditionB([])).toBe(true);
+  });
+});
+
+describe('isFailHandoffReason (wi_2607148yg ac-7: fail/handoff only on the two conditions)', () => {
+  test('the two sanctioned conditions (direction reversal / progress-impossible / condition-b) fail-handoff', () => {
+    const failing: HandoffReason[] = [
+      'direction_reversed',
+      'progress_impossible',
+      'condition_b_required',
+    ];
+    for (const r of failing) expect(isFailHandoffReason(r)).toBe(true);
+  });
+
+  test('a routine procedure-punt does NOT trip a fail (it force-continues, never a handoff)', () => {
+    expect(isFailHandoffReason('procedure_punt')).toBe(false);
+  });
+});
+
+describe('discoveredDefectCloseBlockers (wi_2607148yg ac-10: lightweight close gate — REAL materialization releases)', () => {
+  const passBase = {
+    schema_version: '0.1.0',
+    work_item_id: 'wi_2607148yg',
+    declared_by: 'verifier' as const,
+    declared_at: '2026-07-14T00:00:00Z',
+    summary: 'lightweight close',
+    acceptance: [{ criterion_id: 'ac-1', verdict: 'pass' as const }],
+    final_verdict: 'pass' as const,
+  };
+  // The close only releases for a grounding whose wi_ pointer resolves to a REAL work item.
+  // These resolvers stand in for the CLI's store.exists lookup.
+  const noneExist = () => false;
+  const exists =
+    (...ids: string[]) =>
+    (id: string) =>
+      ids.includes(id);
+
+  test('an UNMATERIALIZED discovered_defect (no grounding) BLOCKS the work-done close', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        {
+          item: 'null deref when config missing — reproduced',
+          reason: 'found mid-work, real behavior bug',
+          out_of_scope: true,
+          resolvability: 'discovered_defect',
+        },
+      ],
+    });
+    const r = discoveredDefectCloseBlockers(c, noneExist);
+    expect(r.length).toBe(1);
+    expect(r[0]).toContain('discovered defect not materialized');
+  });
+
+  test('a FABRICATED grounding pointer (wi_ id that does not resolve to a real work item) does NOT release — BLOCKS the close', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        {
+          item: 'null deref when config missing — reproduced',
+          reason: 'found mid-work, claims materialization but the WI was never created',
+          out_of_scope: true,
+          resolvability: 'discovered_defect',
+          grounding: 'wi_defect0001', // never created
+        },
+      ],
+    });
+    // The CLI resolver would find wi_defect0001 does not exist → still blocked.
+    const r = discoveredDefectCloseBlockers(c, noneExist);
+    expect(r.length).toBe(1);
+    expect(r[0]).toContain('does not exist');
+    expect(r[0]).toContain('wi_defect0001');
+  });
+
+  test('a MATERIALIZED discovered_defect (grounding wi_ pointer resolves to a REAL work item) RELEASES the close (gate only, not a hard block)', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        {
+          item: 'null deref when config missing — reproduced',
+          reason: 'found mid-work, real behavior bug',
+          out_of_scope: true,
+          resolvability: 'discovered_defect',
+          grounding: 'materialized as wi_260714abc (backlog)',
+        },
+      ],
+    });
+    // A fabricated resolver blocks; only the REAL existence predicate releases.
+    expect(discoveredDefectCloseBlockers(c, noneExist).length).toBe(1);
+    expect(discoveredDefectCloseBlockers(c, exists('wi_260714abc'))).toEqual([]);
+  });
+
+  test('an UNMATERIALIZED discovered_defect in remaining_risk_records also BLOCKS; a real grounding RELEASES', () => {
+    const blocked = completionContract.parse({
+      ...passBase,
+      remaining_risk_records: [
+        { risk: 'off-by-one in pagination — reproduced', resolvability: 'discovered_defect' },
+      ],
+    });
+    expect(discoveredDefectCloseBlockers(blocked, noneExist).length).toBe(1);
+    const released = completionContract.parse({
+      ...passBase,
+      remaining_risk_records: [
+        {
+          risk: 'off-by-one in pagination — reproduced',
+          resolvability: 'discovered_defect',
+          grounding: 'materialized as wi_260714def',
+        },
+      ],
+    });
+    expect(discoveredDefectCloseBlockers(released, exists('wi_260714def'))).toEqual([]);
+    // a fabricated pointer would still block even in the risk-records surface.
+    expect(discoveredDefectCloseBlockers(released, noneExist).length).toBe(1);
+  });
+
+  test('ac-5 regression: a non-defect out_of_scope follow-up still RELEASES (capture≠drive preserved)', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        { item: 'a nice idea for a follow-up', reason: 'captured for later', out_of_scope: true },
+      ],
+    });
+    expect(discoveredDefectCloseBlockers(c, noneExist)).toEqual([]);
+    // and the existing pass-close family still releases it too (no double-messaging).
+    expect(passCloseResidualBlockers(c, ['ac-1'])).toEqual([]);
+  });
+
+  test('a clean completion (no discovered_defect) → no blockers', () => {
+    const c = completionContract.parse({ ...passBase });
+    expect(discoveredDefectCloseBlockers(c, noneExist)).toEqual([]);
+  });
+
+  test('discoveredDefectGroundings extracts the wi_ pointer(s) the CLI resolves (both residual surfaces)', () => {
+    const c = completionContract.parse({
+      ...passBase,
+      unverified: [
+        {
+          item: 'defect a',
+          reason: 'r',
+          out_of_scope: true,
+          resolvability: 'discovered_defect',
+          grounding: 'materialized as wi_260714abc',
+        },
+      ],
+      remaining_risk_records: [
+        {
+          risk: 'defect b',
+          resolvability: 'discovered_defect',
+          grounding: 'wi_260714def and a note',
+        },
+      ],
+    });
+    expect(discoveredDefectGroundings(c).sort()).toEqual(['wi_260714abc', 'wi_260714def']);
   });
 });
 

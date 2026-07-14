@@ -31,6 +31,7 @@ import { seedTestAuthorNode } from './autopilot-bootstrap';
 import { assembleCompletionFromGraph } from './autopilot-complete';
 import {
   type ForwardTrigger,
+  classifyDiscoveredDefect,
   forwardRound,
   planForwardReexpansion,
   totalForwardRounds,
@@ -65,6 +66,7 @@ import {
 } from './autopilot-graph';
 import { type AutopilotDecision, AutopilotStore } from './autopilot-store';
 import { deriveTidyScope, planTidyOnImplementPass } from './autopilot-tidy';
+import { PLACEHOLDER_AC_STATEMENT } from './charter';
 import { countUnitOnlyClosures, isClosed } from './completion-coverage-doctor';
 import { CompletionStore } from './completion-store';
 import { CoverageFeedbackLedger } from './coverage-feedback';
@@ -72,10 +74,14 @@ import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverag
 import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import {
+  type ConditionBDecision,
+  type HandoffReason,
   assertFrozenTestsIntact,
   decisionConflictRequiresApproval,
+  defectFixRequiresConditionB,
   highRiskAssumption,
   intentDriftGate,
+  isFailHandoffReason,
   oracleSatisfaction,
 } from './gates';
 import { createGhClient } from './gh-client';
@@ -1848,6 +1854,46 @@ export const recordResultPayload = z
         "A node's surfaced follow-ups (ac-4); in-scope ones are driven as graph nodes, out-of-scope " +
           'ones emit a single batch-escalate signal (materialize ≠ drive, R9).',
       ),
+    // wi_2607148yg (ac-1/ac-2/ac-3/ac-6): real-behavior defects this node discovered
+    // mid-run. These are DISTINCT from the current-node `tidy_bug_found` in-graph reopen:
+    // the node REPORTS the defect (item + classifier signals) and the LOOP materializes it
+    // into its OWN back-linked work item (WorkItemStore.create — a persisted Record, the id
+    // becomes the real grounding; the agent does NOT supply a grounding string, so a
+    // fabricated pointer is impossible on this path). When it is a REPRODUCED current-harm
+    // bug the loop also chain-drives the FIX to done IN THE SAME graph so the drive shares
+    // the originating run's `loop_rounds` budget (never a fresh per-WI caps block, ac-6). The
+    // drive route keys on the reproduction CLASSIFIER (classifyDiscoveredDefect), NOT the
+    // free-text `item` label (relabel resistance, ac-5): a not-reproduced/latent/tech-debt/
+    // unrelated defect is materialized to BACKLOG only. `condition_b` fix decisions
+    // (security/system/project/feature-design ADVERSE) force a fail-closed block instead of a
+    // drive (ac-4/ac-7). Absent ⇒ no-op (backward compat).
+    discovered_defects: z
+      .array(
+        z.object({
+          item: z.string().min(1),
+          reproduced: z.boolean(),
+          latent: z.boolean().optional(),
+          tech_debt: z.boolean().optional(),
+          unrelated_preexisting: z.boolean().optional(),
+          // Fix decisions this defect's repair would require, each tagged with the protected
+          // axis it touches + whether it is ADVERSE. A single adverse one ⇒ fail-closed.
+          condition_b: z
+            .array(
+              z.object({
+                domain: z.enum(['security', 'system', 'project', 'feature_design']),
+                adverse: z.boolean(),
+                basis: z.string().min(1),
+              }),
+            )
+            .optional(),
+        }),
+      )
+      .optional()
+      .describe(
+        "A node's discovered real-behavior defects (ac-1/ac-2). A reproduced current-harm bug is " +
+          'materialized into its own work item AND chain-driven in the same run (shared run budget); ' +
+          'latent/tech-debt/unrelated/uncertain ⇒ backlog-only; a condition-b fix ⇒ fail-closed block.',
+      ),
     // T1 (wi_2606266az, R5/ADR-0018): the auto-resolve trigger this pass would
     // splice is blocked ONLY by an OPTIONAL tool's absence — the planner then
     // surfaces the residual blocked_external (honest-unverified) instead of looping
@@ -2394,7 +2440,10 @@ async function recordLoopTermination(
 // ── T1 (wi_2606266az) auto-resolve forward triggers (ac-2/3/4/5) ─────────────
 
 /** The three new forward triggers the loop drives (the `review` lane is unchanged). */
-type AutoResolveTrigger = Extract<ForwardTrigger, 'reverify' | 'risk_fix' | 'follow_up'>;
+type AutoResolveTrigger = Extract<
+  ForwardTrigger,
+  'reverify' | 'risk_fix' | 'follow_up' | 'defect_fix'
+>;
 
 /**
  * A GATHERABLE oracle has a RUNNABLE re-evaluation path — a command/scan exists to
@@ -2590,6 +2639,40 @@ export async function recordResult(
   } catch {
     return outcome;
   }
+}
+
+/**
+ * wi_2607148yg (ac-1): materialize a discovered defect into its OWN persisted, back-linked
+ * work item — a tracked Record via WorkItemStore.create (the SAME materialization path the
+ * lightweight `work follow-up --kind bug` uses), NOT a free-text mention. The returned id is
+ * the REAL grounding pointer that the disclosure decision and the lightweight close gate
+ * (discoveredDefectCloseBlockers) attest against, replacing the prior claim-not-proof string.
+ *
+ * Creating a Record starts NO new autopilot run/graph, so this does NOT reintroduce the
+ * N×loop_rounds runaway (ac-6): a DRIVE-eligible defect's FIX still rides the ORIGIN graph's
+ * shared budget via the caller's same-graph `defect_fix` splice — the child WI is a tracked
+ * RECORD + `discovered_by` backlink to the origin, whose fix lands as its OWN node/commit
+ * (ac-3), never a separately-driven graph.
+ */
+async function materializeDiscoveredDefect(
+  repoRoot: string,
+  originWorkItemId: string,
+  item: string,
+  now: Date,
+): Promise<string> {
+  const child = await new WorkItemStore(repoRoot).create(
+    {
+      title: `defect: ${item}`.slice(0, 200),
+      source_request: `Discovered mid-run while working on ${originWorkItemId}: ${item}`,
+      goal: `Fix: ${item}`,
+      acceptance_criteria: [
+        { id: 'ac-1', statement: PLACEHOLDER_AC_STATEMENT, verdict: 'unverified', evidence: [] },
+      ],
+      discovered_by: originWorkItemId,
+    },
+    now,
+  );
+  return child.id;
 }
 
 async function recordResultCore(
@@ -3213,6 +3296,137 @@ async function recordResultCore(
         return outcome;
       }
       // surface-only ⇒ no splice; flow CONTINUES (fall through to the normal pass).
+    }
+
+    // ── wi_2607148yg ac-1/ac-2/ac-3/ac-6: discovered real-behavior defects ──────
+    // A node may report defects it discovered mid-run. Each is CLASSIFIED by the
+    // reproduction gate (classifyDiscoveredDefect — the VERDICT, not the free-text
+    // label, so a relabeled idea never auto-drives, ac-5):
+    //   - `backlog`  — not-reproduced/latent/tech-debt/unrelated ⇒ materialize ONLY
+    //                  (recorded with resolvability `discovered_defect` so the close
+    //                  gate sees it captured), NEVER driven (conservative, ac-2).
+    //   - `drive`    — a reproduced current-harm bug ⇒ materialize into its own
+    //                  back-linked work item AND chain-drive to done in the SAME graph
+    //                  (a `defect_fix` forward splice). The splice reuses the `.rev.r`
+    //                  marker so `totalForwardRounds` counts it against the ORIGINATING
+    //                  run's `loop_rounds` — the derived defect SHARES the run budget
+    //                  and escalates to a fail-handoff at the shared cap, instead of a
+    //                  fresh per-WI caps block that would run N nested defects N×loop_rounds
+    //                  (ac-6 runaway floor). Recorded `defect_chain_driven` (ac-1/ac-8).
+    //   - condition-b — a drive-eligible defect whose FIX needs a security/system/
+    //                  project/feature-design ADVERSE decision does NOT drive: it is a
+    //                  fail-closed block (isFailHandoffReason('condition_b_required')),
+    //                  handing the decision to the user (ac-4/ac-7).
+    const discoveredDefects = input.payload.discovered_defects ?? [];
+    if (discoveredDefects.length > 0) {
+      const now = input.now ?? new Date();
+      const driveEligible = discoveredDefects.filter(
+        (d) => classifyDiscoveredDefect(d) === 'drive',
+      );
+      const backlogOnly = discoveredDefects.filter((d) => classifyDiscoveredDefect(d) !== 'drive');
+      // (ac-1/ac-2) backlog: ACTUALLY materialize each into its OWN back-linked work item
+      // (a persisted Record, not a mention) and record `surface` with the REAL created id as
+      // grounding (lossless channel) — never driven. The real id is what the close gate can
+      // resolve, so a fabricated string can no longer masquerade as materialization.
+      for (const d of backlogOnly) {
+        const materializedWi = await materializeDiscoveredDefect(
+          repoRoot,
+          input.workItemId,
+          d.item,
+          now,
+        );
+        await aps.appendDecision(input.workItemId, {
+          ts: now.toISOString(),
+          node_id: node.id,
+          decision: 'surface',
+          resolvability: 'discovered_defect',
+          reason: `discovered defect materialized to backlog ONLY — not a reproduced current-harm bug (conservative, ac-2), so persisted into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) but NOT driven: ${d.item}`,
+        });
+      }
+      // (ac-4/ac-7) condition-b dominates the drive: any drive-eligible defect whose fix
+      // needs an ADVERSE protected-axis decision ⇒ fail-closed block, do NOT auto-drive.
+      const conditionBDefect = driveEligible.find((d) =>
+        defectFixRequiresConditionB((d.condition_b ?? []) as ConditionBDecision[]),
+      );
+      if (conditionBDefect) {
+        const handoffReason: HandoffReason = 'condition_b_required';
+        // Only the two sanctioned conditions fail; condition_b_required is one of them.
+        // (A defensive assert of the gates contract — a non-fail reason would fall through.)
+        const reason = isFailHandoffReason(handoffReason)
+          ? `condition-b required — fixing the discovered defect needs a security/system/project/feature-design ADVERSE decision; fail-closed handoff instead of auto-drive (ac-4/ac-7): ${conditionBDefect.item}`
+          : `discovered defect fix — non-fail reason, continuing: ${conditionBDefect.item}`;
+        if (isFailHandoffReason(handoffReason)) {
+          await aps.updateNode(input.workItemId, node.id, (n) => ({
+            ...n,
+            status: nodeTransition(n.status, 'block'),
+          }));
+          await aps.appendDecision(input.workItemId, {
+            ts: now.toISOString(),
+            node_id: node.id,
+            failure_class: 'user_decision_needed',
+            decision: 'escalate',
+            reason,
+            attempts: node.attempts,
+          });
+          return {
+            node_id: node.id,
+            status: 'blocked',
+            outcome: 'fail',
+            guard_contentful: true,
+            decision: 'escalate',
+            failure_class: 'user_decision_needed',
+            cap_exceeded: false,
+            reason,
+            promoted_node_ids: [],
+            superseded_node_ids: [],
+          };
+        }
+      }
+      // (ac-1/ac-3/ac-6) drive: ACTUALLY materialize each reproduced defect into its OWN
+      // back-linked work item (a persisted Record — see materializeDiscoveredDefect, which
+      // starts no new run so there is NO N×loop_rounds runaway), THEN chain-drive its FIX in
+      // the SAME graph so the drive shares the run's loop_rounds budget (a `defect_fix`
+      // splice, not a fresh WI graph). The fix lands as its OWN node/commit (ac-3).
+      if (driveEligible.length > 0) {
+        const groundingByDefect = new Map<(typeof driveEligible)[number], string>();
+        for (const d of driveEligible) {
+          groundingByDefect.set(
+            d,
+            await materializeDiscoveredDefect(repoRoot, input.workItemId, d.item, now),
+          );
+        }
+        const outcome = await applyAutoResolveSplice({
+          aps,
+          workItemId: input.workItemId,
+          node,
+          graph,
+          trigger: 'defect_fix',
+          evidenceRefs: input.payload.evidence_refs,
+          guardReason,
+          now,
+          allowedAcceptanceIds,
+          ...(input.payload.blocked_by_tool
+            ? { blockedByOptionalTool: input.payload.blocked_by_tool }
+            : {}),
+        });
+        // Record the materialize-AND-drive fact ONLY when the splice actually drove a
+        // round (an escalate/surface at the shared cap is already recorded by the helper,
+        // so a cap-hit is not falsely logged as a driven defect).
+        if (outcome.status === 'passed' && outcome.promoted_node_ids.length > 0) {
+          for (const d of driveEligible) {
+            const materializedWi = groundingByDefect.get(d);
+            await aps.appendDecision(input.workItemId, {
+              ts: now.toISOString(),
+              node_id: node.id,
+              decision: 'defect_chain_driven',
+              resolvability: 'discovered_defect',
+              reason: `reproduced real-behavior defect materialized into its own back-linked work item (${materializedWi}, discovered_by ${input.workItemId}) and chain-driven to done in the SAME run via a same-graph forward splice — shares the originating run's loop_rounds budget, its fix lands as its OWN commit/node (never merged into the origin diff, ac-3): ${d.item}`,
+            });
+          }
+        }
+        return outcome;
+      }
+      // backlog-only ⇒ persisted; flow CONTINUES (fall through to the normal pass).
     }
 
     // ── T1 ac-4 (wi_2606266az): drive in-scope follow-ups, signal out-of-scope ──

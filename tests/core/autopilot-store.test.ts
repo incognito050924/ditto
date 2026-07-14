@@ -398,4 +398,56 @@ describe('AutopilotStore', () => {
       }),
     ).toBe(true);
   });
+
+  // --- wi_2607148yg (ac-1/ac-2): discovered-defect materialize+drive vocabulary ----
+  // The `defect_chain_driven` decision kind records the materialize-AND-drive fact
+  // (a discovered real-behavior defect materialized into its own work item and driven
+  // to done in the same run), DISTINCT from `batch_escalate` (materialize≠drive). The
+  // `discovered_defect` resolvability names that in-scope-to-drive class.
+  test('a `defect_chain_driven` decision round-trips with the `discovered_defect` resolvability', async () => {
+    await store.write(WI, graph());
+    const driven: AutopilotDecision = {
+      ts: '2026-07-14T00:00:00.000Z',
+      node_id: 'impl-x',
+      decision: 'defect_chain_driven',
+      resolvability: 'discovered_defect',
+      reason: 'reproduced real-behavior defect materialized into wi_child and driven to done',
+    };
+    await store.appendDecision(WI, driven);
+    const read = await store.readDecisions(WI);
+    expect(read).toHaveLength(1);
+    expect(read[0]?.decision).toBe('defect_chain_driven');
+    expect(read[0]?.resolvability).toBe('discovered_defect');
+    // additive/optional fields survive the JSON.parse-only read path unchanged
+    expect(read[0]).toEqual(driven);
+  });
+
+  test('isDecisivePost is FALSE for a `defect_chain_driven` decision (in-flow, disclosed not GitHub-posted)', () => {
+    expect(
+      isDecisivePost({
+        ts: '2026-07-14T00:00:00.000Z',
+        node_id: 'impl-x',
+        decision: 'defect_chain_driven',
+        resolvability: 'discovered_defect',
+        reason: 'materialized + driven',
+      }),
+    ).toBe(false);
+  });
+
+  test('a legacy decision log WITHOUT the new decision kind / resolvability still parses (backward-compat)', async () => {
+    // A record written BEFORE this change: only the pre-existing vocabulary. Must
+    // parse unchanged (additive/optional, no schema_version bump).
+    const legacy: AutopilotDecision = {
+      ts: '2026-07-06T00:00:00.000Z',
+      node_id: 'N1',
+      decision: 'retry',
+      reason: 'legacy retry',
+      attempts: { fix: 1, switch: 0 },
+    };
+    await store.appendDecision(WI, legacy);
+    const read = await store.readDecisions(WI);
+    expect(read).toHaveLength(1);
+    expect(read[0]).toEqual(legacy);
+    expect(read[0]?.resolvability).toBeUndefined();
+  });
 });

@@ -9,6 +9,7 @@ import {
   attestCompletion,
   projectAutoHandling,
   projectDirectionDecisions,
+  reconcileDecisionDisclosure,
 } from '~/core/autopilot-complete';
 import { computeDownstream, kindToOwner, proposalsToNodes } from '~/core/autopilot-graph';
 import {
@@ -679,6 +680,14 @@ const autopilotComplete = defineCommand({
       // never buried. Each entry carries the `decision_id` handle `ditto autopilot revise`
       // targets (ac-5). Pure projection of the append-only log (no re-derive).
       const directionDecisions = projectDirectionDecisions(decisions);
+      // ac-8 (wi_2607148yg): the FULL-LEDGER reconciliation view. The auto-handling and
+      // direction ledgers above each render one slice; this reconciles the WHOLE
+      // append-only log so EVERY internal decision is disclosed as candidate+rationale —
+      // surfaced individually (auto_handling / direction / defect_chains) or ACCOUNTED —
+      // never silently dropped, and carries the explicit NO_DISCRETIONARY_DECISIONS token
+      // when the run made no discretionary choice (absence asserted, not inferred from
+      // silence). Pure projection of the same `decisions` log (no re-derive).
+      const decisionDisclosure = reconcileDecisionDisclosure(decisions);
       // D4 dialectic 결정 (a) (wi_2606278qa): this run materialized out-of-scope
       // follow-ups as tracked draft WIs but does NOT auto-drive them (materialize
       // != drive — per-WI approval + intent-lock is the intended control boundary,
@@ -738,6 +747,9 @@ const autopilotComplete = defineCommand({
           attestation,
           auto_handling: autoHandling,
           direction_decisions: directionDecisions,
+          // ac-8: the reconciled full-ledger disclosure (every decision accounted +
+          // the no-decision token when empty). Coexists with the two slice ledgers above.
+          decision_disclosure: decisionDisclosure,
           cite_gate: {
             verdict: cite.verdict,
             pushed_node_ids: cite.pushed_node_ids,
@@ -821,6 +833,27 @@ const autopilotComplete = defineCommand({
             writeHuman(`      선택지: ${d.options.join('; ')}`);
             writeHuman(`      선택+의도근거: ${d.choice} — ${d.intent_basis}`);
             writeHuman(`      파급/되돌리기비용: ${d.blast_radius} / ${d.reverse_cost}`);
+          }
+        }
+        // ac-8: reconciled full-ledger disclosure. Either the explicit no-decision token
+        // (no discretionary choice was made) or every remaining decision as candidate +
+        // rationale (defect-chain drives + any other accounted kind), so nothing is
+        // silently dropped.
+        if (decisionDisclosure.no_decision) {
+          writeHuman(
+            `  결정 공개 (decision disclosure, ac-8): 결정 없음 — ${decisionDisclosure.no_decision} (ledger ${decisionDisclosure.ledger_size}건)`,
+          );
+        } else {
+          writeHuman(
+            `  결정 공개 (decision disclosure, ac-8): ledger ${decisionDisclosure.ledger_size}건 전수 정합`,
+          );
+          for (const d of decisionDisclosure.defect_chains) {
+            writeHuman(
+              `    [defect_chain_driven] ${d.node_id}${d.resolvability ? ` (${d.resolvability})` : ''} (decision ${d.decision_id}): ${d.reason}`,
+            );
+          }
+          for (const a of decisionDisclosure.accounted) {
+            writeHuman(`    [${a.kind}] ${a.node_id} (decision ${a.decision_id}): ${a.reason}`);
           }
         }
         if (completion.final_verdict !== 'pass') {

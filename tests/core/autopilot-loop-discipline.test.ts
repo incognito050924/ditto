@@ -1744,3 +1744,245 @@ describe('T1 ac-5 / R5 / R2 — no-progress floor, optional-tool surface, loop-c
     expect(res.promoted_node_ids).toEqual([]); // refused — counted against loop_rounds
   });
 });
+
+describe('wi_2607148yg discovered real-behavior defects (materialize + chain-drive vs backlog)', () => {
+  // A running implement node that discovers a defect mid-run. Not a verify node so the
+  // gatherable-reverify path never engages — the discovered_defects channel is exercised alone.
+  function implementNode(id = 'IMP', status: 'running' | 'passed' = 'running') {
+    return {
+      id,
+      kind: 'implement' as const,
+      owner: 'implementer' as const,
+      purpose: 'implement ac-1',
+      status,
+      depends_on: [] as string[],
+      acceptance_refs: ['ac-1'],
+      evidence_refs: [],
+      ac_verdicts: [],
+      attempts: { fix: 0, switch: 0 },
+    };
+  }
+  const passEvidence = [{ kind: 'file' as const, path: 'src/x.ts', summary: 'impl' }];
+
+  // The created child WI id is the FIRST wi_ token in the disclosure reason (the origin id
+  // only appears after `discovered_by`).
+  const childWiFromReason = (reason: string): string | undefined =>
+    reason.match(/work item \((wi_[a-z0-9]+),/)?.[1];
+
+  test('(a) a REPRODUCED defect is materialized into a REAL back-linked work item AND chain-driven — splices a defect_fix round + records defect_chain_driven', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Implemented ac-1; a re-run reproduced a real crash on the error path.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [{ item: 'error-path crash reproduced', reproduced: true }],
+      },
+    });
+    // The origin node passes; a fix+verify pair is spliced (drive in the SAME graph).
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toHaveLength(2);
+    // the spliced round carries the .rev.r marker (shares the run-level loop_rounds budget).
+    expect(res.promoted_node_ids.some((id) => id.includes('.rev.r'))).toBe(true);
+    const after = await aps.get(WI);
+    expect(after.nodes.find((n) => n.id === res.promoted_node_ids[1])?.kind).toBe('verify');
+    const decisions = await aps.readDecisions(WI);
+    const driven = decisions.find((d) => d.decision === 'defect_chain_driven');
+    expect(driven).toBeDefined();
+    expect(driven?.resolvability).toBe('discovered_defect');
+    expect(driven?.reason.toLowerCase()).toContain('own commit'); // ac-3 isolation attested
+    // ac-1: a REAL persisted child work item was created (not a free-text mention) …
+    const childId = childWiFromReason(driven?.reason ?? '');
+    if (!childId) throw new Error('expected a materialized child wi id in the disclosure reason');
+    expect(await wis.exists(childId)).toBe(true);
+    // … with a discovered_by backlink to the ORIGIN work item (provenance, not hierarchy).
+    const child = await wis.get(childId);
+    expect(child.discovered_by).toBe(WI);
+    expect(child.id).not.toBe(WI); // ac-3: a DISTINCT work item from the origin
+  });
+
+  test('(b) a NOT-reproduced / uncertain defect is backlog-only — NO splice, NOT driven', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Implemented ac-1; noticed a possibly-latent edge case, could not reproduce.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [{ item: 'possible latent edge case', reproduced: false }],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]); // NOT driven
+    const decisions = await aps.readDecisions(WI);
+    // materialized (surfaced) with resolvability discovered_defect, but no drive.
+    const surfaced = decisions.find(
+      (d) => d.decision === 'surface' && d.resolvability === 'discovered_defect',
+    );
+    expect(surfaced).toBeDefined();
+    // ac-1/ac-10: backlog-only still materializes a REAL back-linked work item (the close
+    // gate resolves this id; a fabricated string could not stand in for it).
+    const backlogChild = childWiFromReason(surfaced?.reason ?? '');
+    if (!backlogChild)
+      throw new Error('expected a materialized backlog wi id in the surface reason');
+    expect(await wis.exists(backlogChild)).toBe(true);
+    expect((await wis.get(backlogChild)).discovered_by).toBe(WI);
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+  });
+
+  test('(b2) a reproduced but LATENT bug is backlog-only (conservative exclusion, not driven)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Implemented ac-1; found a latent bug with no current harm.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [{ item: 'latent, no current harm', reproduced: true, latent: true }],
+      },
+    });
+    expect(res.promoted_node_ids).toEqual([]);
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+    expect(
+      decisions.some((d) => d.decision === 'surface' && d.resolvability === 'discovered_defect'),
+    ).toBe(true);
+  });
+
+  test('(c) nested derived defects SHARE the run-level budget — a drive at the loop_rounds cap escalates (no N×fresh-caps runaway)', async () => {
+    // The graph already holds loop_rounds=2 forward rounds (prior derived-defect drives,
+    // counted by the SAME .rev.r marker the defect_fix splice reuses). A further reproduced
+    // defect must NOT get a fresh caps block — it shares the ORIGINATING run's budget and
+    // escalates to a fail-handoff at the shared cap. This is the ac-6 runaway floor.
+    const prior1 = { ...implementNode('IMP.rev.r0', 'passed') };
+    const prior2 = { ...implementNode('IMP.rev.r0.rev.r1', 'passed') };
+    await aps.write(WI, {
+      ...graph({
+        nodes: [prior1, prior2, implementNode()],
+        caps: {
+          fix_per_node: 2,
+          switch_per_node: 1,
+          no_progress_rounds: 99,
+          converge_rounds: 99,
+          loop_rounds: 2,
+          oracle_failures_to_block: 3,
+          progress_continuation_cap: 24,
+        },
+      }),
+      work_item_id: WI,
+    });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Yet another reproduced defect after the graph already hit the loop cap.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [{ item: 'nth reproduced defect', reproduced: true }],
+      },
+    });
+    // capped, not driven: the shared run budget stops the chain (termination guaranteed).
+    expect(res.status).toBe('blocked');
+    expect(res.cap_exceeded).toBe(true);
+    expect(res.promoted_node_ids).toEqual([]);
+    const decisions = await aps.readDecisions(WI);
+    // NOT recorded as driven (the splice never drove) — it escalated instead.
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+    expect(decisions.at(-1)?.failure_class).toBe('user_decision_needed');
+  });
+
+  test('(e) a condition-b defect fix does NOT auto-drive — fail-closed blocked handoff', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Reproduced a defect, but fixing it needs a security-adverse decision.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          {
+            item: 'reproduced defect whose fix weakens auth',
+            reproduced: true,
+            condition_b: [
+              { domain: 'security', adverse: true, basis: 'fix would relax an auth check' },
+            ],
+          },
+        ],
+      },
+    });
+    // fail-closed: blocked, user-owned decision, NO auto-drive splice.
+    expect(res.status).toBe('blocked');
+    expect(res.decision).toBe('escalate');
+    expect(res.failure_class).toBe('user_decision_needed');
+    expect(res.promoted_node_ids).toEqual([]);
+    expect(res.reason.toLowerCase()).toContain('condition-b');
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+  });
+
+  test('(e2) a NON-adverse condition-b touch does NOT block — the drive proceeds (only ADVERSE decisions fail-close)', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Reproduced a defect whose fix touches security but is not adverse.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        discovered_defects: [
+          {
+            item: 'reproduced defect, non-adverse security touch',
+            reproduced: true,
+            condition_b: [
+              { domain: 'security', adverse: false, basis: 'adds a defensive check, not adverse' },
+            ],
+          },
+        ],
+      },
+    });
+    expect(res.status).toBe('passed'); // not fail-closed — the drive proceeds
+    expect(res.promoted_node_ids).toHaveLength(2);
+    expect((await aps.readDecisions(WI)).some((d) => d.decision === 'defect_chain_driven')).toBe(
+      true,
+    );
+  });
+
+  test('(d) ac-5 non-defect path UNCHANGED — an out-of-scope follow-up still batch_escalates (no auto-drive), no defect_chain_driven', async () => {
+    await aps.write(WI, { ...graph({ nodes: [implementNode()] }), work_item_id: WI });
+    const res = await recordResult(repo, {
+      workItemId: WI,
+      now: NOW,
+      payload: {
+        node_id: 'IMP',
+        result_text: 'Implemented ac-1; noted an out-of-scope idea for later.',
+        outcome: 'pass',
+        evidence_refs: passEvidence,
+        changed_files: ['src/x.ts'],
+        follow_ups: [{ item: 'a nice-to-have refactor idea', in_scope: false }],
+      },
+    });
+    expect(res.status).toBe('passed');
+    expect(res.promoted_node_ids).toEqual([]); // no-auto-pick: signal only, not driven
+    const decisions = await aps.readDecisions(WI);
+    expect(decisions.some((d) => d.decision === 'batch_escalate')).toBe(true);
+    // the defect drive route never fires for a non-defect follow-up.
+    expect(decisions.some((d) => d.decision === 'defect_chain_driven')).toBe(false);
+  });
+});
