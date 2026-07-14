@@ -329,6 +329,7 @@ export async function pullIssue(deps: PullIssueDeps, coord: IssueCoord): Promise
   const projectItemId = resolveProjectItemId(
     { client: deps.client, config: deps.config },
     coord.number,
+    coord.repo,
   );
   const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value), projectItemId);
   return { kind: 'created', id, coord };
@@ -508,7 +509,7 @@ export async function linkIssue(
   if (existing) return { kind: 'conflict', id: workId, existing, coord };
   // Best-effort board item id (ac-5 reflection target); absent when gh/config missing.
   const projectItemId = opts
-    ? resolveProjectItemId({ client: opts.client, config: opts.config }, coord.number)
+    ? resolveProjectItemId({ client: opts.client, config: opts.config }, coord.number, coord.repo)
     : null;
   await store.update(workId, (cur) => ({
     ...cur,
@@ -1378,12 +1379,42 @@ export interface BoardStatusDeps {
  * (returns null when the issue is not found on the board) — a missing item is a skip,
  * not a crash.
  */
-export function parseBoardPosition(itemList: unknown, issueNumber: number): BoardPosition | null {
+/**
+ * True iff a `gh project item-list` item is the card for (issueNumber, linkedRepo).
+ * A Projects v2 board can hold cards from MULTIPLE repos, so an issue `number` alone
+ * is ambiguous (two repos can each own issue #20). The REAL payload carries the owning
+ * repo at the ITEM TOP LEVEL as a URL string (`item.repository = https://github.com/
+ * owner/name`); `content` holds only number/title/type. So we normalize the URL to
+ * owner/name (`parseRemoteUrlToRepo`) BEFORE the canonical repo compare — the raw URL
+ * would not match owner/name. An absent / non-string / unparseable `repository`
+ * (empty, bare host, already-normalized owner/name → parseRemoteUrlToRepo null) can
+ * NOT be identified by repo, so it does NOT match: skip it — never a number-only
+ * fallback, never a throw (ADR-0018 best-effort). Exported so the completion-reflection
+ * board read (github-reflection.ts) reuses this one matcher, not a duplicate.
+ */
+export function boardItemMatchesRepoNumber(
+  item: unknown,
+  issueNumber: number,
+  linkedRepo: string,
+): boolean {
+  const content = (item as { content?: { number?: unknown } })?.content;
+  if (!content || (content as { number?: unknown }).number !== issueNumber) return false;
+  const repository = (item as { repository?: unknown }).repository;
+  if (typeof repository !== 'string') return false;
+  const normalizedRepo = parseRemoteUrlToRepo(repository);
+  if (normalizedRepo === null) return false;
+  return sameRepoCoord(normalizedRepo, linkedRepo);
+}
+
+export function parseBoardPosition(
+  itemList: unknown,
+  issueNumber: number,
+  linkedRepo: string,
+): BoardPosition | null {
   const items = (itemList as { items?: unknown })?.items;
   if (!Array.isArray(items)) return null;
   for (const it of items) {
-    const content = (it as { content?: { number?: unknown } })?.content;
-    if (!content || (content as { number?: unknown }).number !== issueNumber) continue;
+    if (!boardItemMatchesRepoNumber(it, issueNumber, linkedRepo)) continue;
     const id = (it as { id?: unknown }).id;
     const status = (it as { status?: unknown }).status;
     const priority = (it as { priority?: unknown }).priority;
@@ -1407,12 +1438,13 @@ export function parseBoardPosition(itemList: unknown, issueNumber: number): Boar
 export function resolveProjectItemId(
   deps: { client: GhClient; config: DittoConfigGithub | undefined },
   issueNumber: number,
+  repo: string,
 ): string | null {
   if (!deps.config) return null;
   const { owner, number } = deps.config.project;
   const itemList = deps.client.projectItemList(owner, number);
   if (!itemList.ok) return null;
-  return parseBoardPosition(itemList.value, issueNumber)?.itemId ?? null;
+  return parseBoardPosition(itemList.value, issueNumber, repo)?.itemId ?? null;
 }
 
 /**
@@ -1520,7 +1552,7 @@ export function loadBoardView(deps: BoardStatusDeps, item: WorkItem): BoardView 
       unavailable: { reason: itemList.reason, detail: itemList.detail },
     };
   }
-  const position = parseBoardPosition(itemList.value, gi.number);
+  const position = parseBoardPosition(itemList.value, gi.number, gi.repo);
   if (!position) {
     return {
       coord,

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createFakeGhClient } from '~/core/gh-client';
 import {
   type ReflectionInput,
+  applyBoardStatusOption,
   buildResultSummary,
   extractStatusFieldId,
   reflectAutopilotTermination,
@@ -204,6 +205,67 @@ describe('impl-reflection ac-4/ac-5 — terminal GitHub reflection', () => {
     );
     expect(res.issueClosed).toBe(true);
     expect(calls.filter((c) => c.method === 'issueClose')).toHaveLength(1);
+  });
+});
+
+// wi_260714usn ac-5: the TERMINAL write path (done/finalize/claim → applyBoardStatusOption)
+// must re-verify that the persisted `github_issue.project_item_id` still points at a card
+// whose coordinate (owner/repo#number) MATCHES the work item's linked github_issue coord
+// before editing it. A stale/mispopulated project_item_id pointing at ANOTHER repo's card
+// would otherwise silently flip the WRONG board card. Fail-closed: on mismatch, SKIP the
+// projectItemEdit. The re-check reads the board (projectItemList) and normalizes the card's
+// top-level URL repository → owner/name. A mock GhClient observes whether projectItemEdit
+// was called. Current code has NO coord re-check → it edits regardless → RED on mismatch.
+describe('wi_260714usn ac-5 — applyBoardStatusOption re-checks the card coordinate', () => {
+  const boardWithCard = (repository: unknown, number: number) => ({
+    items: [
+      {
+        id: 'PVTI_item1',
+        repository,
+        content: { type: 'Issue', number, title: 't' },
+        status: 'Backlog',
+      },
+    ],
+    totalCount: 1,
+  });
+
+  // MATCH: the card PVTI_item1 IS owner/app#42 == WI github_issue coord → edit proceeds.
+  test('(match) card coord == WI linked coord → projectItemEdit proceeds', () => {
+    const { client, calls } = createFakeGhClient({
+      values: {
+        projectFieldList: STATUS_FIELD_LIST,
+        projectItemList: boardWithCard('https://github.com/owner/app', 42),
+      },
+    });
+    const res = applyBoardStatusOption({ client, config: cfg() }, workItem(), 'opt_done');
+    expect(res.statusUpdated).toBe(true);
+    expect(calls.filter((c) => c.method === 'projectItemEdit')).toHaveLength(1);
+  });
+
+  // MISMATCH (wrong repo): PVTI_item1 is other/app#42, WI is owner/app#42 → skip, no edit.
+  test('(mismatch: wrong repo) card repo != WI coord → skip, NO projectItemEdit', () => {
+    const { client, calls } = createFakeGhClient({
+      values: {
+        projectFieldList: STATUS_FIELD_LIST,
+        projectItemList: boardWithCard('https://github.com/other/app', 42),
+      },
+    });
+    const res = applyBoardStatusOption({ client, config: cfg() }, workItem(), 'opt_done');
+    expect(res.statusUpdated).toBe(false);
+    expect(calls.filter((c) => c.method === 'projectItemEdit')).toHaveLength(0);
+  });
+
+  // MISMATCH (wrong number): PVTI_item1 is owner/app#99, WI is owner/app#42 → skip, no edit.
+  test('(mismatch: wrong number) card number != WI coord → skip, NO projectItemEdit', () => {
+    const { client, calls } = createFakeGhClient({
+      values: {
+        projectFieldList: STATUS_FIELD_LIST,
+        projectItemList: boardWithCard('https://github.com/owner/app', 99),
+      },
+    });
+    const res = applyBoardStatusOption({ client, config: cfg() }, workItem(), 'opt_done');
+    expect(res.statusUpdated).toBe(false);
+    expect(calls.filter((c) => c.method === 'projectItemEdit')).toHaveLength(0);
   });
 });
 

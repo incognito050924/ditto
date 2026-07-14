@@ -39,14 +39,22 @@ const FIELD_LIST = {
   ],
 };
 
-// `gh project item-list --format json` shape: each item carries its content (issue
-// number/repo) + the single-select field values flattened to lowercased field names.
-function itemListWith(status: string, priority: string, issueNumber = 42) {
+// REAL `gh project item-list --format json` shape: each item carries the owning repo
+// at the ITEM TOP LEVEL as a URL string (item.repository), `content` holds only
+// number/title/type, and the single-select field values are flattened to lowercased
+// field names. Default repo owner/app so the linked WI coord (owner/app#42) matches.
+function itemListWith(
+  status: string,
+  priority: string,
+  issueNumber = 42,
+  repository = 'https://github.com/owner/app',
+) {
   return {
     items: [
       {
         id: 'PVTI_1',
-        content: { type: 'Issue', number: issueNumber, repository: 'owner/app' },
+        repository,
+        content: { type: 'Issue', number: issueNumber, title: 'T' },
         status,
         priority,
       },
@@ -89,6 +97,41 @@ describe('ac-6 work status — board position + divergence', () => {
     expect(out).toContain('Done');
     expect(out).toContain('completion = ditto');
     expect(out).not.toContain('DIVERGENCE');
+  });
+
+  // ac-1 (wi_260714usn): the board READ path is repo-aware. A colliding WRONG-repo card
+  // sharing the issue number must NOT be read as the linked issue's board position. Here
+  // the wrong-repo card (other/app#42, Done) is listed FIRST and the correct card
+  // (owner/app#42, Backlog) second. Number-only reads the first (Done) → wrong position
+  // AND a false terminal divergence. RED for the right reason (wrong-repo card read).
+  test('ac-1: colliding wrong-repo card is NOT read as the issue board position', () => {
+    const board = {
+      items: [
+        {
+          id: 'PVTI_wrong',
+          repository: 'https://github.com/other/app',
+          content: { type: 'Issue', number: 42, title: 'x' },
+          status: 'Done',
+          priority: 'P1',
+        },
+        {
+          id: 'PVTI_right',
+          repository: 'https://github.com/owner/app',
+          content: { type: 'Issue', number: 42, title: 'x' },
+          status: 'Backlog',
+          priority: 'P2',
+        },
+      ],
+      totalCount: 2,
+    };
+    const { client } = createFakeGhClient({
+      values: { projectItemList: board, projectFieldList: FIELD_LIST },
+    });
+    const view = loadBoardView({ client, config: cfg() }, wi('in_progress'));
+    // The correct (owner/app) card is Backlog → no ditto-terminal divergence.
+    expect(view.position?.status).toBe('Backlog');
+    expect(view.position?.priority).toBe('P2');
+    expect(view.divergence.diverged).toBe(false);
   });
 
   test('diverged: board Done but WI in_progress -> divergence line present', () => {

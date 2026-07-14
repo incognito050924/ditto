@@ -1,0 +1,75 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714usn",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "d7a016f94c59b9fd636e70f5a6a275ea602eaf2f5c9385102e1b33f85a9e7360",
+  "ts": "2026-07-14T22:44:20.608Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260714usn/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+        "summary": "30 pass / 6 fail, exit 1 — 6 fail이 AC 어서션에서 red(number-only가 wrong card/throw/wrong edit)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/github-reflection.test.ts",
+        "summary": "16 pass/0 fail — ac-5 match(edit)/wrong-repo(skip)/wrong-number(skip) 3개 green"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/",
+        "summary": "4800 pass/1 fail(기존 무관 wi_2607148yg ENOENT)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+        "summary": "36 pass/0 fail — ac-1..5 전부 green"
+      },
+      {
+        "kind": "command",
+        "command": "bun x tsc --noEmit",
+        "summary": "exit 0 — repo/linkedRepo 인자 전 호출부 컴파일"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/github-reflection.test.ts",
+        "summary": "mismatch(wrong-repo/wrong-number)→no edit, match→edit green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+        "summary": "36 pass/0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun x tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/",
+        "summary": "4801 pass/1 fail — 유일 fail=무관 wi_2607148yg ENOENT"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/github-reflection.test.ts",
+        "summary": "match→edit, wrong-repo/wrong-number→skip green"
+      }
+    ]
+  }
+}

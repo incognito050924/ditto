@@ -131,9 +131,23 @@ const cfg = (overrides: Partial<DittoConfigGithub> = {}): DittoConfigGithub => (
   ...overrides,
 });
 
-// A board item-list payload where issue #1 is item PVTI_x (gh project item-list shape).
-const boardWith = (issueNumber: number, itemId: string) => ({
-  items: [{ id: itemId, content: { type: 'Issue', number: issueNumber }, status: 'Backlog' }],
+// A board item-list payload where issue #1 is item PVTI_x (REAL gh project item-list
+// shape): `repository` is at the ITEM TOP LEVEL as a URL string; `content` carries
+// only number/title/type. Default repo owner/app so the coord these tests pull/link
+// (owner/app#1) matches the card after the repo-aware fix.
+const boardWith = (
+  issueNumber: number,
+  itemId: string,
+  repository = 'https://github.com/owner/app',
+) => ({
+  items: [
+    {
+      id: itemId,
+      repository,
+      content: { type: 'Issue', number: issueNumber, title: `Issue ${issueNumber}` },
+      status: 'Backlog',
+    },
+  ],
 });
 
 function fakeClientWithBoard(title: string, board: unknown) {
@@ -147,28 +161,28 @@ describe('wi_260628p46 project_item_id population', () => {
     const client = createFakeGhClient({
       values: { projectItemList: boardWith(1, 'PVTI_x') },
     }).client;
-    expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBe('PVTI_x');
+    expect(resolveProjectItemId({ client, config: cfg() }, 1, 'owner/app')).toBe('PVTI_x');
   });
 
   test('resolveProjectItemId returns null when no project config', () => {
     const client = createFakeGhClient({
       values: { projectItemList: boardWith(1, 'PVTI_x') },
     }).client;
-    expect(resolveProjectItemId({ client, config: undefined }, 1)).toBeNull();
+    expect(resolveProjectItemId({ client, config: undefined }, 1, 'owner/app')).toBeNull();
   });
 
   test('resolveProjectItemId returns null when the issue is not on the board', () => {
     const client = createFakeGhClient({
       values: { projectItemList: boardWith(99, 'PVTI_x') },
     }).client;
-    expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBeNull();
+    expect(resolveProjectItemId({ client, config: cfg() }, 1, 'owner/app')).toBeNull();
   });
 
   test('resolveProjectItemId returns null when gh degrades (best-effort, no throw)', () => {
     const client = createFakeGhClient({
       degrade: { ok: false, reason: 'unauthenticated', detail: 'x' },
     }).client;
-    expect(resolveProjectItemId({ client, config: cfg() }, 1)).toBeNull();
+    expect(resolveProjectItemId({ client, config: cfg() }, 1, 'owner/app')).toBeNull();
   });
 
   // ac-1: pull with a configured project populates project_item_id from the board.
@@ -222,5 +236,91 @@ describe('wi_260628p46 project_item_id population', () => {
       number: 1,
       project_item_id: 'PVTI_y',
     });
+  });
+});
+
+// wi_260714usn — repo-aware Project board card resolution. A Projects v2 board can
+// hold cards from MULTIPLE repos, so an issue `number` ALONE is ambiguous: two repos
+// can each have an issue #20. The REAL `gh project item-list --format json` shape
+// carries the owning repo at the ITEM TOP LEVEL as a URL string
+// (item.repository = "https://github.com/owner/name"); `content` holds only
+// number/title/type. resolveProjectItemId must match on (repo, number) — normalizing
+// the item's URL repository → owner/name (parseRemoteUrlToRepo) — NOT on number alone.
+// The signature under test is repo-aware: resolveProjectItemId(deps, issueNumber, repo).
+// These are RED against the current number-only code (which ignores the repo arg).
+const boardItem = (id: string, number: number, repository: unknown, status = 'Backlog') => ({
+  id,
+  repository,
+  content: { type: 'Issue', number, title: `Issue ${number}` },
+  status,
+});
+
+const boardOf = (...items: unknown[]) => ({ items, totalCount: items.length });
+
+const clientWithBoard = (board: unknown) =>
+  createFakeGhClient({ values: { projectItemList: board } }).client;
+
+describe('wi_260714usn resolveProjectItemId repo-aware (multi-repo collision)', () => {
+  // ac-1: a 2-repo COLLISION — the same issue number 20 exists on two different repos.
+  // The coord names ONE repo; resolveProjectItemId must return THAT repo's card, not
+  // the first-listed one. Number-only code returns the first (ditto) card → RED for the
+  // right reason (picks the wrong card because it never looks at the repo).
+  test('ac-1: collision same number, different repo → resolves the coord repo card, not the first', () => {
+    const client = clientWithBoard(
+      boardOf(
+        boardItem('PVTI_ditto', 20, 'https://github.com/incognito050924/ditto'),
+        boardItem('PVTI_palim', 20, 'https://github.com/incognito050924/palimpsest'),
+      ),
+    );
+    expect(resolveProjectItemId({ client, config: cfg() }, 20, 'incognito050924/palimpsest')).toBe(
+      'PVTI_palim',
+    );
+  });
+
+  // ac-2: the item's repository is the URL form; matching a coord given as owner/name
+  // REQUIRES normalizing URL→owner/name, not a raw string compare. A wrong-repo decoy is
+  // listed FIRST, so number-only returns the decoy → RED; passing needs URL normalization.
+  test('ac-2: repository URL form is normalized (owner/name) to pick the right card past a decoy', () => {
+    const client = clientWithBoard(
+      boardOf(
+        boardItem('PVTI_decoy', 20, 'https://github.com/incognito050924/palimpsest'),
+        boardItem('PVTI_ditto', 20, 'https://github.com/incognito050924/ditto'),
+      ),
+    );
+    expect(resolveProjectItemId({ client, config: cfg() }, 20, 'incognito050924/ditto')).toBe(
+      'PVTI_ditto',
+    );
+  });
+
+  // ac-3: the number matches but the repo is UNUSABLE — absent / non-string / a string
+  // that parseRemoteUrlToRepo maps to null (empty, bare host, already-normalized
+  // owner/name). The card can NOT be identified by repo, so resolve must SKIP (return
+  // null) — NOT throw, and NOT fall back to a number-only match. Number-only code
+  // returns the id for every case → RED for the right reason (no skip, no fallback guard).
+  test('ac-3: matching number but absent/non-string/unparseable repository → null (skip, no number-only fallback)', () => {
+    const call = (repository: unknown) =>
+      resolveProjectItemId(
+        { client: clientWithBoard(boardOf(boardItem('PVTI_x', 20, repository))), config: cfg() },
+        20,
+        'incognito050924/ditto',
+      );
+    expect(call(undefined)).toBeNull(); // (a) absent
+    expect(call(123)).toBeNull(); // (b) non-string: number
+    expect(call({ url: 'x' })).toBeNull(); // (b) non-string: object
+    expect(call('')).toBeNull(); // (c) empty → parseRemoteUrlToRepo null
+    expect(call('https://github.com/')).toBeNull(); // (c) bare host → parseRemoteUrlToRepo null
+    expect(call('incognito050924/ditto')).toBeNull(); // (c) already-normalized owner/name → parseRemoteUrlToRepo null
+  });
+
+  // ac-4 (non-regression guard): a single-repo board (no collision) still resolves the
+  // correct card. Green both before and after the fix — it pins the happy path against
+  // regression while ac-1/ac-2/ac-3 drive the new repo-aware behavior.
+  test('ac-4: single-repo (no collision) → correct card still resolves', () => {
+    const client = clientWithBoard(
+      boardOf(boardItem('PVTI_only', 7, 'https://github.com/incognito050924/ditto')),
+    );
+    expect(resolveProjectItemId({ client, config: cfg() }, 7, 'incognito050924/ditto')).toBe(
+      'PVTI_only',
+    );
   });
 });

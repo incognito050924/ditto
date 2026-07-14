@@ -1,3 +1,4 @@
+import { boardItemMatchesRepoNumber } from '~/cli/commands/work';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 import type { WorkItem } from '~/schemas/work-item';
@@ -138,12 +139,32 @@ export function applyBoardStatusOption(
     notices.push('Project board: project node_id unknown in config — board status update skipped.');
     return { statusUpdated: false, notices };
   }
-  const itemId = workItem.github_issue?.project_item_id;
-  if (!itemId) {
+  const gi = workItem.github_issue;
+  if (!gi?.project_item_id) {
     notices.push(
       'Project board: issue not on the board (no project_item_id) — board status update skipped.',
     );
     return { statusUpdated: false, notices };
+  }
+  const itemId = gi.project_item_id;
+  // Re-validate the persisted project_item_id still points at THIS issue's card BEFORE
+  // editing (wi_260714usn ac-5): a stale/mispopulated id could target ANOTHER repo's card
+  // on a multi-repo board and silently flip the wrong one. Read the board and reuse the
+  // one matcher (boardItemMatchesRepoNumber) — on a confirmed coordinate MISMATCH, skip
+  // fail-closed. A board READ failure must NOT block a legitimate edit (ADR-0018 best-effort),
+  // so on degrade / unreadable list we fall through and edit as before.
+  const board = deps.client.projectItemList(cfg.project.owner, cfg.project.number);
+  if (board.ok) {
+    const items = (board.value as { items?: unknown })?.items;
+    if (Array.isArray(items)) {
+      const card = items.find((it) => (it as { id?: unknown })?.id === itemId);
+      if (card && !boardItemMatchesRepoNumber(card, gi.number, gi.repo)) {
+        notices.push(
+          `Project board: persisted project_item_id points at a card whose coordinate does not match ${gi.repo}#${gi.number} — board status update skipped (stale/mispopulated id).`,
+        );
+        return { statusUpdated: false, notices };
+      }
+    }
   }
   const fieldList = deps.client.projectFieldList(cfg.project.owner, cfg.project.number);
   if (!fieldList.ok) {

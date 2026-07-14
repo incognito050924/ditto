@@ -1,0 +1,388 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260714usn",
+  "title": "[bug] work claim/start/done: 멀티-repo User Project에서 이슈번호만으로 매칭 → 엉뚱한 repo 카드/보드 이동",
+  "source_request": "[bug] work claim/start/done: 멀티-repo User Project에서 이슈번호만으로 매칭 → 엉뚱한 repo 카드/보드 이동\n\n## 요약\n`ditto work start --issue` / `work claim` / `work done`의 GitHub 보드 연동이, work item에 저장하는 `github_issue.project_item_id`를 **이슈 번호만으로** 매칭한다. 한 GitHub **User Project가 여러 repo를 트래킹**하고 그 repo들에 **같은 번호의 이슈**가 있으면, 엉뚱한 repo의 카드를 집는다.\n\n## 환경\n- 백로그 = GitHub **User Project #2 \"Harness-DITTO\"** (`PVT_kwHOAT55Bc4Bb3Q0`, owner `incognito050924`, User 소유)\n- 이 프로젝트는 `incognito050924/ditto`와 `incognito050924/palimpsest` **두 repo를 함께 트래킹**한다.\n\n## 재현\n1. `palimpsest#20`(Svelte 라우팅)을 `ditto work start --issue incognito050924/palimpsest#20`으로 claim.\n2. `ditto`에도 `#20`(다른 이슈)이 존재.\n\n## 실제 vs 기대\n- **실제**: work item에 저장된 `project_item_id` = `PVTI_lAHOAT55Bc4Bb3Q0zgyYgP4` → 이 카드의 content는 **`incognito050924/ditto#20`** (\"wi_260707loq 후속…\"). finalize가 다시 이 값으로 재-clobber했다.\n- **기대**: `palimpsest#20`의 올바른 카드 = `PVTI_lAHOAT55Bc4Bb3Q0zgym0IM` (content = `incognito050924/palimpsest#20`).\n- 결과: claim의 \"보드를 In progress로 이동\"이 **엉뚱한 repo의 카드**를 대상으로 하고, palimpsest#20 카드는 Backlog에 그대로 남았다. 수동으로 올바른 카드를 조회·이동해야 했다.\n\n## 부수 증상\n- `ditto work status <wi>`의 보드 상태 읽기가 **`unavailable (nonzero: unknown owner type)`**로 실패. User 소유 프로젝트를 organization으로 가정하는 GraphQL 경로로 보인다(`user(...)` 대신 `organization(...)`?).\n\n## 근본 원인 (추정)\n프로젝트에서 이슈에 대응하는 `ProjectV2Item`을 찾을 때 **이슈 번호만** 키로 쓰고 **repository(nameWithOwner)**를 조건에 넣지 않는다.\n\n## 수정 방향 (제안)\n- 프로젝트 아이템 해석을 `repository nameWithOwner + number`로 좁힌다. 권위 있는 방법: `repository(owner,name).issue(number).projectItems.nodes[].project.id == 목표 projectId`인 항목의 `id`를 쓴다.\n- 보드 상태 읽기/쓰기가 **User 소유 프로젝트**(`user()`)와 org 소유를 모두 처리하도록 한다(\"unknown owner type\" 제거).\n\n## 우회 (현재)\n`gh api graphql`로 `repository(owner,name).issue(n).projectItems`를 조회해 올바른 카드 id를 얻어 직접 `updateProjectV2ItemFieldValue`.\n\n---\n_이 버그는 `palimpsest#20`(SvelteKit 라우팅 온톨로지) 자동화 작업 중 발견됨. 같은 Project #2를 공유하므로 이 repo(ditto) 백로그에 등록._",
+  "goal": "ditto work claim/start/done/finalize의 GitHub 보드 연동이, 해석(resolve)과 쓰기(reflection) 양쪽에서 work item에 연결된 정확한 좌표(owner/repo nameWithOwner + number)의 카드만 다루도록 number-only 매칭을 repo+number 정체성 매칭으로 고친다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "parseBoardPosition/resolveProjectItemId 및 보드상태 읽기가 보드 아이템의 repository와 number가 work item 연결 좌표(github_issue owner/repo#number)와 둘 다 일치할 때만 그 아이템을 선택한다 — number만 일치하는 다른 repo 카드는 선택하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260714usn/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "30 pass / 6 fail, exit 1 — 6 fail이 AC 어서션에서 red(number-only가 wrong card/throw/wrong edit)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts",
+          "summary": "20 pass/0 fail (was 16/4) — ac-1/ac-2/ac-3 link + ac-1 status flipped green"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck",
+          "summary": "exit 0 — 3-arg signature compiles across all callers incl github-reflection.ts"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail — ac-1..5 전부 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0 — repo/linkedRepo 인자 전 호출부 컴파일"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts",
+          "summary": "collision resolve+read 양경로 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/",
+          "summary": "4801 pass/1 fail — 유일 fail=무관 wi_2607148yg ENOENT"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts",
+          "summary": "collision→coord repo card, wrong-repo not read as position (green)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "보드 아이템의 repository(top-level URL 형태)를 parseRemoteUrlToRepo로 owner/name 정규화한 뒤 sameRepoCoord로 비교한다 — raw URL을 owner/name과 직접 문자열 비교해 miss가 나지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260714usn/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "30 pass / 6 fail, exit 1 — 6 fail이 AC 어서션에서 red(number-only가 wrong card/throw/wrong edit)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts",
+          "summary": "20 pass/0 fail (was 16/4) — ac-1/ac-2/ac-3 link + ac-1 status flipped green"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck",
+          "summary": "exit 0 — 3-arg signature compiles across all callers incl github-reflection.ts"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail — ac-1..5 전부 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0 — repo/linkedRepo 인자 전 호출부 컴파일"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts",
+          "summary": "URL 정규화 decoy-first green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/",
+          "summary": "4801 pass/1 fail — 유일 fail=무관 wi_2607148yg ENOENT"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts",
+          "summary": "URL 정규화 past decoy green"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "number는 일치하나 repository가 없거나 비-문자열/이상 형태이거나 parseRemoteUrlToRepo가 null을 반환하는 아이템은 skip하여 null로 떨어진다 — number-only 매칭으로 fallback하지 않고 throw하지도 않는다(best-effort degrade)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260714usn/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "30 pass / 6 fail, exit 1 — 6 fail이 AC 어서션에서 red(number-only가 wrong card/throw/wrong edit)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts",
+          "summary": "20 pass/0 fail (was 16/4) — ac-1/ac-2/ac-3 link + ac-1 status flipped green"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck",
+          "summary": "exit 0 — 3-arg signature compiles across all callers incl github-reflection.ts"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail — ac-1..5 전부 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0 — repo/linkedRepo 인자 전 호출부 컴파일"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts",
+          "summary": "absent/non-string/null repository → null skip, no throw green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/",
+          "summary": "4801 pass/1 fail — 유일 fail=무관 wi_2607148yg ENOENT"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts",
+          "summary": "absent/non-string/unparseable → null skip, no throw green"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "단일-repo(번호 충돌 없음) 시나리오에서 올바른 카드가 여전히 해석된다 — repo 조건 추가가 기존 정상 매칭을 회귀시키지 않는다(실제 gh payload 형태 fixture로 검증)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260714usn/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "30 pass / 6 fail, exit 1 — 6 fail이 AC 어서션에서 red(number-only가 wrong card/throw/wrong edit)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts",
+          "summary": "20 pass/0 fail (was 16/4) — ac-1/ac-2/ac-3 link + ac-1 status flipped green"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck",
+          "summary": "exit 0 — 3-arg signature compiles across all callers incl github-reflection.ts"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail — ac-1..5 전부 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0 — repo/linkedRepo 인자 전 호출부 컴파일"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts",
+          "summary": "단일repo 비회귀 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/",
+          "summary": "4801 pass/1 fail — 유일 fail=무관 wi_2607148yg ENOENT"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts",
+          "summary": "single-repo 비회귀 green"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "터미널 보드 쓰기(github-reflection.ts applyBoardStatusOption; done/finalize/claim reflection)가 편집 전에 저장된 project_item_id가 가리키는 카드의 좌표를 repo-aware 매처로 재검증하고, work item 연결 좌표와 불일치하면 편집을 skip한다(fail-closed, ADR-0018) — 수정 전 잘못 저장된 id가 엉뚱한 repo 카드를 편집하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260714usn/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "30 pass / 6 fail, exit 1 — 6 fail이 AC 어서션에서 red(number-only가 wrong card/throw/wrong edit)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/github-reflection.test.ts",
+          "summary": "16 pass/0 fail — ac-5 match(edit)/wrong-repo(skip)/wrong-number(skip) 3개 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun run typecheck",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/",
+          "summary": "4800 pass/1 fail(기존 무관 wi_2607148yg ENOENT)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail — ac-1..5 전부 green"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0 — repo/linkedRepo 인자 전 호출부 컴파일"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/github-reflection.test.ts",
+          "summary": "mismatch(wrong-repo/wrong-number)→no edit, match→edit green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-github-link.test.ts tests/cli/work-github-status.test.ts tests/core/github-reflection.test.ts",
+          "summary": "36 pass/0 fail exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun x tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/",
+          "summary": "4801 pass/1 fail — 유일 fail=무관 wi_2607148yg ENOENT"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/github-reflection.test.ts",
+          "summary": "match→edit, wrong-repo/wrong-number→skip green"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "tests/cli/work-github-link.test.ts",
+    "tests/cli/work-github-status.test.ts",
+    "tests/core/github-reflection.test.ts",
+    "src/cli/commands/work.ts",
+    "src/core/github-reflection.ts"
+  ],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 33
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260714usn",
+    "fresh_evidence_needed": [
+      "land aborted — 129 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_26062227h/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_26062227h/events/000001.workspace-write.156fc8a60318.json, .ditto/work-items/wi_26062227h/events/000002.workspace-write.2f1461c077f0.json, .ditto/work-items/wi_26062227h/events/000003.workspace-write.e3b8a6dd498c.json, .ditto/work-items/wi_26062227h/events/000004.workspace-write.85506a66f33b.json, .ditto/work-items/wi_26062227h/events/000005.workspace-write.10839af1b0cf.json, .ditto/work-items/wi_26062227h/record.json, .ditto/work-items/wi_260624a6d/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_260624a6d/events/000001.workspace-write.a4c5d9fbc307.json, .ditto/work-items/wi_260624a6d/record.json, .ditto/work-items/wi_260625mrf/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_260625mrf/events/000001.workspace-write.9f48bf6808ed.json, .ditto/work-items/wi_260625mrf/events/000002.workspace-write.23fce09d4d53.json, .ditto/work-items/wi_260625mrf/record.json, .ditto/work-items/wi_2606276nc/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_2606276nc/events/000001.workspace-write.8f36f754b0f2.json, .ditto/work-items/wi_2606276nc/events/000002.workspace-write.003468d125a6.json, .ditto/work-items/wi_2606276nc/events/000003.workspace-write.8db0aff423a4.json, .ditto/work-items/wi_2606276nc/record.json, .ditto/work-items/wi_260628sx5/events/000000.workspace-write.051bf4df2e24.json, .ditto/work-items/wi_260628sx5/events/000001.workspace-write.15e863de3ba1.json, .ditto/work-items/wi_260628sx5/record.json, .ditto/work-items/wi_260706aka/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706aka/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260706aka/events/000002.workspace-write.f6144f82eae6.json, .ditto/work-items/wi_260706aka/events/000003.workspace-write.44d4ea0add69.json, .ditto/work-items/wi_260706aka/events/000004.workspace-write.81ca2c5e4f02.json, .ditto/work-items/wi_260706aka/events/000005.workspace-write.762cd40ce772.json, .ditto/work-items/wi_260706aka/events/000006.workspace-write.8c2429d7201b.json, .ditto/work-items/wi_260706aka/events/000007.workspace-write.de8b586b55f3.json, .ditto/work-items/wi_260706aka/events/000008.workspace-write.9ca996a1341d.json, .ditto/work-items/wi_260706aka/events/000009.workspace-write.e4724a31e425.json, .ditto/work-items/wi_260706aka/record.json, .ditto/work-items/wi_260706d0i/events/000000.workspace-write.939021107f6c.json, .ditto/work-items/wi_260706d0i/record.json, .ditto/work-items/wi_260706tu6/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706tu6/events/000001.workspace-write.f3f10706ee95.json, .ditto/work-items/wi_260706tu6/record.json, .ditto/work-items/wi_2607083ch/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607083ch/events/000001.workspace-write.ecb4f22736cd.json, .ditto/work-items/wi_2607083ch/events/000002.workspace-write.6987ff2df0eb.json, .ditto/work-items/wi_2607083ch/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_2607083ch/events/000004.workspace-write.0971cc3facde.json, .ditto/work-items/wi_2607083ch/record.json, .ditto/work-items/wi_260708700/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708700/events/000001.workspace-write.20262cda9cea.json, .ditto/work-items/wi_260708700/events/000002.workspace-write.d30a19a4ed08.json, .ditto/work-items/wi_260708700/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708700/events/000004.workspace-write.5ba66cbdf53a.json, .ditto/work-items/wi_260708700/record.json, .ditto/work-items/wi_260708e1x/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708e1x/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260708e1x/events/000002.workspace-write.479ef70041cc.json, .ditto/work-items/wi_260708e1x/record.json, .ditto/work-items/wi_260708xgo/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708xgo/events/000001.workspace-write.74cc633dca6e.json, .ditto/work-items/wi_260708xgo/events/000002.workspace-write.a89fc0dbc3c1.json, .ditto/work-items/wi_260708xgo/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708xgo/events/000004.workspace-write.b1a1cdb16e7d.json, .ditto/work-items/wi_260708xgo/record.json, .ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json, .ditto/work-items/wi_260709ft1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260709ft1/events/000001.workspace-write.ad8d984eea64.json, .ditto/work-items/wi_260709ft1/events/000002.workspace-write.92cee662b9d6.json, .ditto/work-items/wi_260709ft1/events/000003.workspace-write.55d9b7d5086b.json, .ditto/work-items/wi_260709ft1/events/000004.workspace-write.c01ad576a99f.json, .ditto/work-items/wi_260709ft1/events/000005.workspace-write.571c6f91f1b5.json, .ditto/work-items/wi_260709ft1/record.json, .ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json, .ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json, .ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json, .ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json, .ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json, .ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json, .ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json, .ditto/work-items/wi_260711dp9/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260711dp9/events/000001.workspace-write.4b76752cf8b7.json, .ditto/work-items/wi_260711dp9/record.json, .ditto/work-items/wi_260714f4p/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714f4p/events/000001.workspace-write.1bd5fb7feb5f.json, .ditto/work-items/wi_260714f4p/events/000002.workspace-write.9ab842c0a015.json, .ditto/work-items/wi_260714f4p/events/000003.workspace-write.69b4e69af646.json, .ditto/work-items/wi_260714f4p/events/000004.workspace-write.6cada70ca91c.json, .ditto/work-items/wi_260714f4p/record.json, .ditto/work-items/wi_260714m9w/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714m9w/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714m9w/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714m9w/events/000003.workspace-write.3c5e7921a0ee.json, .ditto/work-items/wi_260714m9w/events/000004.workspace-write.51ace740a65c.json, .ditto/work-items/wi_260714m9w/events/000005.workspace-write.0e10e7cc76eb.json, .ditto/work-items/wi_260714m9w/record.json, .ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json, .ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json, .ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json, .ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json, .ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json, .ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json, .ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json, .ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json, .ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json, .ditto/work-items/wi_260714mfx/record.json, .ditto/work-items/wi_260714pjs/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714pjs/events/000001.workspace-write.ef6117b8e41a.json, .ditto/work-items/wi_260714pjs/events/000002.workspace-write.9ab22168ce87.json, .ditto/work-items/wi_260714pjs/events/000003.workspace-write.69b4e69af646.json, .ditto/work-items/wi_260714pjs/events/000004.workspace-write.eb88d07f14fd.json, .ditto/work-items/wi_260714pjs/record.json, .ditto/work-items/wi_260714pls/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714pls/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714pls/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714pls/events/000003.workspace-write.c9b708211df4.json, .ditto/work-items/wi_260714pls/events/000004.workspace-write.fcdbb34bf3fc.json, .ditto/work-items/wi_260714pls/events/000005.workspace-write.7b03b59cc37a.json, .ditto/work-items/wi_260714pls/events/000006.workspace-write.d22029f6f722.json, .ditto/work-items/wi_260714pls/record.json, .ditto/work-items/wi_260714usn/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714usn/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714usn/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714usn/events/000003.workspace-write.87f6168bc90b.json, .ditto/work-items/wi_260714usn/events/000004.workspace-write.4a0d95cf99c2.json, .ditto/work-items/wi_260714usn/events/000005.workspace-write.2b5d46eb24e0.json, .ditto/work-items/wi_260714usn/events/000006.workspace-write.083b67d7f30e.json, .ditto/work-items/wi_260714usn/events/000007.workspace-write.d7a016f94c59.json, .ditto/work-items/wi_260714usn/record.json, bin/ditto, reports/design/palimpsest-ditto-convergence-design.md. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "7b31742008f6e0a4e3c869d50f5437945968f007",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_260714usn/",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
+  "created_at": "2026-07-14T20:52:14.661Z",
+  "updated_at": "2026-07-14T22:46:13.558Z",
+  "closed_at": "2026-07-14T22:46:13.557Z"
+}
