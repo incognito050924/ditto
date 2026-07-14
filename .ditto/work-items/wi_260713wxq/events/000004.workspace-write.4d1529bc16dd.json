@@ -1,0 +1,75 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260713wxq",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "4d1529bc16ddc88b01656419afcc8dd47183a2d0bb9708c9ecb003cdb2733a91",
+  "ts": "2026-07-14T06:26:23.679Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260713wxq/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/pre-tool-use.test.ts (pre-fix)",
+        "summary": "RED: ac-1(a) Expected 0 Received 2 at test:960 (empty deny-all)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/pre-tool-use.test.ts",
+        "summary": "GREEN: 215 pass / 0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/work-items/wi_260713wxq/reviewer-output.json",
+        "summary": "reviewer-output: 6/6 MUST-CHECK hold; 4 files, 0 high-risk-without-evidence"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (affected+related subsets, 376 tests) + tsc --noEmit",
+        "summary": "all exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full)",
+        "summary": "4739 pass / 11 skip / 0 fail across 373 files (12317 expect) — regression fixed, ac-8"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:plugin",
+        "summary": "exit 0 → dist/plugin OK"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:codex-plugin",
+        "summary": "exit 0 → dist/codex-plugin OK"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/pre-tool-use.test.ts",
+        "summary": "ac-1: 215 pass / 0 fail (prior verifier fresh run)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-reopen.test.ts tests/cli/autopilot-reopen-cli.test.ts",
+        "summary": "ac-2..7: 12 pass / 0 fail (prior verifier fresh run)"
+      }
+    ]
+  }
+}
