@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260715clv",
+  "title": "ditto 전역 언어 지침: 번역체·정서차이·문맥부적합 단어 + 식별자-only 언급 (지침, 비강제)",
+  "source_request": "평이한 문장에서 자연스럽지 않은 번역체(직역 어투·문체)와 언어권 정서/사고 차이에서 오는 문장 구조·단어 선택의 미묘한 차이, 문맥에 안 어울리는 단어로 번역하는 문제 개선을 ditto 전체로 확장. 그리고 내부 용어/문서의 번호·식별자만 언급하는 이슈도 함께 확장. 구조적 강제가 아니라 지침 정도로.",
+  "goal": "ditto의 모든 에이전트가 사용자향 텍스트를 자연스러운 한국어로 쓰고(번역체·문맥부적합 단어·정서차이 무시 회피), 사용자가 볼 수 없는 내부 번호·식별자만 달랑 언급하지 않도록, 강제 게이트가 아니라 공유 지침+리뷰 렌즈로 유도한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "root ./AGENTS.md §8(응답 방식)에 '자연스러운 한국어 — 직역체·번역투 회피, 언어권 사고·정서에 맞는 어순·단어선택, 문맥에 맞는 단어 번역' 지침 문단이 존재한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -q \"자연스러운 한국어로 쓴다. 영어를 단어 단위로 옮긴 직역체\" AGENTS.md && echo AC1_PRESENT",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "root ./AGENTS.md §8에 '사용자가 볼 수 없는 내부 번호·식별자·문서를 뜻 없이 달랑 언급하지 않는다(내용 인라인 또는 생략)' 지침 문단이 존재한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -q \"사용자가 볼 수 없는 것을 달랑 들지 않는다. 사용자가 합의하지 않았거나\" AGENTS.md && echo AC2_PRESENT",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "빌드 후 resources/managed/AGENTS.md·resources/managed/CLAUDE.md·dist/plugin/resources/managed/AGENTS.md 세 파일 모두 두 지침 문단을 포함하고 charter-manifest.json shas 배열에 새 정규화 SHA가 추가된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c \nP1=\"자연스러운 한국어로 쓴다\"; P2=\"달랑 들지 않는다\"; SHA=\"cba30bd6ec880ed80cf2b2a682efccccf6a01ea5db26322b93f3187a9fe401fa\";\nfor f in resources/managed/AGENTS.md resources/managed/CLAUDE.md dist/plugin/resources/managed/AGENTS.md; do\n  grep -q \"$P1\" \"$f\" && grep -q \"$P2\" \"$f\" || { echo \"MISSING in $f\"; exit 1; };\ndone;\ngrep -q \"$SHA\" resources/managed/charter-manifest.json || { echo \"SHA missing from manifest\"; exit 1; };\necho \"AC3_ALL_PRESENT: managed3+manifestSHA\"",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260715clv/completion.json",
+    ".ditto/local/work-items/wi_260715clv/work-item.json",
+    ".ditto/memory/events/memevt_retro_34d61b25850dff27.json",
+    ".ditto/memory/events/memevt_retro_bd0767dd39a62619.json",
+    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json",
+    ".ditto/work-items/wi_260715clv/",
+    ".ditto/work-items/wi_260715ujg/"
+  ],
+  "worktrees": [],
+  "autopilot_exempt": true,
+  "risks": [],
+  "re_entry": {
+    "command": "ditto work handoff wi_260715clv --show",
+    "fresh_evidence_needed": [
+      "미pass acceptance에 대한 검증 결과"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260715clv.md",
+  "created_at": "2026-07-15T04:30:30.114Z",
+  "updated_at": "2026-07-15T05:02:30.994Z",
+  "closed_at": "2026-07-15T05:02:30.991Z"
+}
