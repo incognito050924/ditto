@@ -4,6 +4,7 @@ import {
   MAX_GREEN_TREES,
   type TreeState,
   addGreenTree,
+  isTreeCleanIgnoringTrails,
   shouldRecordGreen,
   shouldSkipGate,
 } from '~/core/push-gate-cache';
@@ -33,6 +34,61 @@ describe('shouldSkipGate — skip only on clean + exact tree match (ac-1/ac-2/ac
 
   test('ac-3: empty cache → never skips', () => {
     expect(shouldSkipGate(clean('abc'), { trees: [] })).toBe(false);
+  });
+});
+
+describe('isTreeCleanIgnoringTrails — forgive untracked runtime trails, never a real change (facet 3)', () => {
+  // WHY: the green-tree cache re-ran the full ~4min suite on EVERY push because
+  // untracked `.ditto/work-items/` + `.ditto/memory/` runtime trails made
+  // `git status --porcelain` non-empty → the tree was never "clean" → the cache never
+  // hit. The clean check must FORGIVE those untracked trails (the cache key is HEAD's
+  // tree, which untracked files never change) WITHOUT weakening the gate: ANY tracked/
+  // staged/source change must still count DIRTY → miss. These assertions pin the
+  // load-bearing predicate `status==='??' AND path under a trail prefix`. A
+  // path-prefix-only impl (ignoring the status column) FAILS the tracked/staged cases
+  // below, and a prefix-WITHOUT-trailing-slash impl FAILS the collision case — that is
+  // exactly the gate-weakening this test forbids.
+
+  test('untracked work-item trail → clean (ignorable)', () => {
+    expect(isTreeCleanIgnoringTrails('?? .ditto/work-items/wi_x/\n')).toBe(true);
+  });
+
+  test('untracked memory event → clean (ignorable)', () => {
+    expect(isTreeCleanIgnoringTrails('?? .ditto/memory/events/foo.json\n')).toBe(true);
+  });
+
+  test('TRACKED-modified file under a trail prefix → DIRTY (never forgiven)', () => {
+    expect(isTreeCleanIgnoringTrails(' M .ditto/work-items/wi_x/record.json\n')).toBe(false);
+  });
+
+  test('STAGED file under a trail prefix → DIRTY (never forgiven)', () => {
+    expect(isTreeCleanIgnoringTrails('M  .ditto/memory/events/foo.json\n')).toBe(false);
+  });
+
+  test('source change → DIRTY', () => {
+    expect(isTreeCleanIgnoringTrails(' M src/foo.ts\n')).toBe(false);
+  });
+
+  test('untracked NEW source (not under a trail prefix) → DIRTY', () => {
+    expect(isTreeCleanIgnoringTrails('?? src/newfile.ts\n')).toBe(false);
+  });
+
+  test('prefix COLLISION (sibling dir, not a child of the trail) → DIRTY', () => {
+    expect(isTreeCleanIgnoringTrails('?? .ditto/work-items-x/foo\n')).toBe(false);
+  });
+
+  test('empty porcelain → clean', () => {
+    expect(isTreeCleanIgnoringTrails('')).toBe(true);
+  });
+
+  test('trails ONLY (the fixed scenario) → clean', () => {
+    const porcelain = '?? .ditto/work-items/wi_x/\n?? .ditto/memory/events/e.json\n';
+    expect(isTreeCleanIgnoringTrails(porcelain)).toBe(true);
+  });
+
+  test('trails PLUS one real source change → DIRTY (the real change dominates)', () => {
+    const porcelain = '?? .ditto/work-items/wi_x/\n?? .ditto/memory/events/e.json\n M src/foo.ts\n';
+    expect(isTreeCleanIgnoringTrails(porcelain)).toBe(false);
   });
 });
 

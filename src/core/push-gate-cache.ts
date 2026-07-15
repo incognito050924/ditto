@@ -37,6 +37,39 @@ export const MAX_GREEN_TREES = 20;
 export const EMPTY_CACHE: GreenCache = { trees: [] };
 
 /**
+ * Untracked runtime-trail prefixes the clean check FORGIVES: ditto writes these as a
+ * side effect of merely running (a Run's work-item state, memory events), so an
+ * otherwise-committed tree that is dirty ONLY with fresh untracked trails is still
+ * "clean enough" to hit the green-tree cache — the cache key is HEAD's tree, which
+ * untracked files never change. Trailing slash is load-bearing: a sibling like
+ * `.ditto/work-items-x/` must NOT match. Kept as a minimal local constant rather than
+ * reusing land-commit's `BYPRODUCT_PREFIXES` — that list is `.ditto/memory/` only and
+ * extending it there would change land-commit's byproduct-absorb behavior for its own
+ * callers; the two overlap on `.ditto/memory/` but serve different gates.
+ */
+const IGNORABLE_TRAIL_PREFIXES = ['.ditto/work-items/', '.ditto/memory/'] as const;
+
+/**
+ * Decide clean/dirty from RAW `git status --porcelain` output for the green-tree cache.
+ * A porcelain line is `XY <path>` (X=staged col, Y=worktree col; `??`=untracked). The
+ * tree is CLEAN iff EVERY line is an UNTRACKED (`??`) file under one of
+ * {@link IGNORABLE_TRAIL_PREFIXES}. ANY tracked/staged change (even under a trail
+ * prefix), or any untracked file outside a trail, is DIRTY — the gate is never
+ * weakened, only fresh untracked trails are forgiven. Empty output → clean.
+ *
+ * Feed the UNTRIMMED porcelain: a global trim would strip the first line's leading
+ * status-column space, confusing ` M path` (tracked-modified) with `?? path`.
+ */
+export function isTreeCleanIgnoringTrails(porcelain: string): boolean {
+  const lines = porcelain.split('\n').filter((l) => l.length > 0);
+  return lines.every((line) => {
+    const status = line.slice(0, 2);
+    const path = line.slice(3);
+    return status === '??' && IGNORABLE_TRAIL_PREFIXES.some((pre) => path.startsWith(pre));
+  });
+}
+
+/**
  * Skip the gate ONLY when the working tree is clean AND HEAD's tree hash is a
  * recorded green. A dirty tree (tested content ≠ HEAD tree) or an unknown hash
  * always runs the full command.

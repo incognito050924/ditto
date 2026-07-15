@@ -14,6 +14,7 @@ import {
   type TreeState,
   addGreenTree,
   greenCachePath,
+  isTreeCleanIgnoringTrails,
   shouldRecordGreen,
   shouldSkipGate,
 } from '~/core/push-gate-cache';
@@ -219,8 +220,12 @@ export async function resolvePushGateRoot(
   return { recipeRoot, repoRelDir: relative(recipeRoot, start) };
 }
 
-/** Run a git subcommand in `cwd`, returning trimmed stdout or null on any failure. */
-function gitOut(gitArgs: string[], cwd: string): string | null {
+/**
+ * Run a git subcommand in `cwd`, returning stdout or null on any failure. Trims by
+ * default; pass `{ trim: false }` for porcelain output whose leading status-column
+ * space is load-bearing (` M path` vs `?? path`) and must not be stripped.
+ */
+function gitOut(gitArgs: string[], cwd: string, opts: { trim?: boolean } = {}): string | null {
   try {
     const p = Bun.spawnSync(['git', ...gitArgs], {
       cwd,
@@ -229,7 +234,8 @@ function gitOut(gitArgs: string[], cwd: string): string | null {
       stdin: 'ignore',
     });
     if (p.exitCode !== 0) return null;
-    return (p.stdout?.toString() ?? '').trim();
+    const out = p.stdout?.toString() ?? '';
+    return opts.trim === false ? out : out.trim();
   } catch {
     return null;
   }
@@ -239,12 +245,18 @@ function gitOut(gitArgs: string[], cwd: string): string | null {
  * Compute the tree identity of the push (HEAD's tree hash) + whether the working
  * tree is clean. Returns undefined when there is no HEAD (unborn branch) or git is
  * unavailable — the caller then never skips (fail-safe: run the full gate).
+ *
+ * "Clean" IGNORES untracked runtime trails (`.ditto/work-items/`, `.ditto/memory/`)
+ * via {@link isTreeCleanIgnoringTrails} so a trail-only-dirty tree can still hit the
+ * green-tree cache — those files never change HEAD's tree hash. A git-status failure
+ * (null) stays fail-safe: clean=false → the full gate runs.
  */
 function computeTreeState(cwd: string): TreeState | undefined {
   const tree = gitOut(['rev-parse', 'HEAD^{tree}'], cwd);
   if (!tree) return undefined;
-  const status = gitOut(['status', '--porcelain'], cwd);
-  return { tree, clean: status === '' };
+  const status = gitOut(['status', '--porcelain'], cwd, { trim: false });
+  if (status === null) return { tree, clean: false };
+  return { tree, clean: isTreeCleanIgnoringTrails(status) };
 }
 
 /** Read the green-tree cache; an absent/corrupt file reads as empty (never a false skip). */
