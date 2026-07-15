@@ -22,6 +22,13 @@ import { WorkItemStore } from './work-item-store';
  * text/user_explanation rejects the round BEFORE persist. `why_matters` and the raw
  * `all_scored` score trail are NOT part of this user-reaching surface, so only the
  * `user_explanation` and `unexplained_identifier` violations are enforced here.
+ *
+ * ac-7 decision (no whitelist change): the newly-landed doc/section-ref leak detection
+ * (§N / ADR-YYYYMMDD-slug) surfaces as an `unexplained_identifier` violation, which is ALREADY
+ * whitelisted here — so it reaches the prism selected face with no change. Conversely the new
+ * `recommended_answer` blank-check violation is DELIBERATELY left out: prism carries no
+ * recommended_answer field, so validateQuestionContext always reports it blank; filtering it
+ * out keeps a prism round (which legitimately has no recommended_answer) from being rejected.
  */
 const ROUND_SURFACE_FIELDS = new Set(['user_explanation', 'unexplained_identifier']);
 

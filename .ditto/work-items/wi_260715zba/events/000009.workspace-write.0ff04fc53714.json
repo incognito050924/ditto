@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715zba",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "0ff04fc537144cf0365d2cc742639e335ebca76b203f921574d6c1b86b3809fb",
+  "ts": "2026-07-15T04:04:17.501Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts",
+        "summary": "exit0 77pass/0fail (+23 new)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite exit0 4897pass/11skip/0fail"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/question-context.ts",
+        "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+      },
+      {
+        "kind": "command",
+        "command": "bun test <5 blast-radius>",
+        "summary": "185pass/0fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full)",
+        "summary": "4905pass/11skip/0fail exit0"
+      },
+      {
+        "kind": "command",
+        "command": "deep-interview check-question (glossary wi / doc-refs)",
+        "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/deep-interview-check-question.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

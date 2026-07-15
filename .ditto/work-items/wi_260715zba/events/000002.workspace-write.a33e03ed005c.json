@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715zba",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "a33e03ed005ce9f9921b5f5f2d2624e314e4b6edae9a6e252f96efa0221ee739",
+  "ts": "2026-07-15T04:03:33.179Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/question-context.test.ts",
+        "summary": "exit0 77pass/0fail (+23 new)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "full suite exit0 4897pass/11skip/0fail"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/question-context.ts",
+        "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/deep-interview-check-question.test.ts tests/core/interview-driver.test.ts",
+        "summary": "exit0 78pass/0fail (red 73/5→green)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test <5 blast-radius files>",
+        "summary": "driver fresh: 185pass/0fail"
+      },
+      {
+        "kind": "command",
+        "command": "tsc --noEmit",
+        "summary": "typecheck clean (async conversion type-correct)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test <5 blast-radius>",
+        "summary": "185pass/0fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full)",
+        "summary": "4905pass/11skip/0fail exit0"
+      },
+      {
+        "kind": "command",
+        "command": "deep-interview check-question (glossary wi / doc-refs)",
+        "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+      }
+    ]
+  }
+}

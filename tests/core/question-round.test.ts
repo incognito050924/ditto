@@ -289,6 +289,33 @@ describe('presentation contract on the prism-equivalent write path (ac-1)', () =
     expect(await store.readValueRounds(wiId)).toHaveLength(0);
   });
 
+  // ac-7 (impl-ac7-prism GAP — adversarial review cat-2): the NEWLY-landed doc/section-ref
+  // leak detection (question-context.ts DOC_SECTION_PATTERNS: §N / ADR-YYYYMMDD-slug) must
+  // actually FIRE through the prism selected face, not be silently dropped by the
+  // ROUND_SURFACE_FIELDS whitelist. A doc/section ref surfaces as an `unexplained_identifier`
+  // violation — the field IS in the whitelist — so it reaches prism. This pins that routing:
+  // a selected question carrying `§4-6` on its user face rejects the round, and the message
+  // names the leaked ref (proving detection fired, not a generic reject).
+  test('appendValueRound rejects a selected question carrying a doc/section ref (§4-6) on the user face', async () => {
+    const bad = round([
+      {
+        text: '§4-6 규칙을 여기에도 적용할까요?',
+        user_explanation: '이 답이 무엇을 정하는지 쉬운 말로 설명하는 문장이에요.',
+        property: 'blind-spot',
+        scores: ctxScore,
+      },
+    ]);
+    let err: Error | undefined;
+    try {
+      await store.appendValueRound(wiId, bad);
+    } catch (e) {
+      err = e as Error;
+    }
+    expect(err).toBeDefined();
+    expect(err?.message).toContain('§4-6');
+    expect(await store.readValueRounds(wiId)).toHaveLength(0);
+  });
+
   test('appendValueRound persists a clean, fully-contextualized selected round', async () => {
     const clean = round([
       {

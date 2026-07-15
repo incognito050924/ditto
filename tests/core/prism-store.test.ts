@@ -202,6 +202,50 @@ describe('PrismStore — appendValueRound reads the glossary opaque-vocab at run
   });
 });
 
+// ac-2 (impl-ac7-prism): the prism selected face persisted + shown to the user must be run
+// through the shared `normalizePresentedText` display transform BEFORE persist, so the stored
+// form is the clean form (validate/persist stay consistent). A selected-face text carrying the
+// broken-char marker (U+FFFD) and a typographic em-dash (U+2014) is normalized in what prism
+// persists: the marker is stripped and the em-dash becomes a plain hyphen.
+describe('PrismStore — appendValueRound normalizes the persisted selected face (ac-2)', () => {
+  const dirty = (wi: string): QuestionRound => ({
+    ts: '2026-07-15T00:00:00.000Z',
+    work_item_id: wi,
+    round: 1,
+    section: 'prism-issue-map',
+    generator_count: 1,
+    dry: false,
+    selected: [
+      {
+        text: 'checkout 흐름을 바꿀까요� — 지금 정해요',
+        property: 'blind-spot',
+        user_explanation: '이 답이 무엇을 정하는지 쉬운 말로 설명하는 문장이에요�.',
+        scores: { consensus: 1, quality: 0.9, necessity: 0.9, answer_value: 0.9 },
+      },
+    ],
+    all_scored: [],
+  });
+
+  test('U+FFFD is stripped and the em-dash becomes a hyphen in what prism persists', async () => {
+    const repo = await mkdtemp(join(tmpdir(), 'ditto-prism-normalize-'));
+    const wi = 'wi_normstore01';
+    try {
+      const store = new PrismStore(repo);
+      await store.appendValueRound(wi, dirty(wi));
+      const rounds = await store.readValueRounds(wi);
+      expect(rounds.length).toBe(1);
+      const persisted = rounds[0]?.selected[0];
+      expect(persisted?.text).not.toContain('�');
+      expect(persisted?.text).not.toContain('—');
+      expect(persisted?.text).toContain('바꿀까요 - 지금');
+      // the user_explanation face is normalized too (both are the user-reaching selected face).
+      expect(persisted?.user_explanation).not.toContain('�');
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('PrismStore — deriveNovelty from detectDivergence verdict (wi_260708yut ac-5)', () => {
   const noHistory: readonly PrismRoundSignature[] = [];
 

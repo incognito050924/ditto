@@ -8,9 +8,11 @@ import { loadGlossaryVocab } from '~/core/knowledge-bridge';
 import {
   OPTION_DESCRIPTION_BUDGET,
   REVIEW_REGENERATE_CAP,
+  findLoanwords,
   findUnexplainedIdentifiers,
   isBranchSeam,
   needsBriefing,
+  normalizePresentedText,
   orderByContinuity,
   resolveReviewDecision,
   routeForReview,
@@ -165,6 +167,32 @@ describe('validateQuestionContext identifier gloss (ac-1, D1)', () => {
       recommended_answer: 'bcrypt를 추천합니다.',
     });
     expect(v.ok).toBe(true);
+  });
+});
+
+// ac-1 (shared-detector-core): recommended_answer is shown to the user by default, so it is
+// part of the user-reaching face and MUST be included in the un-glossed-leak scan. A candidate
+// whose ONLY leak lives in recommended_answer (text + user_explanation clean) must be rejected.
+describe('validateQuestionContext scans recommended_answer for leaks (ac-1)', () => {
+  const clean = {
+    text: '어떤 방식이 좋을까요?',
+    why_matters: '결과에 영향을 줍니다.',
+    user_explanation: '왜 묻는지 쉬운 말로 설명하는 문장이에요.',
+  };
+
+  test('rejects a leak that appears ONLY in recommended_answer', () => {
+    const v = validateQuestionContext({ ...clean, recommended_answer: 'ac-1을 추천합니다.' });
+    expect(v.ok).toBe(false);
+    expect(v.violations.map((x) => x.field)).toContain('unexplained_identifier');
+  });
+
+  test('a glossed identifier in recommended_answer passes', () => {
+    const v = validateQuestionContext({
+      ...clean,
+      recommended_answer: 'ac-1(비밀번호 해시 정책)을 추천합니다.',
+    });
+    expect(v.ok).toBe(true);
+    expect(v.violations.map((x) => x.field)).not.toContain('unexplained_identifier');
   });
 });
 
@@ -439,6 +467,129 @@ describe('findUnexplainedIdentifiers opaque-vocab — zero false positive (ac-2)
     expect(findUnexplainedIdentifiers('모든 acceptance criteria를 증거와 함께 닫습니다')).toEqual(
       [],
     );
+  });
+});
+
+// ac-1 (shared-detector-core): un-agreed doc/section references (§N, §N-M, canonical
+// ADR-YYYYMMDD-slug, legacy ADR-<digits>) are ALWAYS a leak on the user face. CRITICAL: they
+// are NOT run through the ±40-char isGlossed window — a trailing `-slug` / `-number` or adjacent
+// prose would be MIS-READ as a gloss separator + explanatory word and false-negative the very
+// doc-ref. A section number / ADR id cannot be "explained" by adjacent prose, so a matched
+// doc/section ref is an unconditional leak.
+describe('findUnexplainedIdentifiers doc/section refs (ac-1, always-leak)', () => {
+  test('flags a §N-M section ref inside Korean prose', () => {
+    expect(findUnexplainedIdentifiers('§4-6 규칙을 따르세요')).toContain('§4-6');
+  });
+
+  test('flags a bare §N section ref', () => {
+    expect(findUnexplainedIdentifiers('§8 원칙을 보세요')).toContain('§8');
+  });
+
+  test('flags a slug-bearing canonical ADR id (ADR-YYYYMMDD-slug)', () => {
+    expect(findUnexplainedIdentifiers('ADR-20260714-language-axis를 반영합니다')).toContain(
+      'ADR-20260714-language-axis',
+    );
+  });
+
+  test('flags a legacy ADR-<digits> id', () => {
+    expect(findUnexplainedIdentifiers('ADR-0024를 확인하세요')).toContain('ADR-0024');
+  });
+
+  // The load-bearing regression: a doc-ref carrying a parenthetical / dash "gloss" must STILL be
+  // flagged, because isGlossed would false-negative it. This is what makes the doc-ref path
+  // separate from (and never routed through) the gloss window.
+  test('flags a §N-M ref EVEN WITH an adjacent parenthetical (never glossable)', () => {
+    expect(findUnexplainedIdentifiers('§4-6(위임 규율 조항)을 따르세요')).toContain('§4-6');
+  });
+
+  test('flags a canonical ADR id whose trailing -slug looks like a gloss separator', () => {
+    // `-language-axis` after `ADR-20260714` is exactly the dash + explanatory-word shape
+    // isGlossed treats as a gloss; the always-leak path flags it anyway.
+    expect(
+      findUnexplainedIdentifiers('ADR-20260714-language-axis-followups-terminated 참고'),
+    ).toContain('ADR-20260714-language-axis-followups-terminated');
+  });
+
+  test('a doc-ref only inside a code fence is exempt (code stripped first)', () => {
+    expect(findUnexplainedIdentifiers('```\n§4-6\n```')).toEqual([]);
+  });
+});
+
+// ac-3 (shared-detector-core): a BOUNDED loanword advisory. A seed loanword (외래어 with a plain
+// Korean equivalent) in free-standing prose produces an advisory signal; the SAME token inside a
+// code fence / inline code / glued into an ASCII identifier is exempt, and ordinary Korean prose
+// (and legitimately-kept technical terms like 커밋/테스트/코드) never flags. Matched by indexOf,
+// never a broad \w+ scan.
+describe('findLoanwords (ac-3, bounded advisory)', () => {
+  test('flags a seed loanword in Korean prose (밸런스 -> 균형)', () => {
+    const out = findLoanwords('밸런스를 맞추는 게 중요합니다');
+    expect(out.map((x) => x.loanword)).toContain('밸런스');
+    expect(out.find((x) => x.loanword === '밸런스')?.suggestion).toBe('균형');
+  });
+
+  test('flags each of several distinct seed loanwords (케이스, 이슈, 리스크)', () => {
+    const flagged = findLoanwords('이 케이스는 이슈와 리스크가 있어요').map((x) => x.loanword);
+    expect(flagged.sort()).toEqual(['리스크', '이슈', '케이스']);
+  });
+
+  test('does NOT flag a seed loanword inside a code fence (stripCode)', () => {
+    expect(findLoanwords('```\n밸런스\n```')).toEqual([]);
+  });
+
+  test('does NOT flag a seed loanword inside inline code', () => {
+    expect(findLoanwords('`밸런스` 항목')).toEqual([]);
+  });
+
+  test('does NOT flag a seed loanword glued into an ASCII identifier (boundary)', () => {
+    expect(findLoanwords('밸런스value 라는 변수')).toEqual([]);
+    expect(findLoanwords('config_밸런스 라는 변수')).toEqual([]);
+  });
+
+  test('does NOT flag ordinary Korean prose with no seed loanword', () => {
+    expect(findLoanwords('비밀번호를 안전하게 저장하는 방법을 정합니다')).toEqual([]);
+  });
+
+  test('does NOT flag legitimately-kept technical terms (커밋 / 테스트 / 코드)', () => {
+    expect(findLoanwords('커밋과 테스트, 코드를 확인합니다')).toEqual([]);
+  });
+});
+
+// ac-2 (shared-detector-core): a deterministic display normalizer, SEPARATE from the gate. It
+// strips broken/garbage chars (U+FFFD replacement char, C0/C1 control chars incl. ESC/CSI) and
+// canonicalizes typographic chars (em/en dash -> hyphen, curly quotes -> straight, ellipsis -> ...).
+// Must be idempotent.
+describe('normalizePresentedText (ac-2, display transform)', () => {
+  test('strips the Unicode replacement char (U+FFFD)', () => {
+    expect(normalizePresentedText('a�b')).toBe('ab');
+  });
+
+  test('strips ESC (U+001B) and C1 CSI (U+009B) control chars', () => {
+    const out = normalizePresentedText('red\x1b[31mtext\x9b0m');
+    expect(out.includes('\x1b')).toBe(false);
+    expect(out.includes('\x9b')).toBe(false);
+  });
+
+  test('keeps ordinary whitespace (\\n, \\t) but strips other C0 controls (\\r, NUL)', () => {
+    expect(normalizePresentedText('a\nb\tc')).toBe('a\nb\tc');
+    expect(normalizePresentedText('a\r\x00b')).toBe('ab');
+  });
+
+  test('normalizes em-dash and en-dash to a plain hyphen', () => {
+    expect(normalizePresentedText('a—b–c')).toBe('a-b-c');
+  });
+
+  test('normalizes curly single and double quotes to straight quotes', () => {
+    expect(normalizePresentedText('“hi” ‘yo’')).toBe('"hi" \'yo\'');
+  });
+
+  test('normalizes the ellipsis char to three dots', () => {
+    expect(normalizePresentedText('wait…')).toBe('wait...');
+  });
+
+  test('is idempotent: normalize(normalize(x)) === normalize(x)', () => {
+    const x = 'a�—“q”…\x1b[0m\r'; // mix of every case
+    const once = normalizePresentedText(x);
+    expect(normalizePresentedText(once)).toBe(once);
   });
 });
 

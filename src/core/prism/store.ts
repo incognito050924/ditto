@@ -10,6 +10,7 @@ import {
 } from '~/schemas/prism';
 import { type QuestionRound, questionRound } from '~/schemas/question-round';
 import { loadGlossaryVocab, warnMalformedGlossary } from '../knowledge-bridge';
+import { normalizePresentedText } from '../question-context';
 import { assertSelectedPresentationContract } from '../question-round';
 import { type PrismBacklogSplit, prismBacklogSplit } from './backlog';
 import type { DivergenceVerdict } from './engine';
@@ -134,7 +135,21 @@ export class PrismStore {
    * `recordRound`'s WI-exists gate) because a prism draft precedes the committed WI.
    */
   async appendValueRound(workItemId: string, round: QuestionRound): Promise<QuestionRound> {
-    const validated = questionRound.parse(round);
+    const parsed = questionRound.parse(round);
+    // ac-2: run the user-reaching selected face (text + user_explanation — the fields persisted
+    // AND shown to the user) through the shared `normalizePresentedText` display transform BEFORE
+    // validate/persist, so the stored form is the clean form and validate/persist stay consistent
+    // (a broken-char marker or typographic dash is normalized in what prism persists).
+    const validated: QuestionRound = {
+      ...parsed,
+      selected: parsed.selected.map((q) => ({
+        ...q,
+        text: normalizePresentedText(q.text),
+        ...(q.user_explanation !== undefined
+          ? { user_explanation: normalizePresentedText(q.user_explanation) }
+          : {}),
+      })),
+    };
     // Same presentation contract as record-turn / recordRound: reject an
     // under-contextualized user-reaching selected question BEFORE persisting (ac-1).
     // Resolve the glossary opaque-vocab (forbidden_abbreviations) ONCE at this consumer

@@ -1292,6 +1292,43 @@ describe('recordTurn — recommended_answer gate + persistence (ac-1/ac-3)', () 
   });
 });
 
+// ac-2 WIRING: the display-time seam on the WRITE path. recordTurn normalizes the user-facing
+// question fields (text / user_explanation / recommended_answer) via normalizePresentedText
+// BEFORE validating AND persisting — so the presentation gate and the persisted record operate
+// on the SAME cleaned text (no "validate one form, persist another" gap flagged in review). A
+// question carrying broken/typographic chars (U+FFFD, em-dash, curly quote) is persisted with
+// plain chars.
+describe('recordTurn — normalizes user-facing question fields before persist (ac-2 wiring)', () => {
+  beforeEach(async () => {
+    await startInterview(repo, { workItemId: wiId, questionCap: 8 });
+  });
+
+  test('em-dash / U+FFFD / curly-quote in text·user_explanation·recommended_answer → persisted NORMALIZED', async () => {
+    const state = await recordTurn(repo, {
+      workItemId: wiId,
+      payload: {
+        dimension: { id: 'd1', critical: false, state: 'partial', ambiguity: 0.5, notes: '' },
+        question: {
+          text: '점수는 정수인가요 — 소수인가요?', // em-dash U+2014
+          why_matters: '응답 형식을 정합니다.',
+          info_gain_estimate: 'high',
+          user_explanation: '응답을 정수로 줄지 정하는 질문이에요�', // trailing U+FFFD
+          recommended_answer: '정수 0-100을 “추천”합니다.', // curly double quotes
+        },
+      },
+    });
+    const q = state.questions[0];
+    // em-dash → plain hyphen
+    expect(q?.question).toBe('점수는 정수인가요 - 소수인가요?');
+    expect(q?.question).not.toContain('—');
+    // U+FFFD stripped
+    expect(q?.user_explanation).toBe('응답을 정수로 줄지 정하는 질문이에요');
+    expect(q?.user_explanation).not.toContain('�');
+    // curly quotes → straight
+    expect(q?.recommended_answer).toBe('정수 0-100을 "추천"합니다.');
+  });
+});
+
 // ac-1 (impl-ac1-recordturn): the recordTurn WRITE path rejects a bad question surface
 // BEFORE persist, wiring the EXISTING pure validators (validateQuestionContext +
 // findUnexplainedIdentifiers, question-context.ts) into the write path. A "bad" turn is

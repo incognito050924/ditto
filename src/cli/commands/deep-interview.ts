@@ -21,9 +21,12 @@ import {
   startInterview,
 } from '~/core/interview-driver';
 import { InterviewStore } from '~/core/interview-store';
+import { loadGlossaryVocab, warnMalformedGlossary } from '~/core/knowledge-bridge';
 import { finalizeFromDesignDoc } from '~/core/prism/finalize';
 import type { OpponentSeamConfig } from '~/core/prism/opponent';
 import {
+  findLoanwords,
+  normalizePresentedText,
   questionContextCandidate,
   selectSingleFire,
   validateQuestionContext,
@@ -593,7 +596,7 @@ const checkQuestionCmd = defineCommand({
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
-  run: ({ args }) => {
+  run: async ({ args }) => {
     let format: ReturnType<typeof parseOutputFormat>;
     try {
       format = parseOutputFormat(args.output);
@@ -619,9 +622,46 @@ const checkQuestionCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const verdict = validateQuestionContext(parsed.data);
+    // Resolve the glossary opaque-vocab (forbidden_abbreviations) so the check-question FLOOR is
+    // no longer floor-only: union the glossary set with the detector's hardcoded floor, mirroring
+    // the recordTurn/prism call sites EXACTLY. Fail-open (ADR-0018): a missing/malformed glossary
+    // yields [] (floor-only) WITH a warning, never a throw of the pre-ask gate.
+    const repoRoot = await resolveRepoRootForCreate();
+    const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
+    // Display-time seam: normalize the user-facing fields (text / user_explanation /
+    // recommended_answer) so the question reaches the user CLEAN, and validate the SAME
+    // normalized form recordTurn will persist (no validate-one-form / persist-another gap).
+    const normalized = {
+      text: normalizePresentedText(parsed.data.text),
+      why_matters: parsed.data.why_matters,
+      ...(parsed.data.user_explanation !== undefined
+        ? { user_explanation: normalizePresentedText(parsed.data.user_explanation) }
+        : {}),
+      ...(parsed.data.recommended_answer !== undefined
+        ? { recommended_answer: normalizePresentedText(parsed.data.recommended_answer) }
+        : {}),
+      ...(parsed.data.background !== undefined ? { background: parsed.data.background } : {}),
+      ...(parsed.data.grounding !== undefined ? { grounding: parsed.data.grounding } : {}),
+      ...(parsed.data.self_answer_attempts !== undefined
+        ? { self_answer_attempts: parsed.data.self_answer_attempts }
+        : {}),
+    };
+    const verdict = validateQuestionContext(normalized, opaqueVocab);
+    // ADVISORY register guidance (non-blocking): flag closed-seed 외래어 that carry a plain Korean
+    // equivalent over the SAME normalized user-facing fields the question reaches the user in.
+    // Deduped tokens; code-fenced / identifier-glued hits are exempt (findLoanwords → stripCode).
+    // This NEVER touches the exit code (see the `if (!verdict.ok)` gate below) — a candidate whose
+    // only smell is a loanword still passes; the driver plainifies it before asking.
+    const loanwordAdvisory = [
+      ...new Set(
+        [normalized.text, normalized.user_explanation, normalized.recommended_answer]
+          .flatMap((field) => findLoanwords(field))
+          .map((signal) => signal.loanword),
+      ),
+    ];
     if (format === 'json') {
-      writeJson(verdict);
+      // Echo the normalized candidate so the SKILL asks the CLEANED text (the display seam).
+      writeJson({ ...verdict, normalized, loanword_advisory: loanwordAdvisory });
     } else if (verdict.ok) {
       writeHuman('check-question: ok (presentation contract satisfied)');
     } else {

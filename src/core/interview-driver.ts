@@ -34,6 +34,7 @@ import {
   type OrderableItem,
   findUnexplainedIdentifiers,
   isBranchSeam,
+  normalizePresentedText,
   orderByContinuity,
   validateQuestionContext,
 } from './question-context';
@@ -389,18 +390,31 @@ export async function recordTurn(
   // gate. Unioned with the detector's hardcoded floor; a bad glossary fails open to floor-only
   // WITH a warning (never silent, never a crash of the interview gate).
   const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
+  // Display-time seam (ac-2): normalize the user-facing fields (text / user_explanation /
+  // recommended_answer) via normalizePresentedText ONCE, then both VALIDATE and PERSIST the
+  // SAME normalized text — closing the "validate one form, persist another" gap. why_matters /
+  // background / grounding are not user-default surfaces, so they are left as-is.
+  const normalizedText = normalizePresentedText(question.text);
+  const normalizedUserExplanation =
+    question.user_explanation !== undefined
+      ? normalizePresentedText(question.user_explanation)
+      : undefined;
+  const normalizedRecommendedAnswer =
+    question.recommended_answer !== undefined
+      ? normalizePresentedText(question.recommended_answer)
+      : undefined;
   const surfaceVerdict = validateQuestionContext(
     {
-      text: question.text,
+      text: normalizedText,
       why_matters: question.why_matters,
-      user_explanation: question.user_explanation,
-      recommended_answer: question.recommended_answer,
+      user_explanation: normalizedUserExplanation,
+      recommended_answer: normalizedRecommendedAnswer,
     },
     opaqueVocab,
   );
   const leakedIdentifiers = [
-    ...findUnexplainedIdentifiers(question.text, opaqueVocab),
-    ...findUnexplainedIdentifiers(question.user_explanation, opaqueVocab),
+    ...findUnexplainedIdentifiers(normalizedText, opaqueVocab),
+    ...findUnexplainedIdentifiers(normalizedUserExplanation, opaqueVocab),
   ];
   if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
     const violations = surfaceVerdict.violations.map((v) => `${v.field}: ${v.reason}`).join('; ');
@@ -457,18 +471,21 @@ export async function recordTurn(
     id: qId,
     asked_at: nowIso,
     dimension: dimension.id,
-    question: question.text,
+    // Persist the NORMALIZED user-facing text (ac-2) — the same form that was validated above,
+    // so the presentation gate and the durable record never diverge.
+    question: normalizedText,
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
     // Persist the self-answer ledger from the payload (was hardcoded `[]`), so the
     // "we checked X first" evidence behind asking the user survives (wi_260622ph8).
     self_answer_attempts: question.self_answer_attempts ?? [],
-    // Presentation-contract context carried with the question (wi_260622ph8).
-    ...(question.user_explanation !== undefined
-      ? { user_explanation: question.user_explanation }
+    // Presentation-contract context carried with the question (wi_260622ph8), persisted in its
+    // normalized (display-clean) form (ac-2).
+    ...(normalizedUserExplanation !== undefined
+      ? { user_explanation: normalizedUserExplanation }
       : {}),
-    ...(question.recommended_answer !== undefined
-      ? { recommended_answer: question.recommended_answer }
+    ...(normalizedRecommendedAnswer !== undefined
+      ? { recommended_answer: normalizedRecommendedAnswer }
       : {}),
     ...(question.background !== undefined ? { background: question.background } : {}),
     ...(question.grounding !== undefined ? { grounding: question.grounding } : {}),

@@ -1,0 +1,430 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260715zba",
+  "title": "deep-interview 사용자향 질문·컨텍스트 품질: 내부참조·외래어·일관성",
+  "source_request": "ditto 의 deep-interview 에서 사용하는 언어와 문제 펭이화를 했는데. 여전히 사용자가 알 지 못하는(보지 못하거나 ditto 내부 계약이나 동작 문서, 볼 수는 있지만 합의하지 않은 문서-사용자는 특별한 일 없이 문서를 매번 찾아보지 않는다고 가정- 등) 컨택스트나 문서에 내부에서 사용된 항목의 ID나 문단 번호 사용, 뜬금없는 외래어나 깨진 문자 등이 계속 발견돼. 무엇보다 제공되는 컨택스트의 양이나 품질이 일관성이 떨어진다고 생각해. (수정 직후에는 괜찮아 보였으나 지금은 의문이 생길 정도)",
+  "goal": "deep-interview(및 같은 검사 모듈을 공유하는 prism 정련 흐름)가 사용자에게 제시하는 질문·컨텍스트가, 사용자가 알 수 없는 내부 참조(미합의 문서·내부 ID·문단/조항 번호·설명 없는 내부 용어)·부적절한 외래어·깨진 문자 없이 매 질문 일관되게 자기완결적이도록, 손으로 목록을 키우지 않는 저유지보수·결정적 장치로 보장한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "모든 사용자 기본-노출 필드(질문·쉬운 설명·추천 답)에서 사용자가 알 수 없는 내부 참조(내부 ID·미합의 문서/문단·조항 번호·설명 없는 내부 용어)가 설명 없이 나가면 결정적으로 검출·차단된다 — recommended_answer 포함, deep-interview 착수 전 게이트에 glossary 용어 주입 포함",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/deep-interview-check-question.test.ts tests/core/interview-driver.test.ts",
+          "summary": "exit0 78pass/0fail (red 73/5→green)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius files>",
+          "summary": "driver fresh: 185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "typecheck clean (async conversion type-correct)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "깨진 문자(인코딩 치환문자·제어문자)는 표시 전 결정적으로 제거되고 특수 문장부호는 평이·안전 문자로 정규화된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/deep-interview-check-question.test.ts tests/core/interview-driver.test.ts",
+          "summary": "exit0 78pass/0fail (red 73/5→green)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius files>",
+          "summary": "driver fresh: 185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "typecheck clean (async conversion type-correct)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-round.test.ts tests/core/prism-store.test.ts",
+          "summary": "exit0 30pass/0fail (pre-fix 29/1: U+FFFD assertion red→green)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/prism/store.ts",
+          "summary": "appendValueRound normalizes text+user_explanation before validate/persist"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "통용 한국어 대체어가 있는 외래어는 플래그되고 코드·명령·식별자는 예외로 통과한다 (정상 한국어·기술용어에 위양성 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/deep-interview-check-question.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "critical/비-critical 구분 없이 모든 사용자향 질문이 동일한 결정적 자기완결성·충분성 바닥선을 통과한다 (질문별 편차 제거)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/deep-interview-check-question.test.ts tests/core/interview-driver.test.ts",
+          "summary": "exit0 78pass/0fail (red 73/5→green)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius files>",
+          "summary": "driver fresh: 185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "tsc --noEmit",
+          "summary": "typecheck clean (async conversion type-correct)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "저유지보수 불변식: 1차 메커니즘은 누출마다 손으로 목록을 키우지 않아도 된다 — 이미 관리하는 용어집 자동도출 + 규칙 기반 검출이며, hand-curated blocklist 확장을 요구하지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "자기완결성·일관성 보장은 결정적이며 공통 경로에 per-question LLM 왕복을 추가하지 않는다 (인터뷰 라운드 지연 악화 금지)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "변경은 공유 모듈에 적용돼 prism에도 반영되며 기존 deep-interview/prism 테스트가 전부 green으로 유지된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715zba/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-context.test.ts",
+          "summary": "exit0 77pass/0fail (+23 new)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "full suite exit0 4897pass/11skip/0fail"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "recommended_answer scan + doc/section-ref always-leak + normalizePresentedText + findLoanwords"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/question-round.test.ts tests/core/prism-store.test.ts",
+          "summary": "exit0 30pass/0fail (pre-fix 29/1: U+FFFD assertion red→green)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/prism/store.ts",
+          "summary": "appendValueRound normalizes text+user_explanation before validate/persist"
+        },
+        {
+          "kind": "command",
+          "command": "bun test <5 blast-radius>",
+          "summary": "185pass/0fail"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full)",
+          "summary": "4905pass/11skip/0fail exit0"
+        },
+        {
+          "kind": "command",
+          "command": "deep-interview check-question (glossary wi / doc-refs)",
+          "summary": "exit1 flagged; normalize exit0 clean+idempotent"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/question-context.ts",
+    "tests/core/question-context.test.ts",
+    "src/core/prism/store.ts",
+    "src/core/question-round.ts",
+    "tests/core/question-round.test.ts",
+    "tests/core/prism-store.test.ts",
+    "src/cli/commands/deep-interview.ts",
+    "src/core/interview-driver.ts",
+    "tests/cli/deep-interview-check-question.test.ts",
+    "tests/core/interview-driver.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260715zba",
+    "fresh_evidence_needed": [
+      "land aborted — 19 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_260715ffn/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260715ffn/record.json, .ditto/work-items/wi_260715ujg/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260715ujg/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260715ujg/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260715ujg/record.json, .ditto/work-items/wi_260715zba/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260715zba/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260715zba/events/000002.workspace-write.a33e03ed005c.json, .ditto/work-items/wi_260715zba/events/000003.workspace-write.dbb3c2d88db5.json, .ditto/work-items/wi_260715zba/events/000004.workspace-write.8fbe28d6870b.json, .ditto/work-items/wi_260715zba/events/000005.workspace-write.f6e2d84740c0.json, .ditto/work-items/wi_260715zba/events/000006.workspace-write.956e98ad58aa.json, .ditto/work-items/wi_260715zba/events/000007.workspace-write.81fa25133153.json, .ditto/work-items/wi_260715zba/events/000008.workspace-write.3a4630a2fd30.json, .ditto/work-items/wi_260715zba/events/000009.workspace-write.0ff04fc53714.json, .ditto/work-items/wi_260715zba/events/000010.workspace-write.3a85549af6e0.json, .ditto/work-items/wi_260715zba/record.json, bin/ditto. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "a33e188e4ce77a85da5234a78837cefedc77a7c2",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_34d61b25850dff27.json",
+    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json",
+    ".ditto/work-items/wi_260715ffn/",
+    ".ditto/work-items/wi_260715zba/"
+  ],
+  "created_at": "2026-07-15T00:25:24.569Z",
+  "updated_at": "2026-07-15T04:04:46.453Z",
+  "closed_at": "2026-07-15T04:04:46.451Z"
+}

@@ -20027,6 +20027,10 @@ var IDENTIFIER_PATTERNS = [
   /(?:wi|orch|memevt|adr|prism)_[0-9a-z]+/g
 ];
 var EXPLANATORY_WORD = "[\uAC00-\uD7A3]{2,}|[A-Za-z]{3,}";
+var DOC_SECTION_PATTERNS = [
+  /\u00A7\d+(?:-\d+)?/g,
+  /ADR-\d{8}-[a-z0-9-]+|ADR-\d+/g
+];
 var stripCode = (s2) => s2.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ");
 var hasIdentifierBoundary = (text, start, end) => {
   const before = start === 0 || !/[A-Za-z0-9_-]/.test(text[start - 1] ?? "");
@@ -20087,6 +20091,16 @@ function findUnexplainedIdentifiers(s2, opaqueVocab = []) {
         found.push(m2[0]);
     }
   }
+  for (const pattern of DOC_SECTION_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (let m2 = pattern.exec(text);m2 !== null; m2 = pattern.exec(text)) {
+      const start = m2.index;
+      const end = start + m2[0].length;
+      if (!hasIdentifierBoundary(text, start, end))
+        continue;
+      found.push(m2[0]);
+    }
+  }
   found.push(...findLiteralOpaqueVocab(text, OPAQUE_VOCAB_FLOOR));
   found.push(...findLiteralOpaqueVocab(text, opaqueVocab));
   return found;
@@ -20113,7 +20127,8 @@ function validateQuestionContext(candidate, opaqueVocab = []) {
   }
   const leaked = [
     ...findUnexplainedIdentifiers(candidate.text, opaqueVocab),
-    ...findUnexplainedIdentifiers(candidate.user_explanation, opaqueVocab)
+    ...findUnexplainedIdentifiers(candidate.user_explanation, opaqueVocab),
+    ...findUnexplainedIdentifiers(candidate.recommended_answer, opaqueVocab)
   ];
   if (leaked.length > 0) {
     violations.push({
@@ -20122,6 +20137,32 @@ function validateQuestionContext(candidate, opaqueVocab = []) {
     });
   }
   return { ok: violations.length === 0, violations };
+}
+function normalizePresentedText(s2) {
+  const CONTROL = new RegExp("[\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F]", "g");
+  return s2.replace(/\uFFFD/g, "").replace(CONTROL, "").replace(/[\u2013\u2014]/g, "-").replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\u2026/g, "...");
+}
+var LOANWORD_SEED = [
+  { loanword: "\uBC38\uB7F0\uC2A4", suggestion: "\uADE0\uD615" },
+  { loanword: "\uCF00\uC774\uC2A4", suggestion: "\uC0AC\uB840" },
+  { loanword: "\uC774\uC288", suggestion: "\uC0AC\uC548" },
+  { loanword: "\uB9AC\uC2A4\uD06C", suggestion: "\uC704\uD5D8" }
+];
+function findLoanwords(s2) {
+  if (s2 === undefined)
+    return [];
+  const text = stripCode(s2);
+  const found = [];
+  for (const seed of LOANWORD_SEED) {
+    for (let idx = text.indexOf(seed.loanword);idx !== -1; idx = text.indexOf(seed.loanword, idx + 1)) {
+      const start = idx;
+      const end = idx + seed.loanword.length;
+      if (!hasIdentifierBoundary(text, start, end))
+        continue;
+      found.push(seed);
+    }
+  }
+  return found;
 }
 var INFO_GAIN_RANK = { high: 3, medium: 2, low: 1 };
 function selectSingleFire(candidates) {
@@ -39856,15 +39897,18 @@ async function recordTurn(repoRoot, input) {
   const nowIso = (input.now ?? new Date).toISOString();
   const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
   const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
+  const normalizedText = normalizePresentedText(question.text);
+  const normalizedUserExplanation = question.user_explanation !== undefined ? normalizePresentedText(question.user_explanation) : undefined;
+  const normalizedRecommendedAnswer = question.recommended_answer !== undefined ? normalizePresentedText(question.recommended_answer) : undefined;
   const surfaceVerdict = validateQuestionContext({
-    text: question.text,
+    text: normalizedText,
     why_matters: question.why_matters,
-    user_explanation: question.user_explanation,
-    recommended_answer: question.recommended_answer
+    user_explanation: normalizedUserExplanation,
+    recommended_answer: normalizedRecommendedAnswer
   }, opaqueVocab);
   const leakedIdentifiers = [
-    ...findUnexplainedIdentifiers(question.text, opaqueVocab),
-    ...findUnexplainedIdentifiers(question.user_explanation, opaqueVocab)
+    ...findUnexplainedIdentifiers(normalizedText, opaqueVocab),
+    ...findUnexplainedIdentifiers(normalizedUserExplanation, opaqueVocab)
   ];
   if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
     const violations = surfaceVerdict.violations.map((v2) => `${v2.field}: ${v2.reason}`).join("; ");
@@ -39898,12 +39942,12 @@ async function recordTurn(repoRoot, input) {
     id: qId,
     asked_at: nowIso,
     dimension: dimension.id,
-    question: question.text,
+    question: normalizedText,
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
     self_answer_attempts: question.self_answer_attempts ?? [],
-    ...question.user_explanation !== undefined ? { user_explanation: question.user_explanation } : {},
-    ...question.recommended_answer !== undefined ? { recommended_answer: question.recommended_answer } : {},
+    ...normalizedUserExplanation !== undefined ? { user_explanation: normalizedUserExplanation } : {},
+    ...normalizedRecommendedAnswer !== undefined ? { recommended_answer: normalizedRecommendedAnswer } : {},
     ...question.background !== undefined ? { background: question.background } : {},
     ...question.grounding !== undefined ? { grounding: question.grounding } : {},
     ...question.marginal_gain !== undefined ? { marginal_gain: question.marginal_gain } : {},
@@ -40647,7 +40691,15 @@ class PrismStore {
     return readJson(this.backlogSplitPath(workItemId2), prismBacklogSplit);
   }
   async appendValueRound(workItemId2, round) {
-    const validated = questionRound.parse(round);
+    const parsed = questionRound.parse(round);
+    const validated = {
+      ...parsed,
+      selected: parsed.selected.map((q2) => ({
+        ...q2,
+        text: normalizePresentedText(q2.text),
+        ...q2.user_explanation !== undefined ? { user_explanation: normalizePresentedText(q2.user_explanation) } : {}
+      }))
+    };
     const opaqueVocab = await loadGlossaryVocab(this.repoRoot, () => warnMalformedGlossary(this.repoRoot));
     assertSelectedPresentationContract(validated.selected, opaqueVocab);
     await this.workItems.appendQuestionRoundLine(workItemId2, JSON.stringify(validated));
@@ -41159,7 +41211,7 @@ var checkQuestionCmd = defineCommand({
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
   },
-  run: ({ args }) => {
+  run: async ({ args }) => {
     let format;
     try {
       format = parseOutputFormat(args.output);
@@ -41185,9 +41237,23 @@ var checkQuestionCmd = defineCommand({
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const verdict2 = validateQuestionContext(parsed.data);
+    const repoRoot = await resolveRepoRootForCreate();
+    const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
+    const normalized = {
+      text: normalizePresentedText(parsed.data.text),
+      why_matters: parsed.data.why_matters,
+      ...parsed.data.user_explanation !== undefined ? { user_explanation: normalizePresentedText(parsed.data.user_explanation) } : {},
+      ...parsed.data.recommended_answer !== undefined ? { recommended_answer: normalizePresentedText(parsed.data.recommended_answer) } : {},
+      ...parsed.data.background !== undefined ? { background: parsed.data.background } : {},
+      ...parsed.data.grounding !== undefined ? { grounding: parsed.data.grounding } : {},
+      ...parsed.data.self_answer_attempts !== undefined ? { self_answer_attempts: parsed.data.self_answer_attempts } : {}
+    };
+    const verdict2 = validateQuestionContext(normalized, opaqueVocab);
+    const loanwordAdvisory = [
+      ...new Set([normalized.text, normalized.user_explanation, normalized.recommended_answer].flatMap((field) => findLoanwords(field)).map((signal) => signal.loanword))
+    ];
     if (format === "json") {
-      writeJson2(verdict2);
+      writeJson2({ ...verdict2, normalized, loanword_advisory: loanwordAdvisory });
     } else if (verdict2.ok) {
       writeHuman("check-question: ok (presentation contract satisfied)");
     } else {
@@ -58871,4 +58937,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=6f7dc02e79212df21b36e8b490cfb87b716ade303de5045c207e4fd0fee35fde
+//# ditto-src-stamp=fc546f7b8bed928b92be5a0b3a8e73b33b8425d0c8c2e3fde59916524faca6f6

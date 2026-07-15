@@ -72,6 +72,17 @@ const IDENTIFIER_PATTERNS: readonly RegExp[] = [
 // identifier fragments (e.g. "T", "D1") do not qualify, so "ac-1 (T-2)" stays unglossed.
 const EXPLANATORY_WORD = '[가-힣]{2,}|[A-Za-z]{3,}';
 
+// Un-agreed doc/section references: section refs (§N, §N-M) and ADR doc-ids (canonical
+// ADR-YYYYMMDD-slug, tried FIRST in the alternation, else legacy ADR-<digits>). These are an
+// UNCONDITIONAL leak — they are DELIBERATELY NOT routed through the ±40-char isGlossed window: a
+// trailing `-slug`/`-number` or adjacent prose is exactly the "dash + explanatory word" shape
+// isGlossed reads as a gloss, which would false-negative the very doc-ref. A section number / ADR
+// id cannot be "explained" by adjacent prose, so a match is flagged regardless of surrounding gloss.
+const DOC_SECTION_PATTERNS: readonly RegExp[] = [
+  /§\d+(?:-\d+)?/g,
+  /ADR-\d{8}-[a-z0-9-]+|ADR-\d+/g,
+];
+
 const stripCode = (s: string): string => s.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`]*`/g, ' ');
 
 // Unicode-safe boundaries: before = start | non-[A-Za-z0-9_-]; after = end | non-[A-Za-z0-9_].
@@ -169,6 +180,16 @@ export function findUnexplainedIdentifiers(
       if (!isGlossed(text, start, end)) found.push(m[0]);
     }
   }
+  // Un-agreed doc/section refs (§N, §N-M, ADR ids): UNCONDITIONAL leak — never gloss-checked.
+  for (const pattern of DOC_SECTION_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (let m = pattern.exec(text); m !== null; m = pattern.exec(text)) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (!hasIdentifierBoundary(text, start, end)) continue;
+      found.push(m[0]);
+    }
+  }
   // Curated opaque vocabulary: the hardcoded floor + the caller-resolved glossary set.
   found.push(...findLiteralOpaqueVocab(text, OPAQUE_VOCAB_FLOOR));
   found.push(...findLiteralOpaqueVocab(text, opaqueVocab));
@@ -206,12 +227,14 @@ export function validateQuestionContext(
       reason: '이 답이 무엇을 정하는지(왜 중요한지)를 밝혀야 해요',
     });
   }
-  // ac-1 (D1): the user-reaching face (text + user_explanation) must not leak an
-  // un-glossed internal identifier. background/grounding/self_answer_attempts are not
-  // user-default surfaces, so they are excluded from this check.
+  // ac-1 (D1): the user-reaching face (text + user_explanation + recommended_answer) must not
+  // leak an un-glossed internal identifier. recommended_answer is shown to the user by default,
+  // so it is part of that face; background/grounding/self_answer_attempts are not user-default
+  // surfaces, so they are excluded from this check.
   const leaked = [
     ...findUnexplainedIdentifiers(candidate.text, opaqueVocab),
     ...findUnexplainedIdentifiers(candidate.user_explanation, opaqueVocab),
+    ...findUnexplainedIdentifiers(candidate.recommended_answer, opaqueVocab),
   ];
   if (leaked.length > 0) {
     violations.push({
@@ -220,6 +243,76 @@ export function validateQuestionContext(
     });
   }
   return { ok: violations.length === 0, violations };
+}
+
+// --- ac-2 (shared-detector-core): broken-character display normalization -------
+//
+// A DISPLAY transform, DELIBERATELY SEPARATE from the validateQuestionContext reject→regenerate
+// GATE: the gate decides whether a candidate may be ASKED; this only cleans a string that WILL be
+// shown. Deterministic and IDEMPOTENT — normalize(normalize(x)) === normalize(x): every rule maps
+// a broken/typographic char to a plain char that is not itself a rule input, so a second pass is a
+// no-op.
+export function normalizePresentedText(s: string): string {
+  const CONTROL = new RegExp('[\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F]', 'g');
+  return (
+    s
+      // Unicode replacement char (U+FFFD) — the "broken char" marker.
+      .replace(/�/g, '')
+      // C0/C1 control chars incl. ESC (U+001B) and C1 CSI (U+009B); KEEP only \t (U+0009) and
+      // \n (U+000A). Strips \r, NUL, and the ANSI-introducer control bytes.
+      .replace(CONTROL, '')
+      // em-dash (U+2014) / en-dash (U+2013) -> plain hyphen.
+      .replace(/[–—]/g, '-')
+      // curly double quotes (U+201C/U+201D) -> straight double quote.
+      .replace(/[“”]/g, '"')
+      // curly single quotes (U+2018/U+2019) -> straight apostrophe.
+      .replace(/[‘’]/g, "'")
+      // ellipsis (U+2026) -> three dots.
+      .replace(/…/g, '...')
+  );
+}
+
+// --- ac-3 (shared-detector-core): bounded loanword advisory --------------------
+//
+// A CLOSED seed list of common loanwords (외래어) that carry a plain Korean equivalent, matched by
+// LITERAL indexOf — NEVER a regex, never a broad \w+ open-world prose scan (that regressed on
+// Korean; see the IDENTIFIER_PATTERNS note above). The signal is ADVISORY register guidance
+// (외래어→한국어 per the project language rule), NOT a hard block. Code fences / inline `code` are
+// stripped first (stripCode) and an ASCII identifier-boundary hit is skipped (hasIdentifierBoundary),
+// so a seed token inside code or glued into an identifier is exempt — only free-standing prose flags.
+// The seed is BOUNDED and stable — deliberately NOT a growing per-leak blocklist (low-maintenance):
+// it names a few register smells, not every possible foreign word.
+export interface LoanwordSignal {
+  loanword: string;
+  suggestion: string;
+}
+
+export const LOANWORD_SEED: ReadonlyArray<LoanwordSignal> = [
+  { loanword: '밸런스', suggestion: '균형' },
+  { loanword: '케이스', suggestion: '사례' },
+  { loanword: '이슈', suggestion: '사안' },
+  { loanword: '리스크', suggestion: '위험' },
+];
+
+export function findLoanwords(s: string | undefined): LoanwordSignal[] {
+  if (s === undefined) return [];
+  const text = stripCode(s);
+  const found: LoanwordSignal[] = [];
+  for (const seed of LOANWORD_SEED) {
+    for (
+      let idx = text.indexOf(seed.loanword);
+      idx !== -1;
+      idx = text.indexOf(seed.loanword, idx + 1)
+    ) {
+      const start = idx;
+      const end = idx + seed.loanword.length;
+      // Skip a seed token that is glued into an ASCII identifier (same boundary discipline as the
+      // leak scan). Korean prose neighbours (particles) are non-ASCII, so free-standing use flags.
+      if (!hasIdentifierBoundary(text, start, end)) continue;
+      found.push(seed);
+    }
+  }
+  return found;
 }
 
 // --- ac-2 (impl-di-recommended-answer): deep-interview single-fire selector ---

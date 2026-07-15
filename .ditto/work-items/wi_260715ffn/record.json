@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260715ffn",
+  "title": "deep-interview 인터뷰 라운드 지연 — 질문 사이 수 분 대기",
+  "source_request": "deep-interview 인터뷰가 질문 사이 몇 분씩 걸려 '인터뷰'라 하기 어렵다 (사용자 실사용 관찰, 2026-07-15)",
+  "goal": "deep-interview 한 질문을 던지기까지의 대기 시간을 인터뷰로 느껴질 수준으로 줄인다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "follows": "wi_260715zba",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-15T01:33:42.894Z",
+  "updated_at": "2026-07-15T01:33:42.894Z"
+}
