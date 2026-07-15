@@ -23202,6 +23202,8 @@ var PRIME_DIRECTIVE = [
   "- \uC774 \uC694\uCCAD\uC5D0 work item\uC774 \uD544\uC694\uD55C\uC9C0, \uADF8\uB9AC\uACE0 \uC5B4\uB290 \uACBD\uB85C\uB85C \uAC08\uC9C0\uB294 \uB124\uAC00 \uD310\uB2E8\uD55C\uB2E4(\uBB34\uAC8C\uB85C \uB77C\uC6B0\uD305, \uAD8C\uACE0): \uC791\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \u2192 \uAC00\uBCBC\uC6B4 \uACBD\uB85C; \uBAA8\uD638\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uAC70\uB098 \uC5EC\uB7EC \uD45C\uBA74\uC5D0 \uAC78\uCE58\uAC70\uB098 \uC704\uD5D8\uC774 \uC120\uC5B8\uB418\uBA74 \u2192 \uBB34\uAC70\uC6B4 \uACBD\uB85C. \uD6C5\uC740 \uC808\uB300 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E4\uC9C0 \uC54A\uB294\uB2E4. \uD544\uC694\uD558\uB2E4\uACE0 \uBCF4\uBA74 \uB124\uAC00 \uC9C1\uC811 \uB4F1\uB85D\uD55C\uB2E4: `ditto work start`.",
   "- \uC0AC\uC6A9\uC790\uB9CC \uB2F5\uD560 \uC218 \uC788\uB294 \uAC83\uB9CC \uBB3B\uB294\uB2E4. \uB098\uBA38\uC9C0\uB294 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uC2A4\uC2A4\uB85C \uB2F5\uD55C\uB2E4.",
   "- \uC644\uB8CC\uB294 \uC99D\uAC70\uB85C\uB9CC \uC778\uC815\uB41C\uB2E4: \uC644\uB8CC(\uD1B5\uACFC)\uB85C \uD310\uC815\uD558\uAE30 \uC804\uC5D0 \uBAA8\uB4E0 acceptance criterion\uC744 \uC99D\uAC70\uC640 \uD568\uAED8 \uB2EB\uB294\uB2E4. \uAE30\uC900\uC740 work item \uC804\uCCB4\uC774\uC9C0 \uC911\uAC04 \uCCB4\uD06C\uD3EC\uC778\uD2B8\uAC00 \uC544\uB2C8\uB2E4.",
+  "- \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBCF4\uC5EC\uC904 \uC751\uB2F5\uC740 \uC0AC\uC6A9\uC790\uC758 \uC5B8\uC5B4\uB85C \uC790\uC5F0\uC2A4\uB7FD\uAC8C \uC4F4\uB2E4: \uB2E8\uC5B4 \uB2E8\uC704\uB85C \uC62E\uAE34 \uC9C1\uC5ED\uCCB4\xB7\uBC88\uC5ED\uD22C\uB97C \uD53C\uD558\uACE0, \uB2E8\uC5B4\uB294 \uC0AC\uC804\uC801 1:1 \uB300\uC751\uC774 \uC544\uB2C8\uB77C \uBB38\uB9E5\uC5D0 \uB9DE\uB294 \uB9D0\uB85C \uC62E\uAE34\uB2E4.",
+  "- \uC0AC\uC6A9\uC790\uAC00 \uBCFC \uC218 \uC5C6\uB294 \uAC83\uC744 \uB2EC\uB791 \uB4E4\uC9C0 \uC54A\uB294\uB2E4: \uC0AC\uC6A9\uC790\uAC00 \uD569\uC758\uD558\uC9C0 \uC54A\uC558\uAC70\uB098 \uB9E4\uBC88 \uCC3E\uC544\uBCF4\uC9C0 \uC54A\uC744 \uB0B4\uBD80 \uBC88\uD638\xB7\uC2DD\uBCC4\uC790\xB7\uBB38\uC11C\uB97C \uB73B \uC5C6\uC774 \uC774\uB984\uB9CC \uB300\uC9C0 \uC54A\uB294\uB2E4 \u2014 \uD544\uC694\uD558\uBA74 \uADF8 \uB0B4\uC6A9\uC744 \uADF8 \uC790\uB9AC\uC5D0 \uD480\uC5B4 \uB2F4\uACE0, \uC544\uB2C8\uBA74 \uBE80\uB2E4.",
   ...CHARTER_SELF_CHECKS.map((c3) => `- \uC2A4\uC2A4\uB85C \uC810\uAC80(${c3.id}): ${c3.question}`)
 ].join(`
 `);
@@ -55104,6 +55106,16 @@ function resolvePushGate(recipe2, repoRelDir) {
 // src/core/push-gate-cache.ts
 import { join as join83 } from "path";
 var MAX_GREEN_TREES = 20;
+var IGNORABLE_TRAIL_PREFIXES = [".ditto/work-items/", ".ditto/memory/"];
+function isTreeCleanIgnoringTrails(porcelain) {
+  const lines = porcelain.split(`
+`).filter((l2) => l2.length > 0);
+  return lines.every((line) => {
+    const status = line.slice(0, 2);
+    const path = line.slice(3);
+    return status === "??" && IGNORABLE_TRAIL_PREFIXES.some((pre) => path.startsWith(pre));
+  });
+}
 function shouldSkipGate(state, cache) {
   if (!state.clean)
     return false;
@@ -55190,7 +55202,7 @@ async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir12()) {
   const recipeRoot = await resolveRepoRootForCreate(start, homeDir);
   return { recipeRoot, repoRelDir: relative21(recipeRoot, start) };
 }
-function gitOut(gitArgs, cwd) {
+function gitOut(gitArgs, cwd, opts = {}) {
   try {
     const p2 = Bun.spawnSync(["git", ...gitArgs], {
       cwd,
@@ -55200,7 +55212,8 @@ function gitOut(gitArgs, cwd) {
     });
     if (p2.exitCode !== 0)
       return null;
-    return (p2.stdout?.toString() ?? "").trim();
+    const out = p2.stdout?.toString() ?? "";
+    return opts.trim === false ? out : out.trim();
   } catch {
     return null;
   }
@@ -55209,8 +55222,10 @@ function computeTreeState(cwd) {
   const tree = gitOut(["rev-parse", "HEAD^{tree}"], cwd);
   if (!tree)
     return;
-  const status = gitOut(["status", "--porcelain"], cwd);
-  return { tree, clean: status === "" };
+  const status = gitOut(["status", "--porcelain"], cwd, { trim: false });
+  if (status === null)
+    return { tree, clean: false };
+  return { tree, clean: isTreeCleanIgnoringTrails(status) };
 }
 function readGreenCache(cwd) {
   try {
@@ -58937,4 +58952,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=fc546f7b8bed928b92be5a0b3a8e73b33b8425d0c8c2e3fde59916524faca6f6
+//# ditto-src-stamp=a2b314545cb3ba04fe41cb17fcab8ae6504d01711e5eb6820b99a54b5766bed1

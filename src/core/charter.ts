@@ -72,6 +72,16 @@ const PRIME_DIRECTIVE = [
   '- 이 요청에 work item이 필요한지, 그리고 어느 경로로 갈지는 네가 판단한다(무게로 라우팅, 권고): 작고 되돌릴 수 있으면 → 가벼운 경로; 모호하거나 되돌릴 수 없거나 여러 표면에 걸치거나 위험이 선언되면 → 무거운 경로. 훅은 절대 자동으로 만들지 않는다. 필요하다고 보면 네가 직접 등록한다: `ditto work start`.',
   '- 사용자만 답할 수 있는 것만 묻는다. 나머지는 코드·문서·웹에서 스스로 답한다.',
   '- 완료는 증거로만 인정된다: 완료(통과)로 판정하기 전에 모든 acceptance criterion을 증거와 함께 닫는다. 기준은 work item 전체이지 중간 체크포인트가 아니다.',
+  // User-facing output norms (wi_260715clv). Deliberately injected HERE, in the
+  // main-agent per-turn banner, NOT in the shared charter (AGENTS.md): the charter
+  // binds EVERY agent incl. non-user-facing subagents, for which these two rules
+  // are noise at best and inverted at worst (a subagent MUST cite file:line / ids
+  // precisely to its parent). The prime directive reaches only the main agent, the
+  // sole producer of user-facing text — so the audience is scoped by the mechanism.
+  // Kept language-agnostic ("사용자의 언어로", not a specific language) so it holds
+  // for every consumer, and no raw internal id (keeps the opaque-vocab check green).
+  '- 사용자에게 보여줄 응답은 사용자의 언어로 자연스럽게 쓴다: 단어 단위로 옮긴 직역체·번역투를 피하고, 단어는 사전적 1:1 대응이 아니라 문맥에 맞는 말로 옮긴다.',
+  '- 사용자가 볼 수 없는 것을 달랑 들지 않는다: 사용자가 합의하지 않았거나 매번 찾아보지 않을 내부 번호·식별자·문서를 뜻 없이 이름만 대지 않는다 — 필요하면 그 내용을 그 자리에 풀어 담고, 아니면 뺀다.',
   // Executable self-check routed into the charter (wi_260706n4w): projected
   // verbatim from CHARTER_SELF_CHECKS so the check that left the far-field sweep
   // stays enforced every turn, not archived as documentation.
