@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715clv",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "76954662b9c17bd25c35d37dfdfe7828e249bb0709ae63af7239842640ac8e07",
+  "ts": "2026-07-15T07:02:37.944Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "unverified",
+    "evidence": []
+  }
+}

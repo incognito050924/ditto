@@ -7,36 +7,66 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "root ./AGENTS.md §8(응답 방식)에 '자연스러운 한국어 — 직역체·번역투 회피, 언어권 사고·정서에 맞는 어순·단어선택, 문맥에 맞는 단어 번역' 지침 문단이 존재한다",
+      "statement": "src/core/charter.ts의 PRIME_DIRECTIVE 배열이 '사용자의 언어로 자연스럽게 쓴다' 문자열을 포함한다 — grep 1건 이상, 직역체·번역투 회피·문맥 단어 규범(언어중립)",
       "verdict": "pass",
       "evidence": [
         {
           "kind": "command",
-          "command": "bash -c grep -q \"자연스러운 한국어로 쓴다. 영어를 단어 단위로 옮긴 직역체\" AGENTS.md && echo AC1_PRESENT",
+          "command": "bash -c grep -q '사용자의 언어로 자연스럽게 쓴다' src/core/charter.ts && echo AC1_OK",
           "summary": "exit 0"
+        }
+      ],
+      "superseded": [
+        {
+          "statement": "root ./AGENTS.md §8(응답 방식)에 '자연스러운 한국어 — 직역체·번역투 회피, 언어권 사고·정서에 맞는 어순·단어선택, 문맥에 맞는 단어 번역' 지침 문단이 존재한다",
+          "reason": "접근 전환: 헌장 §8(모든 에이전트 구속) → main-agent 전용 prime-directive hook. 사용자 결정(서브에이전트 오적용·컨텍스트비용 회피)"
         }
       ]
     },
     {
       "id": "ac-2",
-      "statement": "root ./AGENTS.md §8에 '사용자가 볼 수 없는 내부 번호·식별자·문서를 뜻 없이 달랑 언급하지 않는다(내용 인라인 또는 생략)' 지침 문단이 존재한다",
+      "statement": "src/core/charter.ts의 PRIME_DIRECTIVE 배열이 '달랑 들지 않는다' 문자열을 포함한다 — grep 1건 이상, 사용자가 볼 수 없는 내부 번호·식별자·문서 이름만 대지 않는 규범",
       "verdict": "pass",
       "evidence": [
         {
           "kind": "command",
-          "command": "bash -c grep -q \"사용자가 볼 수 없는 것을 달랑 들지 않는다. 사용자가 합의하지 않았거나\" AGENTS.md && echo AC2_PRESENT",
+          "command": "bash -c grep -q '달랑 들지 않는다' src/core/charter.ts && echo AC2_OK",
           "summary": "exit 0"
+        }
+      ],
+      "superseded": [
+        {
+          "statement": "root ./AGENTS.md §8에 '사용자가 볼 수 없는 내부 번호·식별자·문서를 뜻 없이 달랑 언급하지 않는다(내용 인라인 또는 생략)' 지침 문단이 존재한다",
+          "reason": "접근 전환: 헌장 §8(모든 에이전트 구속) → main-agent 전용 prime-directive hook. 사용자 결정(서브에이전트 오적용·컨텍스트비용 회피)"
         }
       ]
     },
     {
       "id": "ac-3",
-      "statement": "빌드 후 resources/managed/AGENTS.md·resources/managed/CLAUDE.md·dist/plugin/resources/managed/AGENTS.md 세 파일 모두 두 지침 문단을 포함하고 charter-manifest.json shas 배열에 새 정규화 SHA가 추가된다",
+      "statement": "AGENTS.md·resources/managed/AGENTS.md·resources/managed/CLAUDE.md·root CLAUDE.md에서 '자연스러운 한국어로 쓴다' grep 결과가 0건이다 — 이전 §8 charter 변경 revert 확인(규범이 서브에이전트 헌장에 없음)",
       "verdict": "pass",
       "evidence": [
         {
           "kind": "command",
-          "command": "bash -c \nP1=\"자연스러운 한국어로 쓴다\"; P2=\"달랑 들지 않는다\"; SHA=\"cba30bd6ec880ed80cf2b2a682efccccf6a01ea5db26322b93f3187a9fe401fa\";\nfor f in resources/managed/AGENTS.md resources/managed/CLAUDE.md dist/plugin/resources/managed/AGENTS.md; do\n  grep -q \"$P1\" \"$f\" && grep -q \"$P2\" \"$f\" || { echo \"MISSING in $f\"; exit 1; };\ndone;\ngrep -q \"$SHA\" resources/managed/charter-manifest.json || { echo \"SHA missing from manifest\"; exit 1; };\necho \"AC3_ALL_PRESENT: managed3+manifestSHA\"",
+          "command": "bash -c total=0; for f in AGENTS.md resources/managed/AGENTS.md resources/managed/CLAUDE.md CLAUDE.md; do c=$(grep -c \"자연스러운 한국어로 쓴다\" \"$f\"); total=$((total+c)); done; [ \"$total\" -eq 0 ] && echo \"AC3_OK: 헌장 언어지침 0건\" || { echo \"FAIL: $total\"; exit 1; }",
+          "summary": "exit 0"
+        }
+      ],
+      "superseded": [
+        {
+          "statement": "빌드 후 resources/managed/AGENTS.md·resources/managed/CLAUDE.md·dist/plugin/resources/managed/AGENTS.md 세 파일 모두 두 지침 문단을 포함하고 charter-manifest.json shas 배열에 새 정규화 SHA가 추가된다",
+          "reason": "접근 전환: 헌장 §8(모든 에이전트 구속) → main-agent 전용 prime-directive hook. 사용자 결정(서브에이전트 오적용·컨텍스트비용 회피)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "rebuild 후 bin/ditto가 방출하는 charterProjection() 출력이 두 규범 문자열을 포함하고 전체 bun test가 0 fail로 통과한다 — opaque-vocab·identifier·cue 체크 무회귀",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c \necho \"{\\\"prompt\\\":\\\"x\\\",\\\"session_id\\\":\\\"s\\\",\\\"transcript_path\\\":\\\"/tmp/t\\\",\\\"cwd\\\":\\\"/Users/ecoletree/dev/project/ditto\\\"}\" | ./bin/ditto hook user-prompt-submit 2>/dev/null > /tmp/hookout.txt\ngrep -q \"사용자의 언어로 자연스럽게 쓴다\" /tmp/hookout.txt && grep -q \"달랑 들지 않는다\" /tmp/hookout.txt || { echo \"hook missing norms\"; exit 1; }\ngrep -qE \"Ran [0-9]+ tests across\" /tmp/ditto_test2.log && grep -qE \"^0 fail| 0 fail\" /tmp/ditto_test2.log || { echo \"test not green\"; exit 1; }\necho \"AC4_OK: hook emits both norms + full suite 0 fail\"",
           "summary": "exit 0"
         }
       ]
@@ -46,13 +76,12 @@
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
-    ".ditto/local/work-items/wi_260715clv/completion.json",
-    ".ditto/local/work-items/wi_260715clv/work-item.json",
-    ".ditto/memory/events/memevt_retro_34d61b25850dff27.json",
-    ".ditto/memory/events/memevt_retro_bd0767dd39a62619.json",
-    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json",
-    ".ditto/work-items/wi_260715clv/",
-    ".ditto/work-items/wi_260715ujg/"
+    "AGENTS.md",
+    "CLAUDE.md",
+    "resources/managed/AGENTS.md",
+    "resources/managed/CLAUDE.md",
+    "src/core/charter.ts",
+    "bin/ditto"
   ],
   "worktrees": [],
   "autopilot_exempt": true,
@@ -65,7 +94,8 @@
   },
   "runs": [],
   "handoff_path": ".ditto/local/handoff/wi_260715clv.md",
+  "started_at_sha": "150eb82a8a5f019f53afa7125c59aadfc5e9dd51",
   "created_at": "2026-07-15T04:30:30.114Z",
-  "updated_at": "2026-07-15T05:02:30.994Z",
-  "closed_at": "2026-07-15T05:02:30.991Z"
+  "updated_at": "2026-07-15T07:09:36.375Z",
+  "closed_at": "2026-07-15T07:09:36.373Z"
 }

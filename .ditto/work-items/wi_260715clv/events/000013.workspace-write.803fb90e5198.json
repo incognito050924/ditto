@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715clv",
+  "seq": 13,
+  "actor": "workspace-write",
+  "event_id": "803fb90e51980791ac7e5ef01b999d8cd114c533d401c1690b520117a787b169",
+  "ts": "2026-07-15T07:09:20.537Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c \necho \"{\\\"prompt\\\":\\\"x\\\",\\\"session_id\\\":\\\"s\\\",\\\"transcript_path\\\":\\\"/tmp/t\\\",\\\"cwd\\\":\\\"/Users/ecoletree/dev/project/ditto\\\"}\" | ./bin/ditto hook user-prompt-submit 2>/dev/null > /tmp/hookout.txt\ngrep -q \"사용자의 언어로 자연스럽게 쓴다\" /tmp/hookout.txt && grep -q \"달랑 들지 않는다\" /tmp/hookout.txt || { echo \"hook missing norms\"; exit 1; }\ngrep -qE \"Ran [0-9]+ tests across\" /tmp/ditto_test2.log && grep -qE \"^0 fail| 0 fail\" /tmp/ditto_test2.log || { echo \"test not green\"; exit 1; }\necho \"AC4_OK: hook emits both norms + full suite 0 fail\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

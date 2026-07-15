@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715clv",
+  "seq": 11,
+  "actor": "workspace-write",
+  "event_id": "86d6e238f9f07e6dc776aaf21a7b1efe46995061e90aec7d9987327ec3078621",
+  "ts": "2026-07-15T07:04:01.684Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -q '달랑 들지 않는다' src/core/charter.ts && echo AC2_OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
