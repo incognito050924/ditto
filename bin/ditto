@@ -58835,7 +58835,7 @@ var worktreeCreate = defineCommand({
 var worktreeRemove = defineCommand({
   meta: {
     name: "remove",
-    description: "Tear down a work item worktree(s). Dirty/unmerged worktrees are blocked unless --force (explicit approval)"
+    description: "Tear down a work item worktree(s). Dirty/unlanded worktrees are blocked unless --force (explicit approval)"
   },
   args: {
     workId: {
@@ -58845,7 +58845,7 @@ var worktreeRemove = defineCommand({
     },
     force: {
       type: "boolean",
-      description: "Explicit approval: remove even dirty/unmerged worktrees (-f / -D)",
+      description: "Explicit approval: remove even dirty/unlanded worktrees (-f / -D)",
       default: false
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
@@ -59077,4 +59077,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=1b2fc489e81f86d20201415f2ae60d57d70ae71fa1c7230248031d9ec45c0ff9
+//# ditto-src-stamp=f20bfc3077b68b7a0f076f284953f62847a085ec52ddffc18aa4532b2fecc2ce

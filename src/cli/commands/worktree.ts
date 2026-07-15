@@ -84,7 +84,7 @@ const worktreeRemove = defineCommand({
   meta: {
     name: 'remove',
     description:
-      'Tear down a work item worktree(s). Dirty/unmerged worktrees are blocked unless --force (explicit approval)',
+      'Tear down a work item worktree(s). Dirty/unlanded worktrees are blocked unless --force (explicit approval)',
   },
   args: {
     workId: {
@@ -94,7 +94,7 @@ const worktreeRemove = defineCommand({
     },
     force: {
       type: 'boolean',
-      description: 'Explicit approval: remove even dirty/unmerged worktrees (-f / -D)',
+      description: 'Explicit approval: remove even dirty/unlanded worktrees (-f / -D)',
       default: false,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
