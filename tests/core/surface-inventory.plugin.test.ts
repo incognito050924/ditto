@@ -1,40 +1,30 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claudeCodeHostAdapter } from '~/core/hosts';
-import { collectSurfaceInventory } from '~/core/surface-inventory';
-import { surfaceCatalog } from '~/schemas/surface-catalog';
+import { collectSurfaceInventory, generateSurfaceCatalog } from '~/core/surface-inventory';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..');
 
-const catalogAbsent = !existsSync(join(REPO_ROOT, '.ditto', 'local', 'surfaces.json'));
-
 describe('DITTO plugin surface inventory (M1.6)', () => {
-  test.skipIf(catalogAbsent)(
-    'checked-in .ditto/local/surfaces.json exists and is non-empty (no false-green)',
-    () => {
-      const raw = JSON.parse(
-        readFileSync(join(REPO_ROOT, '.ditto', 'local', 'surfaces.json'), 'utf8'),
-      );
-      const parsed = surfaceCatalog.parse(raw);
-      expect(parsed.surfaces.length).toBe(49); // 18 skills (+coverage-taxonomy) + 24 agents (21 plugin + 3 .claude/agents variants, f95ebec) + 6 hooks + 1 plugin
-    },
-  );
+  // Code-self-contained (wi_260715ujg): the expected side is the pure deterministic
+  // code scan (generateSurfaceCatalog), asserted against a SOURCE-PINNED committed
+  // count anchor — NOT the gitignored, per-developer .ditto/local/surfaces.json (which
+  // can be absent on a fresh clone/worktree, and whose pre-push regen flaked concurrent
+  // pushes). The hardcoded 49 is the real anchor: any genuine skill/agent/hook ADD or
+  // DELETE changes the scan count and turns this RED (drift still caught, not silent).
+  test('code-scanned catalog has the source-pinned surface count (no false-green)', async () => {
+    const cat = await generateSurfaceCatalog([claudeCodeHostAdapter], REPO_ROOT);
+    expect(cat.surfaces.length).toBe(49); // 18 skills (+coverage-taxonomy) + 24 agents (21 plugin + 3 .claude/agents variants, f95ebec) + 6 hooks + 1 plugin
+  });
 
-  test.skipIf(catalogAbsent)(
-    'declared catalog matches the actual plugin-root scan (no drift)',
-    async () => {
-      const report = await collectSurfaceInventory([claudeCodeHostAdapter], REPO_ROOT);
-      expect(report.mismatch_count).toBe(0);
-      expect(report.findings).toEqual([]);
-      // hook + plugin surfaces are inventoried, not just skills/agents/commands
-      const kinds = new Set(report.surfaces.map((s) => s.kind));
-      expect(kinds.has('hook')).toBe(true);
-      expect(kinds.has('plugin')).toBe(true);
-    },
-  );
+  test('code-scanned catalog includes hook + plugin surfaces (not just skills/agents/commands)', async () => {
+    const cat = await generateSurfaceCatalog([claudeCodeHostAdapter], REPO_ROOT);
+    const kinds = new Set(cat.surfaces.map((s) => s.kind));
+    expect(kinds.has('hook')).toBe(true);
+    expect(kinds.has('plugin')).toBe(true);
+  });
 });
 
 describe('catalog false-green guards', () => {

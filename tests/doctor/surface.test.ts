@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -240,13 +239,13 @@ describe('doctor surface', () => {
 });
 
 describe('generated surface catalog (G6: code-generated, no hand drift)', () => {
-  test('regenerating from code equals the committed .ditto/local/surfaces.json', async () => {
-    const committed = JSON.parse(
-      readFileSync(join(repoRoot, '.ditto', 'local', 'surfaces.json'), 'utf8'),
-    );
+  test('code-generated catalog has the source-pinned surface count (no hand drift)', async () => {
+    // Code-self-contained (wi_260715ujg): assert the pure code scan against a committed
+    // count literal instead of diffing the gitignored, per-developer
+    // .ditto/local/surfaces.json (absent on a fresh clone/worktree, and whose pre-push
+    // regen flaked concurrent pushes). The hardcoded 49 is the anchor — a surface added
+    // or removed changes the scan count and fails here (drift caught, not silent).
     const generated = await generateSurfaceCatalog(listHostAdapters(), repoRoot);
-    // committed catalog IS the generator's output; a surface added without
-    // running scripts/gen-surfaces.ts makes this fail (drift caught, not silent).
-    expect(generated).toEqual(committed);
+    expect(generated.surfaces.length).toBe(49);
   });
 });

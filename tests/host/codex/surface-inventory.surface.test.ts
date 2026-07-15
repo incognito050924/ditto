@@ -3,8 +3,9 @@
 //
 // Asserts the codex adapter scans its plugin root into host=codex surfaces
 // (.codex-plugin/plugin.json -> plugin, skills/<id>/SKILL.md -> skill,
-// hooks/hooks.json -> hook) and that the codex catalog (surfaces.codex.json)
-// matches the actual scan with no drift. Agent surfaces (.codex/agents/*.toml)
+// hooks/hooks.json -> hook) and that the code-scanned codex catalog has a
+// source-pinned surface count (code-self-contained — no on-disk surfaces.codex.json
+// dependency, wi_260715ujg). Agent surfaces (.codex/agents/*.toml)
 // are produced by agent projection (M4 / N8); this slice wires the scanner
 // capability but does not assert any agent surface is discovered.
 import { describe, expect, test } from 'bun:test';
@@ -13,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { collectCapabilityInventory } from '~/core/capability-inventory';
 import { codexHostAdapter } from '~/core/hosts';
-import { collectSurfaceInventory } from '~/core/surface-inventory';
+import { generateSurfaceCatalog } from '~/core/surface-inventory';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 
@@ -69,10 +70,15 @@ describe('Codex host surface inventory (M3)', () => {
     }
   });
 
-  test('codex catalog matches the actual codex scan (no drift)', async () => {
-    const report = await collectSurfaceInventory([codexHostAdapter], REPO_ROOT);
-    expect(report.mismatch_count).toBe(0);
-    expect(report.findings).toEqual([]);
+  test('code-scanned codex catalog has the source-pinned surface count (all host=codex)', async () => {
+    // Code-self-contained (wi_260715ujg): scan the codex plugin root directly instead
+    // of diffing against the gitignored, per-developer surfaces.codex.json (absent on a
+    // fresh clone/worktree, and whose pre-push regen flaked concurrent pushes). The
+    // pinned count 25 is the committed anchor — a codex skill/hook/plugin ADD or DELETE
+    // changes the scan count and turns this RED.
+    const cat = await generateSurfaceCatalog([codexHostAdapter], REPO_ROOT, 'surfaces.codex.json');
+    expect(cat.surfaces.length).toBe(25);
+    expect(cat.surfaces.every((s) => s.host === 'codex')).toBe(true);
   });
 
   test('codex declared hooks == registered hooks (capability drift = 0)', async () => {

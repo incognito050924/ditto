@@ -10,12 +10,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { claudeCodeHostAdapter } from '~/core/hosts';
 import { SessionPointerStore } from '~/core/session-pointer';
-import { collectSurfaceInventory } from '~/core/surface-inventory';
+import { collectSurfaceInventory, generateSurfaceCatalog } from '~/core/surface-inventory';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type HookHandler, KILL_SWITCH, noOpHandler, runHook } from '~/hooks/runtime';
 import { stopHandler } from '~/hooks/stop';
 import { resolveActiveWorkItem, userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
-import { surfaceCatalog } from '~/schemas/surface-catalog';
 
 const REPO = join(import.meta.dir, '..', '..');
 const readText = (rel: string): string => readFileSync(join(REPO, rel), 'utf8');
@@ -563,16 +562,18 @@ describe('M1.5b — agent skeleton (v0 8종, post-v0 부재)', () => {
 // ─────────────────────────────────────────────────────────────────────────
 describe('M1.6 — surface inventory 테스트 (drift·false-green 차단)', () => {
   // acceptance: drift 감지(누락/잉여 fail), hook+plugin 포함, 부재·빈 목록 → fail.
-  test('실제 plugin-root 스캔 ↔ checked-in catalog 일치(drift 0)', async () => {
-    const report = await collectSurfaceInventory([claudeCodeHostAdapter], REPO);
-    expect(report.mismatch_count).toBe(0);
-    expect(report.findings).toEqual([]);
+  // Code-self-contained (wi_260715ujg): 실 plugin-root 스캔을 커밋된 count 앵커와 대조한다.
+  // gitignored per-developer .ditto/local/surfaces.json 부재로 게이트가 flake 하지 않게 —
+  // 하드코딩 49 가 앵커라 skill/agent/hook 추가·삭제 시 스캔 개수가 바뀌어 RED. 드리프트
+  // 검출 자체(누락/잉여 fail)는 아래 tmp-fixture 케이스가 그대로 exercise 한다.
+  test('실제 plugin-root 코드 스캔이 고정된 surface 개수를 낸다 (추가·삭제 → RED)', async () => {
+    const cat = await generateSurfaceCatalog([claudeCodeHostAdapter], REPO);
+    expect(cat.surfaces.length).toBe(49);
   });
 
-  test('catalog 에 hook · plugin surface 포함 (skill/agent만이 아님)', () => {
-    const raw = JSON.parse(readText('.ditto/local/surfaces.json'));
-    const parsed = surfaceCatalog.parse(raw);
-    const kinds = new Set(parsed.surfaces.map((s) => s.kind));
+  test('catalog 에 hook · plugin surface 포함 (skill/agent만이 아님)', async () => {
+    const cat = await generateSurfaceCatalog([claudeCodeHostAdapter], REPO);
+    const kinds = new Set(cat.surfaces.map((s) => s.kind));
     expect(kinds.has('hook')).toBe(true);
     expect(kinds.has('plugin')).toBe(true);
   });

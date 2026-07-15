@@ -39,10 +39,6 @@ export const ALLOWLIST = new Set<string>([
   // 이 가드의 단위 테스트. 위반 패턴 문자열을 인메모리 fixture 로만 담는다(실 파일에
   // 안 씀). 단일-라인 텍스트 스캔이 그 fixture 문자열을 위반으로 오인하므로 면제한다.
   'tests/scripts/check-test-isolation.test.ts',
-  // 실 .ditto/local/surfaces.json 을 읽어 카탈로그 drift 를 검출(읽기). 후속 수정 대상.
-  'tests/core/surface-inventory.plugin.test.ts',
-  // 실 surfaces.json 을 코드 재생성본과 비교(읽기). 후속 수정 대상.
-  'tests/doctor/surface.test.ts',
   // self-host: 빌드 산출물 stamp 를 실 repo(process.cwd) 기준으로 계산(읽기/분석).
   'tests/core/build-stamp.test.ts',
   // self-host: 실 .claude/agents variant 카탈로그를 실 repo 기준으로 로드(읽기).

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { parseRecipe } from '~/core/recipe/parse';
 
 // ac-7 (wi_260629i9c) — DOGFOOD: ditto's OWN hardcoded pre-push is replaced by the
-// recipe-driven gate, while keeping all-branch testing and the surfaces:gen prestep.
+// recipe-driven gate, while keeping all-branch testing.
 // Deterministic unit test: read the checked-in files, assert structure. NO real push.
 
 const REPO_ROOT = join(import.meta.dir, '..', '..');
@@ -39,9 +39,13 @@ describe('.githooks/pre-push — delegates the gate to ditto push-gate, keeps di
     expect(prePush).not.toMatch(/^\s*(if\s+!\s+)?bun test\b/m);
   });
 
-  test('keeps the NON-BLOCKING surfaces:gen prestep (failure → warn + proceed)', () => {
-    // `bun run surfaces:gen ... || echo ...` — the `||` proves it does not block.
-    expect(prePush).toMatch(/bun run surfaces:gen[^\n]*\|\|[^\n]*echo/);
+  test('no longer regenerates the gitignored surfaces catalog before the gate', () => {
+    // wi_260715ujg: the surfaces:gen prestep regenerated a gitignored per-developer file
+    // and flaked concurrent-session pushes; it is removed now that the surface-drift
+    // tests are code-self-contained (no on-disk catalog dependency). The gate delegation
+    // to ./bin/ditto push-gate must still be present.
+    expect(prePush).not.toContain('surfaces:gen');
+    expect(prePush).toContain('./bin/ditto push-gate');
   });
 
   test('keeps the bun-absent graceful skip at the top', () => {

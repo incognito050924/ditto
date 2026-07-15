@@ -65,8 +65,10 @@ describe('detectIsolationViolations (pure)', () => {
 });
 
 describe('ALLOWLIST', () => {
-  test('contains the known pre-existing real-repo .ditto cases', () => {
-    expect(ALLOWLIST.has('tests/core/surface-inventory.plugin.test.ts')).toBe(true);
-    expect(ALLOWLIST.has('tests/doctor/surface.test.ts')).toBe(true);
+  test('contains the known self-host real-repo .ditto cases', () => {
+    // self-host cases that legitimately analyze the real repo (build stamp,
+    // agent-variant catalog) — the allowlist must carry these known cases.
+    expect(ALLOWLIST.has('tests/core/build-stamp.test.ts')).toBe(true);
+    expect(ALLOWLIST.has('tests/core/agent-variants.test.ts')).toBe(true);
   });
 });
