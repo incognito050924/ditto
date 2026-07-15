@@ -4,9 +4,10 @@ import { realpathSync } from 'node:fs';
 import { mkdir, readFile, readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import type { WorkItemWorktree } from '~/schemas/work-item';
+import { scrubCredentials } from './chain-drive';
 import { localDir } from './ditto-paths';
 import { ensureDir } from './fs';
-import { aheadBehind, isWorkingTreeClean } from './git';
+import { aheadBehind, isWorkingTreeClean, landBranchToOrigin } from './git';
 import { fileExists } from './hosts/shared';
 import { WorkItemStore } from './work-item-store';
 
@@ -497,37 +498,22 @@ export function worktreeBindingHint(
   return `→ cd ${join(repoRoot, ws.worktree_path)} 후 거기서 세션을 열면 자동으로 이 work item(${workItemId})에 바인딩됩니다`;
 }
 
-/** A branch has commits not reachable from the owning repo's HEAD (would be lost). */
-function branchHasUnmergedCommits(cwd: string, branch: string): boolean {
-  try {
-    const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
-    const tip = execFileSync('git', ['rev-parse', branch], { cwd, encoding: 'utf8' }).trim();
-    try {
-      execFileSync('git', ['merge-base', '--is-ancestor', tip, head], {
-        cwd,
-        stdio: ['ignore', 'ignore', 'ignore'],
-      });
-      return false; // tip reachable from HEAD → fully merged
-    } catch {
-      return true; // not an ancestor → unmerged commits exist
-    }
-  } catch {
-    return true; // unresolvable branch/HEAD → treat as unmerged (fail safe)
-  }
-}
-
 export interface WorktreeRemovalResult {
   removed: WorkItemWorktree[];
-  /** Worktrees left intact because they were dirty/unmerged and not force-approved. */
+  /** Worktrees left intact because they were dirty/unlanded and not force-approved. */
   blocked: { worktree: WorkItemWorktree; reason: string }[];
 }
 
 /**
- * ac-2: tear down a work item's worktree(s). A worktree with uncommitted/untracked
- * changes OR a branch with unmerged commits is BLOCKED — never deleted without
- * explicit approval (`force`). Clean+merged worktrees are removed (`git worktree
- * remove`, then `git branch -d`). With `force` the removal is unconditional
- * (`-f` / `-D`) — the explicit approval.
+ * ac-2 / C4: tear down a work item's worktree(s). A worktree with uncommitted/untracked
+ * changes OR a branch NOT yet LANDED to origin/<default> is BLOCKED — never deleted
+ * without explicit approval (`force`). "Landed" = the branch tip is reachable from
+ * `refs/remotes/origin/<default>` (branchLandedToOrigin), NOT local-HEAD ancestry: a
+ * land PUSHES and never merges into the shared local checkout, so a local-HEAD check
+ * would read every landed branch as "unmerged" and orphan its worktree. A confirmed-
+ * landed (or force-approved) branch's local ref is dropped with `-D` — the commits are
+ * durably on origin, so the local ref is redundant; a branch whose push FAILED stays
+ * blocked and is never force-deleted.
  *
  * cov-d-meta-disk-consistency: the work-item meta drops ONLY the worktrees actually
  * removed, so a partial teardown (some blocked) leaves accurate meta. Sub-repo
@@ -554,9 +540,11 @@ export async function removeWorktreesForWorkItem(
       const ownerCwd = wt.owning_repo === '.' ? repoRoot : join(repoRoot, wt.owning_repo);
       const wtAbs = join(repoRoot, wt.worktree_path);
       const dirty = !isWorkingTreeClean(wtAbs);
-      const unmerged = branchHasUnmergedCommits(ownerCwd, wt.branch);
-      if ((dirty || unmerged) && !force) {
-        const why = [dirty ? 'uncommitted changes' : null, unmerged ? 'unmerged commits' : null]
+      // C4: "removable" now means LANDED to origin/<default> (durable), not merged into
+      // the local checkout (which a push never touches).
+      const unlanded = !branchLandedToOrigin(ownerCwd, wt.branch);
+      if ((dirty || unlanded) && !force) {
+        const why = [dirty ? 'uncommitted changes' : null, unlanded ? 'unlanded commits' : null]
           .filter(Boolean)
           .join(' + ');
         blocked.push({ worktree: wt, reason: `${why}; refusing to delete without --force` });
@@ -567,7 +555,10 @@ export async function removeWorktreesForWorkItem(
         if (force) removeArgs.push('--force');
         removeArgs.push('--', wtAbs);
         execFileSync('git', removeArgs, { cwd: ownerCwd, stdio: ['ignore', 'ignore', 'pipe'] });
-        execFileSync('git', ['branch', force ? '-D' : '-d', '--', wt.branch], {
+        // `-D` (not `-d`): we only reach here for a branch that is LANDED to origin
+        // (commits durable there) or force-approved, so `-d`'s local-merge check — which
+        // a pushed-but-not-locally-merged branch always fails — is exactly the wrong gate.
+        execFileSync('git', ['branch', '-D', '--', wt.branch], {
           cwd: ownerCwd,
           stdio: ['ignore', 'ignore', 'pipe'],
         });
@@ -591,94 +582,143 @@ export async function removeWorktreesForWorkItem(
   });
 }
 
-// ── Merge-back of a work item's worktree branch(es) (wi_260627t82) ────────────
-// The one net-new git MUTATION of the worktree-sequential driver. It lives here
-// (not git.ts) to reach the module-private helpers a safe merge needs:
-// withWorktreeLock, branchHasUnmergedCommits, assertSafeArg, and the ownerCwd
-// derivation. `git merge --no-edit <branch>` folds the worktree branch's commits
-// into the OWNING repo's current HEAD WITHOUT checking the branch out — exactly
-// the ref `branchHasUnmergedCommits(ownerCwd, branch)` (and the removal clean+merged
-// guard) inspect — so a clean merge makes `removeWorktreesForWorkItem` able to tear
-// the worktree down.
+// ── Direct-to-origin land of a work item's worktree branch(es) (wi_2607156f8) ──
+// The one net-new git NETWORK mutation of the worktree-sequential driver. It lives
+// here (not git.ts) to reach the module-private helpers a safe land needs:
+// withWorktreeLock, assertSafeArg, and the per-owning-repo ordering. Landing PUSHES a
+// work-item branch's commits straight to origin/<default> — it NEVER merges into the
+// shared local checkout, so a land can't touch the main working tree. The teardown
+// gate (removeWorktreesForWorkItem) reads the SAME signal a land confirms: the branch
+// tip reachable from `refs/remotes/origin/<default>` (branchLandedToOrigin), NOT
+// local-HEAD ancestry (which never reflects a push).
 
-type MergeStatus = 'merged' | 'conflicted' | 'skipped';
+/**
+ * The remote's default branch, resolved FROM THE REMOTE via
+ * `git ls-remote --symref origin HEAD` (`ref: refs/heads/<default>\tHEAD`). Returns
+ * null when there is no origin, or origin/HEAD is unset/unresolvable/stale (no real
+ * branch to name). This is the LAND destination, so it is derived from the REMOTE —
+ * never the local-checkout fallback `detectBaseBranch` uses (which could name a branch
+ * that is not the remote default and mis-target the push).
+ */
+function resolveOriginDefaultBranch(cwd: string): string | null {
+  let out: string;
+  try {
+    out = execFileSync('git', ['ls-remote', '--symref', 'origin', 'HEAD'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return null; // no origin / cannot reach it
+  }
+  // `ref: refs/heads/<default>\tHEAD` names the default; a following `<sha>\tHEAD` line
+  // proves it resolves to a real commit (an empty/unborn remote HEAD has no sha line).
+  const ref = out.match(/^ref:\s+refs\/heads\/(.+?)\s+HEAD$/m)?.[1]?.trim();
+  const hasSha = /^[0-9a-f]{40}\s+HEAD$/m.test(out);
+  if (!ref || !hasSha) return null; // unset / unresolvable / stale
+  return ref;
+}
 
-export interface WorktreeMergeOutcome {
+/**
+ * Has `branch` LANDED on the remote default — is its tip reachable from
+ * `refs/remotes/origin/<default>`? After a successful `git push origin branch:default`
+ * the local tracking ref is updated to the pushed tip, so this is true for a landed
+ * branch and FALSE for one whose push failed (or never happened) — the teardown safety
+ * signal (C4). No origin / no default → false (fail-safe: never confirm a land we
+ * cannot verify, so an unlanded worktree is preserved, never force-deleted).
+ */
+function branchLandedToOrigin(cwd: string, branch: string): boolean {
+  const def = resolveOriginDefaultBranch(cwd);
+  if (def === null) return false;
+  try {
+    execFileSync('git', ['rev-parse', '--verify', branch], {
+      cwd,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    execFileSync('git', ['merge-base', '--is-ancestor', branch, `refs/remotes/origin/${def}`], {
+      cwd,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Per owning-repo land outcome status (C5: distinct failure classes, never collapsed). */
+export type LandStatus =
+  | 'landed' // pushed to origin/<default> (or already reachable there — idempotent)
+  | 'skipped-no-origin' // no origin / undeterminable-or-stale / degenerate default (benign)
+  | 'push-gate-rejected'
+  | 'auth-or-network-failed'
+  | 'non-ff-retry-exhausted'
+  | 'rebase-conflict';
+
+export interface WorktreeLandOutcome {
   worktree: WorkItemWorktree;
-  status: MergeStatus;
+  status: LandStatus;
   reason?: string;
 }
 
-export interface WorktreeMergeResult {
-  outcomes: WorktreeMergeOutcome[];
-  /** Every owning repo's branch is now reachable from its HEAD (nothing left ahead). */
-  allMerged: boolean;
+export interface WorktreeLandResult {
+  outcomes: WorktreeLandOutcome[];
+  /** every owning repo's branch is landed on origin/<default> (teardown precondition). */
+  allLanded: boolean;
+  /** at least one owning repo actually landed (partial-land signal for C1). */
+  anyLanded: boolean;
+}
+
+/** A benign outcome is "nothing to fix here" — never a force-delete, never a failure. */
+function isBenignLand(status: LandStatus): boolean {
+  return status === 'landed' || status === 'skipped-no-origin';
 }
 
 /**
- * Merge `branch`'s commits into `ownerCwd`'s CURRENT HEAD (no checkout, no rebase).
- *  - SELF-MERGE GUARD: if the owning checkout is itself on `branch` (the no-origin
- *    fallback where `detectBaseBranch` returned the same branch) there is nothing to
- *    merge into — `skipped`, never a degenerate self-merge.
- *  - AHEAD GATE: if the branch is already an ancestor of HEAD (nothing ahead) the
- *    merge is a no-op → `merged` (idempotent; safe to re-run on resume).
- *  - Otherwise `git merge --no-edit -- <branch>` (`--` ends option parsing). A clean
- *    fast-forward/3-way → `merged`; a conflict → `git merge --abort` (best effort) then
- *    `conflicted` carrying the raw git output — stdout (where the CONFLICT lines are)
- *    plus stderr (the caller scrubs it). NEVER rebase.
+ * Land ONE owning repo's `branch` to origin, from its worktree checkout `wtAbs`
+ * (where `branch` is checked out, so a non-FF rebase acts on it). SELF-GUARDS:
+ *  - no origin / undeterminable-or-stale default / default == branch (degenerate) →
+ *    a distinct 'skipped-no-origin' (never a wrong-branch push).
+ *  - already reachable from origin/<default> → 'landed' (idempotent resume).
+ * Otherwise `landBranchToOrigin` pushes (force-free, non-FF fetch+rebase+re-push with a
+ * bounded, per-attempt-timed retry). Its raw git output is credential-SCRUBBED (C6)
+ * before it enters the reported reason.
  */
-function mergeBranchIntoBase(
-  ownerCwd: string,
-  branch: string,
-): { status: MergeStatus; reason?: string } {
+function landBranchOwning(wtAbs: string, branch: string): { status: LandStatus; reason?: string } {
   assertSafeArg(branch, 'branch');
-  const current = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-    cwd: ownerCwd,
-    encoding: 'utf8',
-  }).trim();
-  if (current === branch) {
-    return { status: 'skipped', reason: 'base checkout is on the work-item branch itself' };
+  const def = resolveOriginDefaultBranch(wtAbs);
+  if (def === null) {
+    return {
+      status: 'skipped-no-origin',
+      reason:
+        'no origin, or origin default is unset/unresolvable/stale — cannot land; push manually',
+    };
   }
-  if (!branchHasUnmergedCommits(ownerCwd, branch)) {
-    return { status: 'merged' }; // nothing ahead — idempotent no-op, removal-safe
+  if (def === branch) {
+    return {
+      status: 'skipped-no-origin',
+      reason: `origin default (${def}) equals the work-item branch — degenerate, refusing to push`,
+    };
   }
-  try {
-    execFileSync('git', ['merge', '--no-edit', '--', branch], {
-      cwd: ownerCwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { status: 'merged' };
-  } catch (err) {
-    try {
-      execFileSync('git', ['merge', '--abort'], { cwd: ownerCwd });
-    } catch {
-      // best effort: nothing to abort, or git unavailable — fall through to report
-    }
-    // git writes the CONFLICT (content) lines to STDOUT, not stderr — capture both
-    // so the human-readable reason is never blank on a real conflict.
-    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string };
-    const reason =
-      [e.stdout?.toString(), e.stderr?.toString()]
-        .map((s) => s?.trim())
-        .filter((s): s is string => Boolean(s))
-        .join('\n')
-        .trim() || (err instanceof Error ? err.message : String(err));
-    return { status: 'conflicted', reason };
-  }
+  assertSafeArg(def, 'origin default branch');
+  if (branchLandedToOrigin(wtAbs, branch)) return { status: 'landed' }; // idempotent resume
+  const res = landBranchToOrigin(wtAbs, branch, def);
+  if (res.status === 'landed') return { status: 'landed' };
+  // C6: scrub the git output before it enters the reported reason / ledger.
+  return { status: res.status, reason: scrubCredentials(res.reason) };
 }
 
 /**
- * Merge every worktree branch a work item owns back into its owning repo's HEAD.
- * Sub-repo branches first, the workspace ('.') branch last (mirror the removal
- * ordering), under the same repo-level lock as create/remove. `allMerged` is true
- * only when every owning repo's branch merged cleanly (or was already merged), which
- * is the precondition the clean-only merge-back orchestrator requires before tearing
- * the worktree down.
+ * Land every worktree branch a work item owns to origin/<default>. Sub-repo branches
+ * first, the workspace ('.') branch last (deterministic order, C1), under the same
+ * repo-level lock as create/remove. Landing is NON-ATOMIC and IRREVERSIBLE (a push
+ * can't be rolled back), so on the FIRST hard failure it STOPS and reports which repos
+ * already landed — never all-or-nothing (C1). Benign no-origin skips do not stop the
+ * sweep. `allLanded` is the teardown precondition; `anyLanded` flags a partial land.
  */
-export async function mergeWorktreesForWorkItem(
+export async function landWorktreesForWorkItem(
   repoRoot: string,
   workItemId: string,
-): Promise<WorktreeMergeResult> {
+): Promise<WorktreeLandResult> {
   assertSafeArg(workItemId, 'work item id');
   return withWorktreeLock(repoRoot, async () => {
     const store = new WorkItemStore(repoRoot);
@@ -687,16 +727,22 @@ export async function mergeWorktreesForWorkItem(
     const ordered = [...item.worktrees].sort(
       (a, b) => (a.owning_repo === '.' ? 1 : 0) - (b.owning_repo === '.' ? 1 : 0),
     );
-    const outcomes: WorktreeMergeOutcome[] = [];
+    const outcomes: WorktreeLandOutcome[] = [];
     for (const wt of ordered) {
-      const ownerCwd = wt.owning_repo === '.' ? repoRoot : join(repoRoot, wt.owning_repo);
-      const r = mergeBranchIntoBase(ownerCwd, wt.branch);
+      const wtAbs = join(repoRoot, wt.worktree_path);
+      const r = landBranchOwning(wtAbs, wt.branch);
       outcomes.push({
         worktree: wt,
         status: r.status,
         ...(r.reason !== undefined ? { reason: r.reason } : {}),
       });
+      // A hard failure stops the sweep: further pushes only add irreversible partial
+      // state. A benign skip (no origin) is not a failure, so it does not stop.
+      if (!isBenignLand(r.status)) break;
     }
-    return { outcomes, allMerged: outcomes.every((o) => o.status === 'merged') };
+    const allLanded =
+      outcomes.length === ordered.length && outcomes.every((o) => o.status === 'landed');
+    const anyLanded = outcomes.some((o) => o.status === 'landed');
+    return { outcomes, allLanded, anyLanded };
   });
 }

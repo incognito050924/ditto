@@ -47,7 +47,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// node_modules/consola/dist/chunks/prompt.mjs
+// ../../../../node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -803,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// node_modules/smol-toml/dist/error.js
+// ../../../../node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -875,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// node_modules/smol-toml/dist/util.js
+// ../../../../node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -991,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/date.js
+// ../../../../node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1113,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/primitive.js
+// ../../../../node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1291,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// node_modules/smol-toml/dist/extract.js
+// ../../../../node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1392,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/struct.js
+// ../../../../node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1576,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// node_modules/smol-toml/dist/parse.js
+// ../../../../node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1723,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/stringify.js
+// ../../../../node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1754,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// node_modules/smol-toml/dist/index.js
+// ../../../../node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1789,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// node_modules/yaml/dist/nodes/identity.js
+// ../../../../node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1843,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// node_modules/yaml/dist/visit.js
+// ../../../../node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1998,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// node_modules/yaml/dist/doc/directives.js
+// ../../../../node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2150,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// node_modules/yaml/dist/doc/anchors.js
+// ../../../../node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2212,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// node_modules/yaml/dist/doc/applyReviver.js
+// ../../../../node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2259,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// node_modules/yaml/dist/nodes/toJS.js
+// ../../../../node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2286,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// node_modules/yaml/dist/nodes/Node.js
+// ../../../../node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2323,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// node_modules/yaml/dist/nodes/Alias.js
+// ../../../../node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2433,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// node_modules/yaml/dist/nodes/Scalar.js
+// ../../../../node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2461,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// node_modules/yaml/dist/doc/createNode.js
+// ../../../../node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2533,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// node_modules/yaml/dist/nodes/Collection.js
+// ../../../../node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2648,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// node_modules/yaml/dist/stringify/stringifyComment.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2665,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// node_modules/yaml/dist/stringify/foldFlowLines.js
+// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2802,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// node_modules/yaml/dist/stringify/stringifyString.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3100,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// node_modules/yaml/dist/stringify/stringify.js
+// ../../../../node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3221,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/stringify/stringifyPair.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3357,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// node_modules/yaml/dist/log.js
+// ../../../../node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3376,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3433,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// node_modules/yaml/dist/nodes/addPairToJSMap.js
+// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3494,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// node_modules/yaml/dist/nodes/Pair.js
+// ../../../../node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3532,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// node_modules/yaml/dist/stringify/stringifyCollection.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3684,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// node_modules/yaml/dist/nodes/YAMLMap.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3811,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// node_modules/yaml/dist/schema/common/map.js
+// ../../../../node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3830,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// node_modules/yaml/dist/nodes/YAMLSeq.js
+// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3923,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// node_modules/yaml/dist/schema/common/seq.js
+// ../../../../node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3942,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// node_modules/yaml/dist/schema/common/string.js
+// ../../../../node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3958,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// node_modules/yaml/dist/schema/common/null.js
+// ../../../../node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3973,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// node_modules/yaml/dist/schema/core/bool.js
+// ../../../../node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3994,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// node_modules/yaml/dist/stringify/stringifyNumber.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4018,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// node_modules/yaml/dist/schema/core/float.js
+// ../../../../node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4061,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/core/int.js
+// ../../../../node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4103,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/core/schema.js
+// ../../../../node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4128,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/json/schema.js
+// ../../../../node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4192,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4247,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4322,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4394,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4423,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/float.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4469,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/int.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4545,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/set.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4628,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4710,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4751,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// node_modules/yaml/dist/schema/tags.js
+// ../../../../node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4842,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// node_modules/yaml/dist/schema/Schema.js
+// ../../../../node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4872,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// node_modules/yaml/dist/stringify/stringifyDocument.js
+// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4952,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// node_modules/yaml/dist/doc/Document.js
+// ../../../../node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5187,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// node_modules/yaml/dist/errors.js
+// ../../../../node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5252,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// node_modules/yaml/dist/compose/resolve-props.js
+// ../../../../node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5382,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// node_modules/yaml/dist/compose/util-contains-newline.js
+// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5422,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// node_modules/yaml/dist/compose/util-flow-indent-check.js
+// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5437,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// node_modules/yaml/dist/compose/util-map-includes.js
+// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5450,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-map.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5557,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-seq.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5605,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// node_modules/yaml/dist/compose/resolve-end.js
+// ../../../../node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5645,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-collection.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5836,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// node_modules/yaml/dist/compose/compose-collection.js
+// ../../../../node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5898,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// node_modules/yaml/dist/compose/resolve-block-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6091,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6308,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// node_modules/yaml/dist/compose/compose-scalar.js
+// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6386,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6413,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// node_modules/yaml/dist/compose/compose-node.js
+// ../../../../node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6516,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// node_modules/yaml/dist/compose/compose-doc.js
+// ../../../../node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6556,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// node_modules/yaml/dist/compose/composer.js
+// ../../../../node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6747,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// node_modules/yaml/dist/parse/cst-scalar.js
+// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6937,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// node_modules/yaml/dist/parse/cst-stringify.js
+// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6995,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/parse/cst-visit.js
+// ../../../../node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7054,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// node_modules/yaml/dist/parse/cst.js
+// ../../../../node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7155,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// node_modules/yaml/dist/parse/lexer.js
+// ../../../../node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7752,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// node_modules/yaml/dist/parse/line-counter.js
+// ../../../../node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7780,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// node_modules/yaml/dist/parse/parser.js
+// ../../../../node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8636,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// node_modules/yaml/dist/public-api.js
+// ../../../../node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8730,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// node_modules/yaml/dist/index.js
+// ../../../../node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8847,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../../../../node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8978,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// node_modules/zod/v3/ZodError.js
+// ../../../../node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9099,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// node_modules/zod/v3/locales/en.js
+// ../../../../node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9206,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// node_modules/zod/v3/errors.js
+// ../../../../node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9219,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../../../../node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9324,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// node_modules/zod/v3/helpers/typeAliases.js
+// ../../../../node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../../../../node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9336,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// node_modules/zod/v3/types.js
+// ../../../../node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12687,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// node_modules/zod/v3/external.js
+// ../../../../node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12807,7 +12807,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// node_modules/zod/index.js
+// ../../../../node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -12988,6 +12988,80 @@ function gitPush(cwd, remote, ref) {
     return { ok: false, stderr };
   }
 }
+function classifyPushRejection(output) {
+  if (/non-fast-forward|fetch first|\bstale info\b/i.test(output))
+    return "non-ff";
+  if (/push-gate:|pre-push hook/i.test(output))
+    return "push-gate";
+  return "auth-network";
+}
+function runGitBounded(cwd, args, timeoutMs) {
+  try {
+    const stdout2 = execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      timeout: timeoutMs,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    return { ok: true, stdout: stdout2, stderr: "", timedOut: false };
+  } catch (err) {
+    const e2 = err;
+    const timedOut = e2.killed === true || e2.signal === "SIGTERM" || e2.code === "ETIMEDOUT";
+    return {
+      ok: false,
+      stdout: e2.stdout?.toString() ?? "",
+      stderr: e2.stderr?.toString() ?? "",
+      timedOut
+    };
+  }
+}
+function landBranchToOrigin(cwd, branch, defaultBranch, opts = {}) {
+  const maxRetries = opts.maxRetries ?? LAND_MAX_RETRIES;
+  const timeout = opts.attemptTimeoutMs ?? LAND_ATTEMPT_TIMEOUT_MS;
+  const refspec = `${branch}:${defaultBranch}`;
+  const originRef = `refs/remotes/origin/${defaultBranch}`;
+  for (let attempt = 0;attempt <= maxRetries; attempt++) {
+    const push = runGitBounded(cwd, ["push", "origin", "--", refspec], timeout);
+    if (push.ok)
+      return { status: "landed", reason: "" };
+    if (!push.timedOut) {
+      const cls = classifyPushRejection(`${push.stderr}
+${push.stdout}`);
+      if (cls === "push-gate") {
+        return { status: "push-gate-rejected", reason: push.stderr || push.stdout };
+      }
+      if (cls === "auth-network") {
+        return { status: "auth-or-network-failed", reason: push.stderr || push.stdout };
+      }
+    }
+    if (attempt >= maxRetries) {
+      return {
+        status: "non-ff-retry-exhausted",
+        reason: push.stderr || push.stdout || "push retries exhausted"
+      };
+    }
+    const terminal = recoverForRetry(cwd, defaultBranch, originRef, timeout);
+    if (terminal)
+      return terminal;
+  }
+  return { status: "non-ff-retry-exhausted", reason: "push retries exhausted" };
+}
+function recoverForRetry(cwd, defaultBranch, originRef, timeout) {
+  const fetched = runGitBounded(cwd, ["fetch", "origin", "--", defaultBranch], timeout);
+  if (!fetched.ok) {
+    if (fetched.timedOut)
+      return null;
+    return { status: "auth-or-network-failed", reason: fetched.stderr || fetched.stdout };
+  }
+  const rebased = runGitBounded(cwd, ["rebase", originRef], timeout);
+  if (rebased.ok)
+    return null;
+  runGitBounded(cwd, ["rebase", "--abort"], timeout);
+  if (rebased.timedOut)
+    return null;
+  return { status: "rebase-conflict", reason: `${rebased.stdout}
+${rebased.stderr}`.trim() };
+}
 function captureGitDiff(cwd) {
   try {
     return execFileSync("git", ["diff", "--binary", "HEAD"], { cwd, encoding: "utf8" });
@@ -12999,6 +13073,7 @@ function captureGitDiff(cwd) {
     }
   }
 }
+var LAND_ATTEMPT_TIMEOUT_MS = 120000, LAND_MAX_RETRIES = 3;
 var init_git = () => {};
 
 // src/schemas/intent-metric.ts
@@ -14263,6 +14338,125 @@ var init_work_item_store = __esm(() => {
   }).passthrough();
 });
 
+// src/core/chain-drive.ts
+async function resolveSpine(store, workId) {
+  const view = await store.stem(workId);
+  const ids = new Set(view.members.map((m2) => m2.id));
+  const childCount = new Map;
+  for (const m2 of view.members) {
+    if (m2.follows !== undefined && ids.has(m2.follows)) {
+      childCount.set(m2.follows, (childCount.get(m2.follows) ?? 0) + 1);
+    }
+  }
+  for (const [parent, count] of childCount) {
+    if (count > 1)
+      throw new BranchedStemError(parent);
+  }
+  return view;
+}
+async function driveChain(deps, options) {
+  const { store } = deps;
+  const view = await resolveSpine(store, options.workId);
+  const members = view.members.map((m2) => m2.id);
+  const ledger = [];
+  let haltedMember;
+  let stoppedAtCap = false;
+  let iterated = 0;
+  for (const member of members) {
+    if (iterated >= options.maxDepth) {
+      stoppedAtCap = true;
+      break;
+    }
+    const item = await store.get(member);
+    if (item.status === "done") {
+      ledger.push({ member_id: member, disposition: "skipped-already-done" });
+      continue;
+    }
+    if (TERMINAL_STEM_STATUSES2.includes(item.status)) {
+      ledger.push({
+        member_id: member,
+        disposition: "halted",
+        reason: `terminal-not-done: member is ${item.status}`
+      });
+      haltedMember = member;
+      break;
+    }
+    if (!await deps.intentExists(member)) {
+      ledger.push({
+        member_id: member,
+        disposition: "blocked-unlocked-no-intent",
+        reason: "needs-intent-lock"
+      });
+      haltedMember = member;
+      break;
+    }
+    iterated++;
+    const result = await deps.driveMember(store.repoRoot, member);
+    if (result.outcome === "done") {
+      ledger.push({ member_id: member, disposition: "driven-done" });
+      continue;
+    }
+    ledger.push({
+      member_id: member,
+      disposition: "halted",
+      reason: scrubCredentials(result.reason)
+    });
+    haltedMember = member;
+    break;
+  }
+  const freshView = await resolveSpine(store, options.workId);
+  const rolledUp = freshView.rolled_up;
+  const queried = await store.get(options.workId);
+  const pushReady = pushReadiness(queried, freshView).ready && rolledUp === "done";
+  let push = "not-requested";
+  if (options.push) {
+    push = pushReady ? await deps.attemptPush(members) : "skipped-not-ready";
+  }
+  return {
+    work_id: options.workId,
+    members,
+    ledger,
+    rolled_up: rolledUp,
+    ...haltedMember !== undefined ? { halted_member: haltedMember } : {},
+    stopped_at_cap: stoppedAtCap,
+    push,
+    push_ready: pushReady
+  };
+}
+function scrubCredentials(text) {
+  return text.replace(/(\/\/)[^/@\s]+@/g, "$1***@");
+}
+async function productionDriveMember(repoRoot, wiId) {
+  const proc = Bun.spawnSync(["ditto", "autopilot", "complete", "--workItem", wiId, "--output", "json"], { cwd: repoRoot, stdout: "pipe", stderr: "pipe" });
+  const item = await new WorkItemStore(repoRoot).get(wiId);
+  if (item.status === "done")
+    return { outcome: "done" };
+  const stderr = (proc.stderr?.toString() ?? "").trim();
+  const reason = proc.exitCode === 0 ? `member ${wiId} did not reach done via autopilot complete (status=${item.status})` : scrubCredentials(stderr || `autopilot complete exited ${proc.exitCode}`);
+  return { outcome: "halted", reason };
+}
+async function productionAttemptPush(repoRoot, members) {
+  const { branch } = captureGitState(repoRoot);
+  if (!branch || branch === "HEAD")
+    return "skipped-no-remote";
+  const result = gitPush(repoRoot, "origin", "HEAD");
+  return result.ok ? "pushed" : "skipped-no-remote";
+}
+var TERMINAL_STEM_STATUSES2, BranchedStemError, DEFAULT_MAX_DEPTH = 20;
+var init_chain_drive = __esm(() => {
+  init_git();
+  init_work_item_store();
+  TERMINAL_STEM_STATUSES2 = ["done", "abandoned"];
+  BranchedStemError = class BranchedStemError extends Error {
+    branchPoint;
+    constructor(branchPoint) {
+      super(`chain drive: the stem through this work item BRANCHES at ${branchPoint} (it has >1 follows-child). A branched/multi-tip chain is not a linear spine; drive each branch explicitly.`);
+      this.branchPoint = branchPoint;
+      this.name = "BranchedStemError";
+    }
+  };
+});
+
 // src/core/worktree.ts
 import { execFileSync as execFileSync2 } from "child_process";
 import { realpathSync } from "fs";
@@ -14550,23 +14744,6 @@ function worktreeBindingHint(repoRoot, worktrees, workItemId2) {
     return null;
   return `\u2192 cd ${join7(repoRoot, ws.worktree_path)} \uD6C4 \uAC70\uAE30\uC11C \uC138\uC158\uC744 \uC5F4\uBA74 \uC790\uB3D9\uC73C\uB85C \uC774 work item(${workItemId2})\uC5D0 \uBC14\uC778\uB529\uB429\uB2C8\uB2E4`;
 }
-function branchHasUnmergedCommits(cwd, branch) {
-  try {
-    const head = execFileSync2("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim();
-    const tip = execFileSync2("git", ["rev-parse", branch], { cwd, encoding: "utf8" }).trim();
-    try {
-      execFileSync2("git", ["merge-base", "--is-ancestor", tip, head], {
-        cwd,
-        stdio: ["ignore", "ignore", "ignore"]
-      });
-      return false;
-    } catch {
-      return true;
-    }
-  } catch {
-    return true;
-  }
-}
 async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
   assertSafeArg(workItemId2, "work item id");
   const force = opts.force ?? false;
@@ -14580,9 +14757,9 @@ async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
       const ownerCwd = wt.owning_repo === "." ? repoRoot : join7(repoRoot, wt.owning_repo);
       const wtAbs = join7(repoRoot, wt.worktree_path);
       const dirty = !isWorkingTreeClean(wtAbs);
-      const unmerged = branchHasUnmergedCommits(ownerCwd, wt.branch);
-      if ((dirty || unmerged) && !force) {
-        const why = [dirty ? "uncommitted changes" : null, unmerged ? "unmerged commits" : null].filter(Boolean).join(" + ");
+      const unlanded = !branchLandedToOrigin(ownerCwd, wt.branch);
+      if ((dirty || unlanded) && !force) {
+        const why = [dirty ? "uncommitted changes" : null, unlanded ? "unlanded commits" : null].filter(Boolean).join(" + ");
         blocked.push({ worktree: wt, reason: `${why}; refusing to delete without --force` });
         continue;
       }
@@ -14592,7 +14769,7 @@ async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
           removeArgs.push("--force");
         removeArgs.push("--", wtAbs);
         execFileSync2("git", removeArgs, { cwd: ownerCwd, stdio: ["ignore", "ignore", "pipe"] });
-        execFileSync2("git", ["branch", force ? "-D" : "-d", "--", wt.branch], {
+        execFileSync2("git", ["branch", "-D", "--", wt.branch], {
           cwd: ownerCwd,
           stdio: ["ignore", "ignore", "pipe"]
         });
@@ -14613,35 +14790,68 @@ async function removeWorktreesForWorkItem(repoRoot, workItemId2, opts = {}) {
     return { removed, blocked };
   });
 }
-function mergeBranchIntoBase(ownerCwd, branch) {
-  assertSafeArg(branch, "branch");
-  const current = execFileSync2("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    cwd: ownerCwd,
-    encoding: "utf8"
-  }).trim();
-  if (current === branch) {
-    return { status: "skipped", reason: "base checkout is on the work-item branch itself" };
-  }
-  if (!branchHasUnmergedCommits(ownerCwd, branch)) {
-    return { status: "merged" };
-  }
+function resolveOriginDefaultBranch(cwd) {
+  let out;
   try {
-    execFileSync2("git", ["merge", "--no-edit", "--", branch], {
-      cwd: ownerCwd,
-      stdio: ["ignore", "pipe", "pipe"]
+    out = execFileSync2("git", ["ls-remote", "--symref", "origin", "HEAD"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
     });
-    return { status: "merged" };
-  } catch (err) {
-    try {
-      execFileSync2("git", ["merge", "--abort"], { cwd: ownerCwd });
-    } catch {}
-    const e2 = err;
-    const reason = [e2.stdout?.toString(), e2.stderr?.toString()].map((s2) => s2?.trim()).filter((s2) => Boolean(s2)).join(`
-`).trim() || (err instanceof Error ? err.message : String(err));
-    return { status: "conflicted", reason };
+  } catch {
+    return null;
+  }
+  const ref = out.match(/^ref:\s+refs\/heads\/(.+?)\s+HEAD$/m)?.[1]?.trim();
+  const hasSha = /^[0-9a-f]{40}\s+HEAD$/m.test(out);
+  if (!ref || !hasSha)
+    return null;
+  return ref;
+}
+function branchLandedToOrigin(cwd, branch) {
+  const def = resolveOriginDefaultBranch(cwd);
+  if (def === null)
+    return false;
+  try {
+    execFileSync2("git", ["rev-parse", "--verify", branch], {
+      cwd,
+      stdio: ["ignore", "ignore", "ignore"]
+    });
+    execFileSync2("git", ["merge-base", "--is-ancestor", branch, `refs/remotes/origin/${def}`], {
+      cwd,
+      stdio: ["ignore", "ignore", "ignore"]
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
-async function mergeWorktreesForWorkItem(repoRoot, workItemId2) {
+function isBenignLand(status) {
+  return status === "landed" || status === "skipped-no-origin";
+}
+function landBranchOwning(wtAbs, branch) {
+  assertSafeArg(branch, "branch");
+  const def = resolveOriginDefaultBranch(wtAbs);
+  if (def === null) {
+    return {
+      status: "skipped-no-origin",
+      reason: "no origin, or origin default is unset/unresolvable/stale \u2014 cannot land; push manually"
+    };
+  }
+  if (def === branch) {
+    return {
+      status: "skipped-no-origin",
+      reason: `origin default (${def}) equals the work-item branch \u2014 degenerate, refusing to push`
+    };
+  }
+  assertSafeArg(def, "origin default branch");
+  if (branchLandedToOrigin(wtAbs, branch))
+    return { status: "landed" };
+  const res = landBranchToOrigin(wtAbs, branch, def);
+  if (res.status === "landed")
+    return { status: "landed" };
+  return { status: res.status, reason: scrubCredentials(res.reason) };
+}
+async function landWorktreesForWorkItem(repoRoot, workItemId2) {
   assertSafeArg(workItemId2, "work item id");
   return withWorktreeLock(repoRoot, async () => {
     const store = new WorkItemStore(repoRoot);
@@ -14649,19 +14859,24 @@ async function mergeWorktreesForWorkItem(repoRoot, workItemId2) {
     const ordered = [...item.worktrees].sort((a2, b2) => (a2.owning_repo === "." ? 1 : 0) - (b2.owning_repo === "." ? 1 : 0));
     const outcomes = [];
     for (const wt of ordered) {
-      const ownerCwd = wt.owning_repo === "." ? repoRoot : join7(repoRoot, wt.owning_repo);
-      const r3 = mergeBranchIntoBase(ownerCwd, wt.branch);
+      const wtAbs = join7(repoRoot, wt.worktree_path);
+      const r3 = landBranchOwning(wtAbs, wt.branch);
       outcomes.push({
         worktree: wt,
         status: r3.status,
         ...r3.reason !== undefined ? { reason: r3.reason } : {}
       });
+      if (!isBenignLand(r3.status))
+        break;
     }
-    return { outcomes, allMerged: outcomes.every((o3) => o3.status === "merged") };
+    const allLanded = outcomes.length === ordered.length && outcomes.every((o3) => o3.status === "landed");
+    const anyLanded = outcomes.some((o3) => o3.status === "landed");
+    return { outcomes, allLanded, anyLanded };
   });
 }
 var RUN_WORKTREE_PREFIX = ".ditto/local/worktrees/", WORK_ITEM_BRANCH_PREFIX = "ditto/", PID_WRITE_GRACE_MS = 2000;
 var init_worktree = __esm(() => {
+  init_chain_drive();
   init_ditto_paths();
   init_fs();
   init_git();
@@ -15713,7 +15928,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// node_modules/sisteransi/src/index.js
+// ../../../../node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15771,7 +15986,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// node_modules/consola/dist/core.mjs
+// ../../../../node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -16167,7 +16382,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -16244,10 +16459,10 @@ ${indent}`);
   }
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -16460,7 +16675,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// node_modules/consola/dist/index.mjs
+// ../../../../node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16743,7 +16958,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// node_modules/citty/dist/index.mjs
+// ../../../../node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -30753,125 +30968,8 @@ async function landCommit(repoRoot, changedFiles, message) {
 init_work_item_store();
 init_coverage();
 
-// src/core/chain-drive.ts
-init_git();
-init_work_item_store();
-var TERMINAL_STEM_STATUSES2 = ["done", "abandoned"];
-
-class BranchedStemError extends Error {
-  branchPoint;
-  constructor(branchPoint) {
-    super(`chain drive: the stem through this work item BRANCHES at ${branchPoint} (it has >1 follows-child). A branched/multi-tip chain is not a linear spine; drive each branch explicitly.`);
-    this.branchPoint = branchPoint;
-    this.name = "BranchedStemError";
-  }
-}
-var DEFAULT_MAX_DEPTH = 20;
-async function resolveSpine(store, workId) {
-  const view = await store.stem(workId);
-  const ids = new Set(view.members.map((m2) => m2.id));
-  const childCount = new Map;
-  for (const m2 of view.members) {
-    if (m2.follows !== undefined && ids.has(m2.follows)) {
-      childCount.set(m2.follows, (childCount.get(m2.follows) ?? 0) + 1);
-    }
-  }
-  for (const [parent, count] of childCount) {
-    if (count > 1)
-      throw new BranchedStemError(parent);
-  }
-  return view;
-}
-async function driveChain(deps, options) {
-  const { store } = deps;
-  const view = await resolveSpine(store, options.workId);
-  const members = view.members.map((m2) => m2.id);
-  const ledger = [];
-  let haltedMember;
-  let stoppedAtCap = false;
-  let iterated = 0;
-  for (const member of members) {
-    if (iterated >= options.maxDepth) {
-      stoppedAtCap = true;
-      break;
-    }
-    const item = await store.get(member);
-    if (item.status === "done") {
-      ledger.push({ member_id: member, disposition: "skipped-already-done" });
-      continue;
-    }
-    if (TERMINAL_STEM_STATUSES2.includes(item.status)) {
-      ledger.push({
-        member_id: member,
-        disposition: "halted",
-        reason: `terminal-not-done: member is ${item.status}`
-      });
-      haltedMember = member;
-      break;
-    }
-    if (!await deps.intentExists(member)) {
-      ledger.push({
-        member_id: member,
-        disposition: "blocked-unlocked-no-intent",
-        reason: "needs-intent-lock"
-      });
-      haltedMember = member;
-      break;
-    }
-    iterated++;
-    const result2 = await deps.driveMember(store.repoRoot, member);
-    if (result2.outcome === "done") {
-      ledger.push({ member_id: member, disposition: "driven-done" });
-      continue;
-    }
-    ledger.push({
-      member_id: member,
-      disposition: "halted",
-      reason: scrubCredentials(result2.reason)
-    });
-    haltedMember = member;
-    break;
-  }
-  const freshView = await resolveSpine(store, options.workId);
-  const rolledUp = freshView.rolled_up;
-  const queried = await store.get(options.workId);
-  const pushReady = pushReadiness(queried, freshView).ready && rolledUp === "done";
-  let push = "not-requested";
-  if (options.push) {
-    push = pushReady ? await deps.attemptPush(members) : "skipped-not-ready";
-  }
-  return {
-    work_id: options.workId,
-    members,
-    ledger,
-    rolled_up: rolledUp,
-    ...haltedMember !== undefined ? { halted_member: haltedMember } : {},
-    stopped_at_cap: stoppedAtCap,
-    push,
-    push_ready: pushReady
-  };
-}
-function scrubCredentials(text) {
-  return text.replace(/(\/\/)[^/@\s]+@/g, "$1***@");
-}
-async function productionDriveMember(repoRoot, wiId) {
-  const proc = Bun.spawnSync(["ditto", "autopilot", "complete", "--workItem", wiId, "--output", "json"], { cwd: repoRoot, stdout: "pipe", stderr: "pipe" });
-  const item = await new WorkItemStore(repoRoot).get(wiId);
-  if (item.status === "done")
-    return { outcome: "done" };
-  const stderr2 = (proc.stderr?.toString() ?? "").trim();
-  const reason = proc.exitCode === 0 ? `member ${wiId} did not reach done via autopilot complete (status=${item.status})` : scrubCredentials(stderr2 || `autopilot complete exited ${proc.exitCode}`);
-  return { outcome: "halted", reason };
-}
-async function productionAttemptPush(repoRoot, members) {
-  const { branch } = captureGitState(repoRoot);
-  if (!branch || branch === "HEAD")
-    return "skipped-no-remote";
-  const result2 = gitPush(repoRoot, "origin", "HEAD");
-  return result2.ok ? "pushed" : "skipped-no-remote";
-}
-
 // src/cli/commands/work.ts
+init_chain_drive();
 init_fs();
 
 // src/core/github-claim.ts
@@ -42770,12 +42868,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// node_modules/fast-string-truncated-width/dist/utils.js
+// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -42794,7 +42892,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// node_modules/fast-string-truncated-width/dist/index.js
+// ../../../../node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -42893,7 +42991,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// node_modules/fast-string-width/dist/index.js
+// ../../../../node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -42904,7 +43002,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// node_modules/fast-wrap-ansi/lib/main.js
+// ../../../../node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -43116,7 +43214,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// node_modules/@clack/core/dist/index.mjs
+// ../../../../node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -43908,7 +44006,7 @@ class a3 extends V2 {
   }
 }
 
-// node_modules/@clack/prompts/dist/index.mjs
+// ../../../../node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -58563,11 +58661,13 @@ var workspaceCommand = defineCommand({
 });
 
 // src/cli/commands/worktree.ts
+init_chain_drive();
 init_fs();
 init_work_item_store();
 init_worktree();
 
 // src/core/worktree-drive.ts
+init_chain_drive();
 import { join as join98 } from "path";
 var TERMINAL_STATUSES4 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
@@ -58576,17 +58676,39 @@ async function driveWorktrees(deps, options) {
   const ledger = [];
   let drivenCount = 0;
   let stoppedAtCap = false;
-  const mergeAndRemove = async (member) => {
-    const mergeRes = await deps.merge(repoRoot, member);
-    if (mergeRes.allMerged) {
-      const rm8 = await deps.removeWorktrees(repoRoot, member);
-      return { member_id: member, disposition: "driven-done", removed: rm8.removed.length > 0 };
+  const finishMember = async (member) => {
+    if (!options.push) {
+      return {
+        member_id: member,
+        disposition: "driven-not-landed",
+        reason: "push not requested (re-run with --push to land to origin)"
+      };
     }
-    const firstUnmerged = mergeRes.outcomes.find((o4) => o4.status !== "merged");
+    const landRes = await deps.land(repoRoot, member);
+    const landedRepos = landRes.outcomes.filter((o4) => o4.status === "landed").map((o4) => o4.worktree.owning_repo);
+    if (landRes.allLanded) {
+      const rm8 = await deps.removeWorktrees(repoRoot, member);
+      return {
+        member_id: member,
+        disposition: "driven-done",
+        removed: rm8.removed.length > 0,
+        landed_repos: landedRepos
+      };
+    }
+    const failure = landRes.outcomes.find((o4) => o4.status !== "landed" && o4.status !== "skipped-no-origin");
+    if (!failure) {
+      return {
+        member_id: member,
+        disposition: "driven-not-landed",
+        reason: "no origin to land to (push manually)",
+        ...landedRepos.length > 0 ? { landed_repos: landedRepos } : {}
+      };
+    }
     return {
       member_id: member,
-      disposition: "merge-conflicted",
-      reason: scrubCredentials(firstUnmerged?.reason ?? "merge did not complete")
+      disposition: "land-failed",
+      reason: `${failure.status}${failure.reason ? `: ${scrubCredentials(failure.reason)}` : ""}`,
+      ...landedRepos.length > 0 ? { landed_repos: landedRepos } : {}
     };
   };
   for (const member of options.workIds) {
@@ -58613,7 +58735,7 @@ async function driveWorktrees(deps, options) {
       continue;
     }
     if (item.status === "done") {
-      ledger.push(await mergeAndRemove(member));
+      ledger.push(await finishMember(member));
       continue;
     }
     if (!await deps.intentExists(member)) {
@@ -58630,22 +58752,21 @@ async function driveWorktrees(deps, options) {
       });
       continue;
     }
-    ledger.push(await mergeAndRemove(member));
+    ledger.push(await finishMember(member));
   }
-  const allDrivenDone = ledger.length > 0 && ledger.every((e2) => e2.disposition === "driven-done");
-  const haltedMembers = ledger.filter((e2) => e2.disposition !== "driven-done").map((e2) => e2.member_id);
-  let push = "not-requested";
-  if (options.push) {
-    push = allDrivenDone ? await deps.attemptPush(options.workIds) : "skipped-not-ready";
-  }
+  const allDrivenDone = ledger.length > 0 && ledger.every((e2) => e2.disposition !== "halted");
+  const allLanded = ledger.length > 0 && ledger.every((e2) => e2.disposition === "driven-done");
+  const haltedMembers = ledger.filter((e2) => e2.disposition === "halted").map((e2) => e2.member_id);
+  const landFailedMembers = ledger.filter((e2) => e2.disposition === "land-failed").map((e2) => e2.member_id);
   return {
     work_ids: options.workIds,
     ledger,
     halted_members: haltedMembers,
+    land_failed_members: landFailedMembers,
     all_driven_done: allDrivenDone,
+    all_landed: allLanded,
     stopped_at_cap: stoppedAtCap,
-    push,
-    push_ready: allDrivenDone
+    push_requested: options.push
   };
 }
 
@@ -58802,7 +58923,7 @@ var worktreeList = defineCommand({
 var worktreeDrive = defineCommand({
   meta: {
     name: "drive",
-    description: "Drive an INDEPENDENT set of named work items, each in its own DITTO worktree: drive each non-terminal intent-locked member through its autopilot inside its worktree, then clean-merge it back into its owning repo and tear the worktree down. Unlike `work chain drive`, the set is not a follows-spine \u2014 a halt on one member CONTINUES to the next; only the depth cap breaks the run. Skips done members (idempotent resume), halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Reports push-readiness on full completion; pushes ONLY with --push (never unasked, never force). This is the sanctioned explicit carve-out: only the named ids are driven (no auto-discovery)."
+    description: "Drive an INDEPENDENT set of named work items, each in its own DITTO worktree: drive each non-terminal intent-locked member through its autopilot inside its worktree, then \u2014 with --push \u2014 LAND it straight to origin/<default> (push the branch commits; NO local merge into the shared main checkout) and tear the worktree down. Unlike `work chain drive`, the set is not a follows-spine \u2014 a halt on one member CONTINUES to the next; only the depth cap breaks the run. Skips done members (idempotent resume), halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Landing is user-gated (a push is irreversible): without --push a driven member is left for a manual land. Failure classes are surfaced distinctly (no-origin skip vs push-gate vs auth/network vs non-FF-exhausted vs rebase-conflict) and never force-push. This is the sanctioned explicit carve-out: only the named ids are driven (no auto-discovery)."
   },
   args: {
     workIds: {
@@ -58812,7 +58933,7 @@ var worktreeDrive = defineCommand({
     },
     push: {
       type: "boolean",
-      description: "On a fully driven-done set, push the current branch HEAD to origin (no force; any push failure degrades to skipped, exit 0). Default: report push-readiness without pushing.",
+      description: "LAND each driven-done member: push its branch commits straight to origin/<default> (force-free; non-FF \u2192 fetch+rebase+re-push), then tear the worktree down. Your LOCAL default branch is NOT updated by a land \u2014 run `git fetch` to sync. Default: drive to done without landing.",
       default: false
     },
     "max-depth": {
@@ -58856,9 +58977,8 @@ var worktreeDrive = defineCommand({
         store,
         intentExists: (id) => intentStore.exists(id),
         driveMember: (worktreeCwd, wiId) => productionDriveMember(worktreeCwd, wiId),
-        merge: (root, wiId) => mergeWorktreesForWorkItem(root, wiId),
-        removeWorktrees: (root, wiId) => removeWorktreesForWorkItem(root, wiId),
-        attemptPush: (members) => productionAttemptPush(repoRoot, members)
+        land: (root, wiId) => landWorktreesForWorkItem(root, wiId),
+        removeWorktrees: (root, wiId) => removeWorktreesForWorkItem(root, wiId)
       }, { workIds, push: args.push === true, maxDepth });
       if (format === "json") {
         writeJson2(result2);
@@ -58866,15 +58986,20 @@ var worktreeDrive = defineCommand({
         writeHuman(`Worktree drive (${result2.work_ids.length} member(s)):`);
         for (const e2 of result2.ledger) {
           const removed = e2.disposition === "driven-done" ? ` removed=${e2.removed === true}` : "";
-          writeHuman(`  ${e2.member_id}	${e2.disposition}${removed}${e2.reason ? `	(${e2.reason})` : ""}`);
+          const landed = e2.landed_repos && e2.landed_repos.length > 0 ? `	landed_repos=[${e2.landed_repos.join(", ")}]` : "";
+          writeHuman(`  ${e2.member_id}	${e2.disposition}${removed}${landed}${e2.reason ? `	(${e2.reason})` : ""}`);
         }
         if (result2.halted_members.length > 0)
           writeHuman(`  halted_members: ${result2.halted_members.join(", ")}`);
+        if (result2.land_failed_members.length > 0)
+          writeHuman(`  land_failed_members: ${result2.land_failed_members.join(", ")}`);
         if (result2.stopped_at_cap)
           writeHuman(`  stopped at depth cap (${maxDepth}) \u2014 re-invoke to continue`);
         writeHuman(`  all_driven_done: ${result2.all_driven_done}`);
-        writeHuman(`  push_ready: ${result2.push_ready}`);
-        writeHuman(`  push: ${result2.push}`);
+        writeHuman(`  all_landed: ${result2.all_landed}`);
+        if (result2.push_requested && result2.all_landed) {
+          writeHuman("  NOTE: landed to origin/<default>; your LOCAL default branch is NOT updated \u2014 run `git fetch` (or `git pull`) to sync.");
+        }
       }
     } catch (err) {
       writeError(`worktree drive failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -58949,4 +59074,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=0cfc52ffa589fed865858a7d0e74af14e5d9ccd04b3ecc97ebe9e601c8ea734c
+//# ditto-src-stamp=2d617a885d0c7144e12055eb765d3b32300798888bd3fd06b2f84d09205367a7

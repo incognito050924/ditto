@@ -4,19 +4,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DriveMemberResult } from '~/core/chain-drive';
 import { WorkItemStore } from '~/core/work-item-store';
-import type { WorktreeMergeResult, WorktreeRemovalResult } from '~/core/worktree';
+import type { LandStatus, WorktreeLandResult, WorktreeRemovalResult } from '~/core/worktree';
 import {
   type WorktreeDriveDeps,
   type WorktreeDriveMemberFn,
-  type WorktreeMergeFn,
+  type WorktreeLandFn,
   driveWorktrees,
 } from '~/core/worktree-drive';
 import type { WorkItemWorktree } from '~/schemas/work-item';
 
-// wi_260627t82 — `driveWorktrees` orchestration. The per-member drive, merge,
-// remove and push steps are all injected fakes here so the deterministic logic
-// (worktree gate, drive→merge→remove sequencing, clean-only merge-back, halt
-// continuation, push gating, depth cap) is exercised without real git.
+// wi_2607156f8 — `driveWorktrees` orchestration. The per-member drive, LAND (push to
+// origin) and remove steps are all injected fakes here so the deterministic logic
+// (worktree gate, drive→land→remove sequencing, user-gated land, C5 failure-class
+// distinction, C1 partial-land reporting, halt continuation, depth cap) is exercised
+// without real git/network. Landing = pushing straight to origin/<default>; it is
+// user-gated, so it fires only with `push:true`.
 
 let dir: string;
 
@@ -28,10 +30,10 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-function wtMeta(id: string): WorkItemWorktree {
+function wt(id: string, repo = '.'): WorkItemWorktree {
   return {
-    owning_repo: '.',
-    worktree_path: `.ditto/local/worktrees/${id}`,
+    owning_repo: repo,
+    worktree_path: `.ditto/local/worktrees/${id}${repo === '.' ? '' : `/${repo}`}`,
     branch: `ditto/${id}`,
   };
 }
@@ -51,7 +53,7 @@ async function createMember(
     ],
   });
   if (worktree) {
-    await store.update(created.id, (cur) => ({ ...cur, worktrees: [wtMeta(created.id)] }));
+    await store.update(created.id, (cur) => ({ ...cur, worktrees: [wt(created.id)] }));
   }
   if (done) {
     await store.close(created.id, 'done');
@@ -59,20 +61,36 @@ async function createMember(
   return created.id;
 }
 
-const mergedResult: WorktreeMergeResult = {
-  outcomes: [{ worktree: wtMeta('x'), status: 'merged' }],
-  allMerged: true,
+// ── land-result fixtures ──────────────────────────────────────────────────────
+const landedAll = (repos: string[] = ['.']): WorktreeLandResult => ({
+  outcomes: repos.map((r) => ({ worktree: wt('x', r), status: 'landed' as LandStatus })),
+  allLanded: true,
+  anyLanded: true,
+});
+const skippedNoOrigin: WorktreeLandResult = {
+  outcomes: [{ worktree: wt('x'), status: 'skipped-no-origin', reason: 'no origin' }],
+  allLanded: false,
+  anyLanded: false,
 };
-function conflictResult(reason: string): WorktreeMergeResult {
+function landFailed(status: LandStatus, reason: string): WorktreeLandResult {
   return {
-    outcomes: [{ worktree: wtMeta('x'), status: 'conflicted', reason }],
-    allMerged: false,
+    outcomes: [{ worktree: wt('x'), status, reason }],
+    allLanded: false,
+    anyLanded: false,
   };
 }
-const removedResult: WorktreeRemovalResult = {
-  removed: [wtMeta('x')],
-  blocked: [],
-};
+/** A multi-repo partial land: the sub-repo landed, then '.' hard-failed. */
+function partialLand(): WorktreeLandResult {
+  return {
+    outcomes: [
+      { worktree: wt('x', 'sub'), status: 'landed' },
+      { worktree: wt('x', '.'), status: 'auth-or-network-failed', reason: 'boom' },
+    ],
+    allLanded: false,
+    anyLanded: true,
+  };
+}
+const removedResult: WorktreeRemovalResult = { removed: [wt('x')], blocked: [] };
 
 /** A driveMember that flips the member done (simulating a successful autopilot). */
 function fakeDriveDone(store: WorkItemStore): WorktreeDriveMemberFn {
@@ -87,15 +105,14 @@ function deps(store: WorkItemStore, overrides: Partial<WorktreeDriveDeps> = {}):
     store,
     intentExists: async () => true,
     driveMember: fakeDriveDone(store),
-    merge: async () => mergedResult,
+    land: async () => landedAll(),
     removeWorktrees: async () => removedResult,
-    attemptPush: async () => 'pushed',
     ...overrides,
   };
 }
 
-describe('clean merge → remove', () => {
-  test('an already-done member merges cleanly and is removed', async () => {
+describe('land (with --push) → remove', () => {
+  test('an already-done member lands and is torn down', async () => {
     const store = new WorkItemStore(dir);
     const a = await createMember(store, { done: true });
     let removeCalls = 0;
@@ -111,32 +128,40 @@ describe('clean merge → remove', () => {
           return removedResult;
         },
       }),
-      { workIds: [a], push: false, maxDepth: 20 },
+      { workIds: [a], push: true, maxDepth: 20 },
     );
     expect(driveCalls).toBe(0); // already done → not re-driven
     expect(removeCalls).toBe(1);
-    expect(res.ledger).toEqual([{ member_id: a, disposition: 'driven-done', removed: true }]);
+    expect(res.ledger).toEqual([
+      { member_id: a, disposition: 'driven-done', removed: true, landed_repos: ['.'] },
+    ]);
+    expect(res.all_landed).toBe(true);
     expect(res.all_driven_done).toBe(true);
     expect(res.halted_members).toEqual([]);
   });
 
-  test('a freshly driven member is merged then removed', async () => {
+  test('a freshly driven member is landed then removed', async () => {
     const store = new WorkItemStore(dir);
     const a = await createMember(store);
-    const res = await driveWorktrees(deps(store), { workIds: [a], push: false, maxDepth: 20 });
-    expect(res.ledger).toEqual([{ member_id: a, disposition: 'driven-done', removed: true }]);
-    expect(res.all_driven_done).toBe(true);
+    const res = await driveWorktrees(deps(store), { workIds: [a], push: true, maxDepth: 20 });
+    expect(res.ledger[0]?.disposition).toBe('driven-done');
+    expect(res.ledger[0]?.removed).toBe(true);
+    expect(res.all_landed).toBe(true);
   });
 });
 
-describe('conflict → preserve (no removal)', () => {
-  test('a conflicted merge halts the member and never removes the worktree', async () => {
+describe('land is user-gated (no --push → no push)', () => {
+  test('push:false drives to done but never lands or tears down', async () => {
     const store = new WorkItemStore(dir);
     const a = await createMember(store);
+    let landCalls = 0;
     let removeCalls = 0;
     const res = await driveWorktrees(
       deps(store, {
-        merge: async () => conflictResult('CONFLICT (content): merge conflict in a.txt'),
+        land: async () => {
+          landCalls++;
+          return landedAll();
+        },
         removeWorktrees: async () => {
           removeCalls++;
           return removedResult;
@@ -144,53 +169,119 @@ describe('conflict → preserve (no removal)', () => {
       }),
       { workIds: [a], push: false, maxDepth: 20 },
     );
-    expect(removeCalls).toBe(0); // preserved
-    expect(res.ledger).toEqual([
-      {
-        member_id: a,
-        disposition: 'merge-conflicted',
-        reason: 'CONFLICT (content): merge conflict in a.txt',
-      },
-    ]);
-    expect(res.all_driven_done).toBe(false);
-    expect(res.halted_members).toEqual([a]);
+    expect(landCalls).toBe(0); // a push is irreversible + user-gated
+    expect(removeCalls).toBe(0); // worktree preserved for a manual land
+    expect(res.ledger[0]?.disposition).toBe('driven-not-landed');
+    expect(res.all_driven_done).toBe(true); // the drive DID reach done
+    expect(res.all_landed).toBe(false);
+    expect(res.push_requested).toBe(false);
+  });
+});
+
+describe('C5 — surface failure classes distinctly', () => {
+  test.each([
+    ['push-gate-rejected', 'push-gate: `bun test` failed'],
+    ['auth-or-network-failed', 'fatal: Authentication failed'],
+    ['non-ff-retry-exhausted', 'still non-fast-forward after 3 retries'],
+    ['rebase-conflict', 'CONFLICT (content): merge conflict in a.txt'],
+  ] as [LandStatus, string][])(
+    'a %s land is land-failed (never driven-done, never collapsed into a benign skip)',
+    async (status, reason) => {
+      const store = new WorkItemStore(dir);
+      const a = await createMember(store);
+      let removeCalls = 0;
+      const res = await driveWorktrees(
+        deps(store, {
+          land: async () => landFailed(status, reason),
+          removeWorktrees: async () => {
+            removeCalls++;
+            return removedResult;
+          },
+        }),
+        { workIds: [a], push: true, maxDepth: 20 },
+      );
+      expect(removeCalls).toBe(0); // failed land → worktree PRESERVED (never force-deleted)
+      expect(res.ledger[0]?.disposition).toBe('land-failed');
+      expect(res.ledger[0]?.disposition).not.toBe('driven-done');
+      expect(res.ledger[0]?.disposition).not.toBe('driven-not-landed'); // not a benign skip
+      expect(res.ledger[0]?.reason).toContain(status); // the class is surfaced
+      expect(res.land_failed_members).toEqual([a]);
+      expect(res.all_landed).toBe(false);
+    },
+  );
+
+  test('a benign no-origin skip is driven-not-landed (NOT land-failed)', async () => {
+    const store = new WorkItemStore(dir);
+    const a = await createMember(store);
+    const res = await driveWorktrees(deps(store, { land: async () => skippedNoOrigin }), {
+      workIds: [a],
+      push: true,
+      maxDepth: 20,
+    });
+    expect(res.ledger[0]?.disposition).toBe('driven-not-landed');
+    expect(res.land_failed_members).toEqual([]);
   });
 
-  test('the conflict reason is credential-scrubbed', async () => {
+  test('a land failure reason is credential-scrubbed (C6)', async () => {
     const store = new WorkItemStore(dir);
     const a = await createMember(store);
     const res = await driveWorktrees(
       deps(store, {
-        merge: async () => conflictResult('fatal: could not read from https://u:tok@host/x'),
+        land: async () =>
+          landFailed('auth-or-network-failed', 'fatal: could not read from https://u:tok@host/x'),
       }),
-      { workIds: [a], push: false, maxDepth: 20 },
+      { workIds: [a], push: true, maxDepth: 20 },
     );
-    expect(res.ledger[0]?.reason).toBe('fatal: could not read from https://***@host/x');
+    expect(res.ledger[0]?.reason).toContain('https://***@host/x');
+    expect(res.ledger[0]?.reason).not.toContain('tok');
+  });
+});
+
+describe('C1 — multi-repo partial land reports WHICH repos landed', () => {
+  test('a sub-repo lands but a later repo fails → land-failed, landed_repos names the landed one', async () => {
+    const store = new WorkItemStore(dir);
+    const a = await createMember(store);
+    let removeCalls = 0;
+    const res = await driveWorktrees(
+      deps(store, {
+        land: async () => partialLand(),
+        removeWorktrees: async () => {
+          removeCalls++;
+          return removedResult;
+        },
+      }),
+      { workIds: [a], push: true, maxDepth: 20 },
+    );
+    expect(res.ledger[0]?.disposition).toBe('land-failed'); // not all-or-nothing "done"
+    expect(res.ledger[0]?.landed_repos).toEqual(['sub']); // the irreversible partial land is reported
+    expect(res.ledger[0]?.reason).toContain('auth-or-network-failed');
+    expect(removeCalls).toBe(0); // partial land → worktrees preserved
+    expect(res.all_landed).toBe(false);
   });
 });
 
 describe('continue-on-halt across an independent set', () => {
-  test('a conflicted member does not stop a later done member', async () => {
+  test('a land-failed member does not stop a later done member', async () => {
     const store = new WorkItemStore(dir);
     const bad = await createMember(store);
     const good = await createMember(store);
     const removed: string[] = [];
-    const merge: WorktreeMergeFn = async (_r, id) =>
-      id === bad ? conflictResult('CONFLICT in x') : mergedResult;
+    const land: WorktreeLandFn = async (_r, id) =>
+      id === bad ? landFailed('rebase-conflict', 'CONFLICT in x') : landedAll();
     const res = await driveWorktrees(
       deps(store, {
-        merge,
+        land,
         removeWorktrees: async (_r, id) => {
           removed.push(id);
           return removedResult;
         },
       }),
-      { workIds: [bad, good], push: false, maxDepth: 20 },
+      { workIds: [bad, good], push: true, maxDepth: 20 },
     );
-    expect(res.ledger.map((e) => e.disposition)).toEqual(['merge-conflicted', 'driven-done']);
-    expect(res.halted_members).toEqual([bad]);
-    expect(removed).toEqual([good]); // only the clean one removed
-    expect(res.all_driven_done).toBe(false);
+    expect(res.ledger.map((e) => e.disposition)).toEqual(['land-failed', 'driven-done']);
+    expect(res.land_failed_members).toEqual([bad]);
+    expect(removed).toEqual([good]); // only the fully-landed one torn down
+    expect(res.all_landed).toBe(false);
   });
 });
 
@@ -199,7 +290,7 @@ describe('drive-step halt', () => {
     const store = new WorkItemStore(dir);
     const blocked = await createMember(store);
     const ok = await createMember(store);
-    let mergeCalls = 0;
+    let landCalls = 0;
     const driveMember: WorktreeDriveMemberFn = async (_c, id) => {
       if (id === blocked) return { outcome: 'halted', reason: 'blocked: needs a user decision' };
       await store.close(id, 'done');
@@ -208,12 +299,12 @@ describe('drive-step halt', () => {
     const res = await driveWorktrees(
       deps(store, {
         driveMember,
-        merge: async () => {
-          mergeCalls++;
-          return mergedResult;
+        land: async () => {
+          landCalls++;
+          return landedAll();
         },
       }),
-      { workIds: [blocked, ok], push: false, maxDepth: 20 },
+      { workIds: [blocked, ok], push: true, maxDepth: 20 },
     );
     expect(res.ledger[0]).toEqual({
       member_id: blocked,
@@ -221,7 +312,7 @@ describe('drive-step halt', () => {
       reason: 'blocked: needs a user decision',
     });
     expect(res.ledger[1]?.disposition).toBe('driven-done');
-    expect(mergeCalls).toBe(1); // only the ok member reached merge
+    expect(landCalls).toBe(1); // only the ok member reached land
     expect(res.halted_members).toEqual([blocked]);
   });
 });
@@ -238,7 +329,7 @@ describe('worktree gate', () => {
           return { outcome: 'done' } as DriveMemberResult;
         },
       }),
-      { workIds: [a], push: false, maxDepth: 20 },
+      { workIds: [a], push: true, maxDepth: 20 },
     );
     expect(driveCalls).toBe(0);
     expect(res.ledger[0]?.disposition).toBe('halted');
@@ -260,7 +351,7 @@ describe('intent-lock gate', () => {
           return { outcome: 'done' } as DriveMemberResult;
         },
       }),
-      { workIds: [a], push: false, maxDepth: 20 },
+      { workIds: [a], push: true, maxDepth: 20 },
     );
     expect(driveCalls).toBe(0);
     expect(res.ledger[0]).toEqual({
@@ -284,67 +375,11 @@ describe('terminal-not-done gate', () => {
           return { outcome: 'done' } as DriveMemberResult;
         },
       }),
-      { workIds: [a], push: false, maxDepth: 20 },
+      { workIds: [a], push: true, maxDepth: 20 },
     );
     expect(driveCalls).toBe(0);
     expect(res.ledger[0]?.disposition).toBe('halted');
     expect(res.ledger[0]?.reason).toMatch(/terminal-not-done/);
-  });
-});
-
-describe('push gating', () => {
-  test('push=false → not-requested, attemptPush never called', async () => {
-    const store = new WorkItemStore(dir);
-    const a = await createMember(store);
-    let pushCalls = 0;
-    const res = await driveWorktrees(
-      deps(store, {
-        attemptPush: async () => {
-          pushCalls++;
-          return 'pushed';
-        },
-      }),
-      { workIds: [a], push: false, maxDepth: 20 },
-    );
-    expect(res.push).toBe('not-requested');
-    expect(res.push_ready).toBe(true);
-    expect(pushCalls).toBe(0);
-  });
-
-  test('push=true & all driven-done → attemptPush called once', async () => {
-    const store = new WorkItemStore(dir);
-    const a = await createMember(store);
-    const b = await createMember(store);
-    const pushed: string[][] = [];
-    const res = await driveWorktrees(
-      deps(store, {
-        attemptPush: async (members) => {
-          pushed.push([...members]);
-          return 'pushed';
-        },
-      }),
-      { workIds: [a, b], push: true, maxDepth: 20 },
-    );
-    expect(res.push).toBe('pushed');
-    expect(pushed).toEqual([[a, b]]);
-  });
-
-  test('push=true but a halt → skipped-not-ready, attemptPush never called', async () => {
-    const store = new WorkItemStore(dir);
-    const a = await createMember(store);
-    let pushCalls = 0;
-    const res = await driveWorktrees(
-      deps(store, {
-        merge: async () => conflictResult('CONFLICT'),
-        attemptPush: async () => {
-          pushCalls++;
-          return 'pushed';
-        },
-      }),
-      { workIds: [a], push: true, maxDepth: 20 },
-    );
-    expect(res.push).toBe('skipped-not-ready');
-    expect(pushCalls).toBe(0);
   });
 });
 

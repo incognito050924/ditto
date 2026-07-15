@@ -1,12 +1,12 @@
 import { defineCommand } from 'citty';
-import { productionAttemptPush, productionDriveMember } from '~/core/chain-drive';
+import { productionDriveMember } from '~/core/chain-drive';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   createWorktreeForWorkItem,
+  landWorktreesForWorkItem,
   listWorktreesForWorkspace,
-  mergeWorktreesForWorkItem,
   removeWorktreesForWorkItem,
   worktreeBindingHint,
 } from '~/core/worktree';
@@ -186,7 +186,7 @@ const worktreeDrive = defineCommand({
   meta: {
     name: 'drive',
     description:
-      'Drive an INDEPENDENT set of named work items, each in its own DITTO worktree: drive each non-terminal intent-locked member through its autopilot inside its worktree, then clean-merge it back into its owning repo and tear the worktree down. Unlike `work chain drive`, the set is not a follows-spine — a halt on one member CONTINUES to the next; only the depth cap breaks the run. Skips done members (idempotent resume), halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Reports push-readiness on full completion; pushes ONLY with --push (never unasked, never force). This is the sanctioned explicit carve-out: only the named ids are driven (no auto-discovery).',
+      'Drive an INDEPENDENT set of named work items, each in its own DITTO worktree: drive each non-terminal intent-locked member through its autopilot inside its worktree, then — with --push — LAND it straight to origin/<default> (push the branch commits; NO local merge into the shared main checkout) and tear the worktree down. Unlike `work chain drive`, the set is not a follows-spine — a halt on one member CONTINUES to the next; only the depth cap breaks the run. Skips done members (idempotent resume), halts (with a per-member verdict) on a missing intent.json, an abandoned member, or a member that ends not-done. Landing is user-gated (a push is irreversible): without --push a driven member is left for a manual land. Failure classes are surfaced distinctly (no-origin skip vs push-gate vs auth/network vs non-FF-exhausted vs rebase-conflict) and never force-push. This is the sanctioned explicit carve-out: only the named ids are driven (no auto-discovery).',
   },
   args: {
     workIds: {
@@ -197,7 +197,7 @@ const worktreeDrive = defineCommand({
     push: {
       type: 'boolean',
       description:
-        'On a fully driven-done set, push the current branch HEAD to origin (no force; any push failure degrades to skipped, exit 0). Default: report push-readiness without pushing.',
+        'LAND each driven-done member: push its branch commits straight to origin/<default> (force-free; non-FF → fetch+rebase+re-push), then tear the worktree down. Your LOCAL default branch is NOT updated by a land — run `git fetch` to sync. Default: drive to done without landing.',
       default: false,
     },
     'max-depth': {
@@ -245,9 +245,8 @@ const worktreeDrive = defineCommand({
           store,
           intentExists: (id) => intentStore.exists(id),
           driveMember: (worktreeCwd, wiId) => productionDriveMember(worktreeCwd, wiId),
-          merge: (root, wiId) => mergeWorktreesForWorkItem(root, wiId),
+          land: (root, wiId) => landWorktreesForWorkItem(root, wiId),
           removeWorktrees: (root, wiId) => removeWorktreesForWorkItem(root, wiId),
-          attemptPush: (members) => productionAttemptPush(repoRoot, members),
         },
         { workIds, push: args.push === true, maxDepth },
       );
@@ -257,17 +256,29 @@ const worktreeDrive = defineCommand({
         writeHuman(`Worktree drive (${result.work_ids.length} member(s)):`);
         for (const e of result.ledger) {
           const removed = e.disposition === 'driven-done' ? ` removed=${e.removed === true}` : '';
+          const landed =
+            e.landed_repos && e.landed_repos.length > 0
+              ? `\tlanded_repos=[${e.landed_repos.join(', ')}]`
+              : '';
           writeHuman(
-            `  ${e.member_id}\t${e.disposition}${removed}${e.reason ? `\t(${e.reason})` : ''}`,
+            `  ${e.member_id}\t${e.disposition}${removed}${landed}${e.reason ? `\t(${e.reason})` : ''}`,
           );
         }
         if (result.halted_members.length > 0)
           writeHuman(`  halted_members: ${result.halted_members.join(', ')}`);
+        if (result.land_failed_members.length > 0)
+          writeHuman(`  land_failed_members: ${result.land_failed_members.join(', ')}`);
         if (result.stopped_at_cap)
           writeHuman(`  stopped at depth cap (${maxDepth}) — re-invoke to continue`);
         writeHuman(`  all_driven_done: ${result.all_driven_done}`);
-        writeHuman(`  push_ready: ${result.push_ready}`);
-        writeHuman(`  push: ${result.push}`);
+        writeHuman(`  all_landed: ${result.all_landed}`);
+        // ac-5: a land pushes to origin/<default> and NEVER updates the local default
+        // branch — the user must fetch to see the landed commits locally.
+        if (result.push_requested && result.all_landed) {
+          writeHuman(
+            '  NOTE: landed to origin/<default>; your LOCAL default branch is NOT updated — run `git fetch` (or `git pull`) to sync.',
+          );
+        }
       }
     } catch (err) {
       writeError(`worktree drive failed: ${err instanceof Error ? err.message : String(err)}`);

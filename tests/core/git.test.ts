@@ -26,10 +26,10 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { listChangedFiles } from '~/core/git';
+import { classifyPushRejection, landBranchToOrigin, listChangedFiles } from '~/core/git';
 
 let repo: string;
 
@@ -91,5 +91,154 @@ describe('listChangedFiles untrackedOnly baseline parsing (wi_260710s4j)', () =>
     // Normalized back to the real utf-8 path — the raw `"\355\225\234…"` quoted form
     // must not leak (the later exclusion compares against the utf-8 owner-reported path).
     expect(listChangedFiles(repo, { untrackedOnly: true })).toEqual(['한글.txt']);
+  });
+});
+
+// ─── Direct-to-origin land (wi_2607156f8) ────────────────────────────────────
+// BACKGROUND — why these tests exist:
+// The worktree LAND path must push a work-item branch's commits STRAIGHT to
+// origin/<default> (never a local merge into the shared main checkout). These pin:
+//   C5  classifyPushRejection maps git's rejection wording to the retry-vs-surface
+//       class (non-FF is recoverable; push-gate / auth-network are real failures).
+//   C1/C2 landBranchToOrigin: a fast-forward push LANDS; a non-fast-forward
+//       rejection is recovered by fetch+rebase (LINEAR, no merge commit)+re-push;
+//       a rebase CONFLICT aborts (leaving a clean tree) and surfaces 'rebase-conflict';
+//       a persistently-rejecting remote EXHAUSTS the bounded retry.
+// Real temp git repos with a LOCAL bare "origin" (no network): landBranchToOrigin IS
+// the git wrapper, so its unit is real `git push/fetch/rebase` over controlled fixtures.
+
+describe('classifyPushRejection (C5 rejection classes)', () => {
+  test("a non-fast-forward '[rejected] (fetch first)' rejection → non-ff (recoverable)", () => {
+    const stderr =
+      ' ! [rejected]        ditto/wi_x -> main (fetch first)\n' +
+      "error: failed to push some refs to 'origin'";
+    expect(classifyPushRejection(stderr)).toBe('non-ff');
+    expect(classifyPushRejection('hint: Updates were rejected (non-fast-forward)')).toBe('non-ff');
+  });
+
+  test("a DITTO pre-push gate decline ('push-gate:') → push-gate (real failure)", () => {
+    expect(classifyPushRejection('push-gate: `bun test` failed — push blocked.')).toBe('push-gate');
+  });
+
+  test('an auth/network rejection → auth-network (real failure)', () => {
+    expect(classifyPushRejection('fatal: Authentication failed for https://host/x')).toBe(
+      'auth-network',
+    );
+    expect(classifyPushRejection('fatal: could not read from remote repository')).toBe(
+      'auth-network',
+    );
+  });
+});
+
+describe('landBranchToOrigin (C1/C2 push + non-FF recovery)', () => {
+  let origin: string;
+  let work: string;
+
+  async function initOrigin(): Promise<void> {
+    origin = await mkdtemp(join(tmpdir(), 'ditto-land-origin-'));
+    execFileSync('git', ['init', '--bare', '-b', 'main', origin], { encoding: 'utf8' });
+  }
+  function g(cwd: string, args: string[]): string {
+    return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  }
+  async function seedOriginWithMain(): Promise<void> {
+    const seed = await mkdtemp(join(tmpdir(), 'ditto-land-seed-'));
+    execFileSync('git', ['clone', '-q', origin, seed], { encoding: 'utf8' });
+    g(seed, ['config', 'user.email', 't@t']);
+    g(seed, ['config', 'user.name', 't']);
+    await writeFile(join(seed, 'shared.txt'), 'line1\n');
+    g(seed, ['add', '.']);
+    g(seed, ['commit', '-q', '-m', 'base']);
+    g(seed, ['push', '-q', 'origin', 'main']);
+    await rm(seed, { recursive: true, force: true });
+  }
+  /** A work clone on branch `ditto/wi_x`, forked from origin/main. */
+  async function makeWork(): Promise<void> {
+    work = await mkdtemp(join(tmpdir(), 'ditto-land-work-'));
+    execFileSync('git', ['clone', '-q', origin, work], { encoding: 'utf8' });
+    g(work, ['config', 'user.email', 't@t']);
+    g(work, ['config', 'user.name', 't']);
+    g(work, ['checkout', '-q', '-b', 'ditto/wi_x']);
+  }
+  /** Advance origin/main out-of-band (another clone) to force a non-FF on work's push. */
+  async function advanceOriginMain(content: string, file = 'other.txt'): Promise<void> {
+    const other = await mkdtemp(join(tmpdir(), 'ditto-land-other-'));
+    execFileSync('git', ['clone', '-q', origin, other], { encoding: 'utf8' });
+    g(other, ['config', 'user.email', 't@t']);
+    g(other, ['config', 'user.name', 't']);
+    await writeFile(join(other, file), content);
+    g(other, ['add', '.']);
+    g(other, ['commit', '-q', '-m', 'other-side change']);
+    g(other, ['push', '-q', 'origin', 'main']);
+    await rm(other, { recursive: true, force: true });
+  }
+
+  beforeEach(async () => {
+    await initOrigin();
+    await seedOriginWithMain();
+    await makeWork();
+  });
+  afterEach(async () => {
+    await rm(origin, { recursive: true, force: true });
+    await rm(work, { recursive: true, force: true });
+  });
+
+  test('a fast-forward push LANDS the branch commits on origin/main', async () => {
+    await writeFile(join(work, 'g.txt'), 'mywork\n');
+    g(work, ['add', '.']);
+    g(work, ['commit', '-q', '-m', 'my work']);
+    const tip = g(work, ['rev-parse', 'HEAD']);
+
+    const res = landBranchToOrigin(work, 'ditto/wi_x', 'main');
+    expect(res.status).toBe('landed');
+    // origin/main now holds the branch tip (the push updated the tracking ref).
+    expect(g(work, ['rev-parse', 'refs/remotes/origin/main'])).toBe(tip);
+  });
+
+  test('a NON-fast-forward push is recovered by fetch+rebase (linear) then lands', async () => {
+    await writeFile(join(work, 'g.txt'), 'mywork\n'); // non-conflicting new file
+    g(work, ['add', '.']);
+    g(work, ['commit', '-q', '-m', 'my work']);
+    await advanceOriginMain('other\n'); // origin/main moves ahead → work's push is non-FF
+
+    const res = landBranchToOrigin(work, 'ditto/wi_x', 'main');
+    expect(res.status).toBe('landed');
+    // origin/main contains BOTH the other-side commit AND the rebased branch commit,
+    // and the history is LINEAR (no merge commit) — the branch was rebased, not merged.
+    g(work, ['fetch', '-q', 'origin', 'main']);
+    const graph = g(work, ['log', '--oneline', 'refs/remotes/origin/main']);
+    expect(graph).toContain('my work');
+    expect(graph).toContain('other-side change');
+    const merges = g(work, ['rev-list', '--merges', 'refs/remotes/origin/main']);
+    expect(merges).toBe(''); // no merge commit anywhere on the landed history
+  });
+
+  test('a rebase CONFLICT during non-FF recovery aborts (clean tree) and surfaces rebase-conflict', async () => {
+    await writeFile(join(work, 'shared.txt'), 'branch-change\n'); // edits the SAME file…
+    g(work, ['add', '.']);
+    g(work, ['commit', '-q', '-m', 'branch edit']);
+    await advanceOriginMain('base-change\n', 'shared.txt'); // …origin edits it too → rebase conflict
+
+    const res = landBranchToOrigin(work, 'ditto/wi_x', 'main');
+    expect(res.status).toBe('rebase-conflict');
+    expect(res.reason).toContain('CONFLICT');
+    // rebase --abort ran: the working tree is clean and HEAD is back on the branch.
+    expect(g(work, ['status', '--porcelain'])).toBe('');
+    expect(g(work, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('ditto/wi_x');
+  });
+
+  test('a persistently-rejecting remote EXHAUSTS the bounded retry (non-ff-retry-exhausted)', async () => {
+    // A pre-receive hook that ALWAYS rejects with a non-FF marker makes every re-push
+    // (after fetch+rebase) fail the same way → the bounded retry exhausts rather than
+    // looping forever.
+    const hook = join(origin, 'hooks', 'pre-receive');
+    await writeFile(hook, '#!/bin/sh\necho "fetch first" >&2\nexit 1\n');
+    await chmod(hook, 0o755);
+    await writeFile(join(work, 'g.txt'), 'mywork\n');
+    g(work, ['add', '.']);
+    g(work, ['commit', '-q', '-m', 'my work']);
+
+    const res = landBranchToOrigin(work, 'ditto/wi_x', 'main', { maxRetries: 2 });
+    expect(res.status).toBe('non-ff-retry-exhausted');
   });
 });

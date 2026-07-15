@@ -200,6 +200,160 @@ export function gitPush(cwd: string, remote: string, ref: string): GitPushResult
   }
 }
 
+// ─── Direct-to-origin land of a work-item branch (wi_2607156f8) ──────────────
+// The worktree LAND path pushes a work-item branch's commits straight to the
+// remote default branch — it never merges into the shared local checkout. On a
+// non-fast-forward rejection it fetches + rebases (linear, NO merge commit) onto
+// `refs/remotes/origin/<default>` and re-pushes, bounded by a retry cap; a rebase
+// conflict aborts and surfaces. Every git subprocess carries a PER-ATTEMPT timeout
+// so a hung call fails that attempt (feeding the retry) instead of blocking forever.
+// NEVER --force.
+
+/** How a failed `git push` is classified from its raw output (drives retry vs surface). */
+export type PushRejectionClass = 'non-ff' | 'push-gate' | 'auth-network';
+
+/**
+ * Classify a failed push from git's combined stderr/stdout:
+ *  - 'non-ff'       — the remote moved ahead (`[rejected] … (fetch first)` /
+ *                     `non-fast-forward`): recoverable by fetch+rebase+re-push.
+ *  - 'push-gate'    — a client pre-push gate declined (DITTO's `push-gate:` message):
+ *                     a real failure, never retried.
+ *  - 'auth-network' — anything else (auth/permission/network/unknown): a real failure.
+ * A non-FF marker wins over the others so a rejection we CAN recover from is retried.
+ */
+export function classifyPushRejection(output: string): PushRejectionClass {
+  if (/non-fast-forward|fetch first|\bstale info\b/i.test(output)) return 'non-ff';
+  if (/push-gate:|pre-push hook/i.test(output)) return 'push-gate';
+  return 'auth-network';
+}
+
+export type LandToOriginStatus =
+  | 'landed'
+  | 'push-gate-rejected'
+  | 'auth-or-network-failed'
+  | 'non-ff-retry-exhausted'
+  | 'rebase-conflict';
+
+export interface LandToOriginResult {
+  status: LandToOriginStatus;
+  /** raw git output on failure (the caller credential-scrubs before reporting). Empty on landed. */
+  reason: string;
+}
+
+/** Default per-attempt wall clock for a land subprocess (push/fetch/rebase). */
+export const LAND_ATTEMPT_TIMEOUT_MS = 120_000;
+/** Default bound on fetch+rebase+re-push recovery attempts after a non-FF rejection. */
+export const LAND_MAX_RETRIES = 3;
+
+interface GitRun {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+/** Run a git subprocess with a per-attempt timeout; a timeout is reported (never thrown). */
+function runGitBounded(cwd: string, args: string[], timeoutMs: number): GitRun {
+  try {
+    const stdout = execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, stdout, stderr: '', timedOut: false };
+  } catch (err) {
+    const e = err as {
+      stdout?: Buffer | string;
+      stderr?: Buffer | string;
+      killed?: boolean;
+      signal?: string;
+      code?: string;
+    };
+    // execFileSync kills a run that exceeds `timeout` (killed=true / SIGTERM / ETIMEDOUT).
+    const timedOut = e.killed === true || e.signal === 'SIGTERM' || e.code === 'ETIMEDOUT';
+    return {
+      ok: false,
+      stdout: e.stdout?.toString() ?? '',
+      stderr: e.stderr?.toString() ?? '',
+      timedOut,
+    };
+  }
+}
+
+/**
+ * Push `branch`'s commits to `origin/<defaultBranch>` (refspec `branch:defaultBranch`,
+ * force-free, `--` end-of-options). On a non-fast-forward rejection: fetch
+ * `origin <defaultBranch>` → rebase the branch onto `refs/remotes/origin/<defaultBranch>`
+ * (LINEAR, no merge commit) → re-push, up to `maxRetries` times. A rebase CONFLICT →
+ * `git rebase --abort` + `rebase-conflict`. A hung subprocess (per-attempt timeout) fails
+ * THAT attempt and feeds the retry. A push-gate decline / auth / network rejection is a
+ * real failure surfaced by class. NEVER force-pushes; the caller must have validated
+ * `branch`/`defaultBranch` (assertSafeArg) — the argv also ends options with `--`.
+ */
+export function landBranchToOrigin(
+  cwd: string,
+  branch: string,
+  defaultBranch: string,
+  opts: { maxRetries?: number; attemptTimeoutMs?: number } = {},
+): LandToOriginResult {
+  const maxRetries = opts.maxRetries ?? LAND_MAX_RETRIES;
+  const timeout = opts.attemptTimeoutMs ?? LAND_ATTEMPT_TIMEOUT_MS;
+  const refspec = `${branch}:${defaultBranch}`;
+  const originRef = `refs/remotes/origin/${defaultBranch}`;
+
+  // attempt 0 = the initial push; up to `maxRetries` fetch+rebase+re-push recoveries.
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const push = runGitBounded(cwd, ['push', 'origin', '--', refspec], timeout);
+    if (push.ok) return { status: 'landed', reason: '' };
+
+    if (!push.timedOut) {
+      const cls = classifyPushRejection(`${push.stderr}\n${push.stdout}`);
+      if (cls === 'push-gate') {
+        return { status: 'push-gate-rejected', reason: push.stderr || push.stdout };
+      }
+      if (cls === 'auth-network') {
+        return { status: 'auth-or-network-failed', reason: push.stderr || push.stdout };
+      }
+    }
+    // non-FF (or a hung push) → recover then retry, unless the retry budget is spent.
+    if (attempt >= maxRetries) {
+      return {
+        status: 'non-ff-retry-exhausted',
+        reason: push.stderr || push.stdout || 'push retries exhausted',
+      };
+    }
+    const terminal = recoverForRetry(cwd, defaultBranch, originRef, timeout);
+    if (terminal) return terminal;
+  }
+  return { status: 'non-ff-retry-exhausted', reason: 'push retries exhausted' };
+}
+
+/**
+ * One fetch+rebase recovery step before a re-push. Returns a TERMINAL result to stop
+ * (a rebase conflict, or a non-timeout fetch failure), or null to proceed to the next
+ * push attempt. A hung fetch/rebase (timeout) is aborted and returns null so the
+ * retry loop continues rather than blocking. NEVER leaves a rebase in progress.
+ */
+function recoverForRetry(
+  cwd: string,
+  defaultBranch: string,
+  originRef: string,
+  timeout: number,
+): LandToOriginResult | null {
+  const fetched = runGitBounded(cwd, ['fetch', 'origin', '--', defaultBranch], timeout);
+  if (!fetched.ok) {
+    if (fetched.timedOut) return null; // hung fetch → feed the retry
+    return { status: 'auth-or-network-failed', reason: fetched.stderr || fetched.stdout };
+  }
+  const rebased = runGitBounded(cwd, ['rebase', originRef], timeout);
+  if (rebased.ok) return null; // rebased onto origin/<default> → retry the push
+  runGitBounded(cwd, ['rebase', '--abort'], timeout); // best effort — never leave a rebase mid-flight
+  if (rebased.timedOut) return null; // hung rebase (now aborted) → feed the retry
+  // git writes CONFLICT (content) lines to STDOUT; keep both so the reason is populated.
+  return { status: 'rebase-conflict', reason: `${rebased.stdout}\n${rebased.stderr}`.trim() };
+}
+
 export function captureGitDiff(cwd: string): string {
   try {
     return execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd, encoding: 'utf8' });

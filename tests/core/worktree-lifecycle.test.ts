@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
   createWorktreeForWorkItem,
+  landWorktreesForWorkItem,
   listRunWorktrees,
-  mergeWorktreesForWorkItem,
   parseWorktreePath,
   removeWorktreesForWorkItem,
   toPosixSeparators,
@@ -22,6 +22,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let repo: string;
 let wis: WorkItemStore;
 let WI: string;
+let origins: string[];
 const NOW = new Date('2026-06-25T00:00:00.000Z');
 
 function git(cwd: string, args: string[]): string {
@@ -32,6 +33,22 @@ function initRepo(dir: string): void {
   git(dir, ['init', '-q']);
   git(dir, ['config', 'user.email', 'ditto@example.test']);
   git(dir, ['config', 'user.name', 'DITTO Test']);
+}
+
+/**
+ * Give `repo` a LOCAL bare `origin` whose default branch is `defaultBranch`, then push
+ * `defaultBranch` so `refs/remotes/origin/<defaultBranch>` is set locally. No network —
+ * a file-path bare repo is real git. The land + teardown gates (landed-to-origin) need
+ * a real origin to resolve the remote default and confirm a branch has landed.
+ */
+async function attachOrigin(defaultBranch = 'main'): Promise<string> {
+  const originDir = await mkdtemp(join(tmpdir(), 'ditto-wt-origin-'));
+  execFileSync('git', ['init', '--bare', '-b', defaultBranch, originDir], { encoding: 'utf8' });
+  git(repo, ['branch', '-M', defaultBranch]); // name the current branch as the default
+  git(repo, ['remote', 'add', 'origin', originDir]);
+  git(repo, ['push', '-q', 'origin', defaultBranch]);
+  origins.push(originDir);
+  return originDir;
 }
 
 async function makeWorkItem(): Promise<string> {
@@ -51,6 +68,7 @@ async function makeWorkItem(): Promise<string> {
 
 beforeEach(async () => {
   repo = await mkdtemp(join(tmpdir(), 'ditto-wt-life-'));
+  origins = [];
   initRepo(repo);
   await writeFile(join(repo, 'README.md'), 'hello\n', 'utf8');
   git(repo, ['add', '.']);
@@ -61,6 +79,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(repo, { recursive: true, force: true });
+  for (const o of origins) await rm(o, { recursive: true, force: true });
 });
 
 describe('createWorktreeForWorkItem (ac-1)', () => {
@@ -142,8 +161,9 @@ describe('createWorktreeForWorkItem (ac-1)', () => {
   });
 });
 
-describe('removeWorktreesForWorkItem (ac-2 safety)', () => {
+describe('removeWorktreesForWorkItem (ac-2 safety, C4 landed-to-origin gate)', () => {
   test('blocks an uncommitted-change worktree and never deletes it without --force', async () => {
+    await attachOrigin(); // branch is landed (== origin/main); only dirtiness should block
     await createWorktreeForWorkItem(repo, WI);
     const wtAbs = join(repo, '.ditto', 'local', 'worktrees', WI);
     await writeFile(join(wtAbs, 'dirty.txt'), 'uncommitted\n', 'utf8');
@@ -158,19 +178,35 @@ describe('removeWorktreesForWorkItem (ac-2 safety)', () => {
     expect((await wis.get(WI)).worktrees).toHaveLength(1);
   });
 
-  test('blocks an unmerged-commits worktree without --force', async () => {
+  test('blocks an UNLANDED-commits worktree without --force (never force-deletes it)', async () => {
+    await attachOrigin();
     await createWorktreeForWorkItem(repo, WI);
     const wtAbs = join(repo, '.ditto', 'local', 'worktrees', WI);
-    git(wtAbs, ['commit', '-q', '--allow-empty', '-m', 'unmerged work']);
+    // A commit that was NOT pushed to origin → the branch tip is not reachable from
+    // origin/main → the teardown must refuse (it would otherwise destroy unlanded work).
+    git(wtAbs, ['commit', '-q', '--allow-empty', '-m', 'unlanded work']);
 
     const res = await removeWorktreesForWorkItem(repo, WI, { force: false });
     expect(res.removed).toEqual([]);
-    expect(res.blocked[0]?.reason).toContain('unmerged commits');
+    expect(res.blocked[0]?.reason).toContain('unlanded commits');
+    expect(listRunWorktrees(repo)).toEqual([`.ditto/local/worktrees/${WI}`]);
+    // the branch (with its unlanded commit) survives
+    expect(git(repo, ['rev-parse', '--verify', `ditto/${WI}`]).length).toBe(40);
+  });
+
+  test('a no-origin worktree cannot be confirmed landed → blocked without --force (fail-safe)', async () => {
+    // No origin attached: the land can never be confirmed, so teardown fails safe
+    // (preserve) rather than destroy possibly-unlanded work.
+    await createWorktreeForWorkItem(repo, WI);
+    const res = await removeWorktreesForWorkItem(repo, WI, { force: false });
+    expect(res.removed).toEqual([]);
+    expect(res.blocked[0]?.reason).toContain('unlanded commits');
     expect(listRunWorktrees(repo)).toEqual([`.ditto/local/worktrees/${WI}`]);
   });
 
-  test('removes a clean, merged worktree and drops it from meta', async () => {
-    await createWorktreeForWorkItem(repo, WI);
+  test('removes a clean, LANDED worktree and drops it from meta', async () => {
+    await attachOrigin();
+    await createWorktreeForWorkItem(repo, WI); // branch == origin/main → already landed
     const res = await removeWorktreesForWorkItem(repo, WI, { force: false });
     expect(res.blocked).toEqual([]);
     expect(res.removed).toHaveLength(1);
@@ -180,10 +216,32 @@ describe('removeWorktreesForWorkItem (ac-2 safety)', () => {
     expect(() => git(repo, ['rev-parse', '--verify', `ditto/${WI}`])).toThrow();
   });
 
-  test('--force removes a dirty/unmerged worktree (explicit approval)', async () => {
+  test('C4: a branch LANDED to origin (pushed, NOT locally merged) is removable', async () => {
+    // The crux of C4: local main HEAD is NEVER moved by a land (no local merge), so the
+    // OLD local-HEAD ancestry gate would read this pushed branch as "unmerged" and BLOCK
+    // teardown (orphan on every success). The gate must instead confirm landed-to-origin.
+    await attachOrigin();
     await createWorktreeForWorkItem(repo, WI);
     const wtAbs = join(repo, '.ditto', 'local', 'worktrees', WI);
-    git(wtAbs, ['commit', '-q', '--allow-empty', '-m', 'unmerged work']);
+    await writeFile(join(wtAbs, 'feature.txt'), 'work\n', 'utf8');
+    git(wtAbs, ['add', '.']);
+    git(wtAbs, ['commit', '-q', '-m', 'feature work']);
+    // Land it to origin (push branch:main) — local main is left untouched.
+    const land = await landWorktreesForWorkItem(repo, WI);
+    expect(land.allLanded).toBe(true);
+    // repo's LOCAL main is NOT updated by the land (proves teardown can't be keyed on it).
+    expect(git(repo, ['rev-parse', 'main'])).not.toBe(git(repo, ['rev-parse', `ditto/${WI}`]));
+
+    const res = await removeWorktreesForWorkItem(repo, WI, { force: false });
+    expect(res.blocked).toEqual([]);
+    expect(res.removed).toHaveLength(1);
+    expect(listRunWorktrees(repo)).toEqual([]);
+  });
+
+  test('--force removes a dirty/unlanded worktree (explicit approval)', async () => {
+    await createWorktreeForWorkItem(repo, WI);
+    const wtAbs = join(repo, '.ditto', 'local', 'worktrees', WI);
+    git(wtAbs, ['commit', '-q', '--allow-empty', '-m', 'unlanded work']);
     await writeFile(join(wtAbs, 'dirty.txt'), 'uncommitted\n', 'utf8');
 
     const res = await removeWorktreesForWorkItem(repo, WI, { force: true });
@@ -194,27 +252,49 @@ describe('removeWorktreesForWorkItem (ac-2 safety)', () => {
   });
 });
 
-describe('mergeWorktreesForWorkItem — conflict reason', () => {
-  test('a real merge conflict carries a non-empty reason with git conflict detail', async () => {
+describe('landWorktreesForWorkItem — direct-to-origin land', () => {
+  test('pushes the branch commits straight to origin/<default> and does NOT touch local main', async () => {
+    await attachOrigin();
+    const localMainBefore = git(repo, ['rev-parse', 'main']);
     await createWorktreeForWorkItem(repo, WI);
     const wtAbs = join(repo, '.ditto', 'local', 'worktrees', WI);
-    // Branch changes README one way…
-    await writeFile(join(wtAbs, 'README.md'), 'branch-side change\n', 'utf8');
-    git(wtAbs, ['add', 'README.md']);
-    git(wtAbs, ['commit', '-q', '-m', 'branch edits README']);
-    // …the base checkout changes the SAME line another way → merge must conflict.
-    await writeFile(join(repo, 'README.md'), 'base-side change\n', 'utf8');
-    git(repo, ['add', 'README.md']);
-    git(repo, ['commit', '-q', '-m', 'base edits README']);
+    await writeFile(join(wtAbs, 'feature.txt'), 'work\n', 'utf8');
+    git(wtAbs, ['add', '.']);
+    git(wtAbs, ['commit', '-q', '-m', 'feature work']);
+    const branchTip = git(wtAbs, ['rev-parse', 'HEAD']);
 
-    const res = await mergeWorktreesForWorkItem(repo, WI);
-    expect(res.allMerged).toBe(false);
-    const outcome = res.outcomes.find((o) => o.status === 'conflicted');
-    expect(outcome).toBeDefined();
-    // git writes CONFLICT text to STDOUT, not stderr — the reason must still be populated.
-    expect(outcome?.reason ?? '').not.toBe('');
-    expect(outcome?.reason).toContain('CONFLICT');
-    expect(outcome?.reason).toContain('README.md');
+    const res = await landWorktreesForWorkItem(repo, WI);
+    expect(res.allLanded).toBe(true);
+    expect(res.anyLanded).toBe(true);
+    expect(res.outcomes.map((o) => o.status)).toEqual(['landed']);
+    // origin/main now holds the branch tip (the push landed it).
+    expect(git(repo, ['rev-parse', 'refs/remotes/origin/main'])).toBe(branchTip);
+    // …but LOCAL main is untouched — landing never merges into the shared checkout.
+    expect(git(repo, ['rev-parse', 'main'])).toBe(localMainBefore);
+  });
+
+  test('no origin → a distinct benign skip (never a wrong-branch push)', async () => {
+    await createWorktreeForWorkItem(repo, WI); // no origin attached
+    const res = await landWorktreesForWorkItem(repo, WI);
+    expect(res.allLanded).toBe(false);
+    expect(res.anyLanded).toBe(false);
+    expect(res.outcomes[0]?.status).toBe('skipped-no-origin');
+    expect(res.outcomes[0]?.reason).toContain('no origin');
+  });
+
+  test('degenerate origin default == work-item branch → skip, never push branch:branch', async () => {
+    // A misconfigured origin whose default branch IS the work-item branch would make
+    // `push ditto/<wi>:ditto/<wi>` — a self-push. It must be refused as a skip.
+    await createWorktreeForWorkItem(repo, WI);
+    const originDir = await mkdtemp(join(tmpdir(), 'ditto-wt-origin-deg-'));
+    execFileSync('git', ['init', '--bare', '-b', `ditto/${WI}`, originDir], { encoding: 'utf8' });
+    git(repo, ['remote', 'add', 'origin', originDir]);
+    git(repo, ['push', '-q', 'origin', `HEAD:refs/heads/ditto/${WI}`]);
+    origins.push(originDir);
+
+    const res = await landWorktreesForWorkItem(repo, WI);
+    expect(res.outcomes[0]?.status).toBe('skipped-no-origin');
+    expect(res.outcomes[0]?.reason).toContain('degenerate');
   });
 });
 
@@ -226,9 +306,11 @@ describe('worktree op serialization (ac-4)', () => {
     await createWorktreeForWorkItem(repo, WI);
     const WI2 = await makeWorkItem();
 
+    // force the remove (this test is about lock serialization / meta integrity, not the
+    // land gate — a clean no-origin worktree would otherwise fail-safe block).
     const [, removal] = await Promise.all([
       createWorktreeForWorkItem(repo, WI2),
-      removeWorktreesForWorkItem(repo, WI, { force: false }),
+      removeWorktreesForWorkItem(repo, WI, { force: true }),
     ]);
 
     expect(removal.removed).toHaveLength(1);
@@ -375,7 +457,9 @@ describe('cross-process worktree concurrency (ac-1)', () => {
       const results = await Promise.all([
         runWorker(scriptPath, 'create', WI1),
         runWorker(scriptPath, 'create', WI2),
-        runWorker(scriptPath, 'remove', WI), // clean → removable without force
+        // force the remove (registry-integrity test, not the land gate — a clean
+        // no-origin worktree would otherwise fail-safe block).
+        runWorker(scriptPath, 'remove', WI, 'force'),
       ]);
 
       // every worker was a distinct real OS process, separate from this test process
