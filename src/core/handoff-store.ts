@@ -665,26 +665,6 @@ export class HandoffStore {
   }
 
   /**
-   * SOFT consume of every active LOCAL handoff: return the bodies + record a
-   * per-recipient consumed-marker. The hard cleanup (move/delete) is SEPARATE — the
-   * age-sweep is the sole local hard path — so a failed resume never loses a handoff
-   * (ac-7). Never moves or deletes here.
-   */
-  async consume(recipient?: string, now: Date = new Date()): Promise<ActiveHandoff[]> {
-    const active = await this.listActive();
-    if (active.length === 0) return [];
-    const who = this.recipient(recipient);
-    for (const a of active) {
-      await this.writeConsumedMarker(who, this.localMarkerId(a.handoff.scope), {
-        source: 'local',
-        ref: a.path,
-        consumed_at: now.toISOString(),
-      });
-    }
-    return active;
-  }
-
-  /**
    * The active LOCAL handoff for this work item (body + path), or null when none /
    * malformed. The scoped counterpart of listActive — used so a session picks up
    * ONLY its own work item's handoff (ac-1, wi_260626r3f).
@@ -732,19 +712,20 @@ export class HandoffStore {
   }
 
   /**
-   * SOFT consume of JUST this work item's active LOCAL handoff: return it (body) +
-   * record a per-recipient consumed-marker, WITHOUT moving/deleting the file. A
-   * failed resume therefore never loses the handoff (ac-7); the age-sweep is the sole
-   * hard cleanup. Returns null when there is no active handoff.
+   * SOFT consume of JUST ONE active LOCAL handoff, addressed by its `stem` — a work
+   * item id (`<wi>`) or a session handoff key (`session__<sid>`), i.e. the same stem
+   * `list` prints. Returns it (body) + records a per-recipient consumed-marker WITHOUT
+   * moving/deleting the file, so a failed resume never loses the handoff (ac-7); the
+   * age-sweep is the sole hard cleanup. Returns null when there is no active handoff.
    */
   async consumeFor(
-    workItemId: string,
+    stem: string,
     recipient?: string,
     now: Date = new Date(),
   ): Promise<ActiveHandoff | null> {
-    const active = await this.getActive(workItemId);
+    const active = await this.getActive(stem);
     if (active === null) return null;
-    await this.writeConsumedMarker(this.recipient(recipient), `local-${workItemId}`, {
+    await this.writeConsumedMarker(this.recipient(recipient), `local-${stem}`, {
       source: 'local',
       ref: active.path,
       consumed_at: now.toISOString(),
@@ -817,12 +798,6 @@ export class HandoffStore {
     const who = recipient !== undefined ? slugifyAuthor(recipient) : gitAuthorSlug(this.repoRoot);
     assertSafeKey(who, 'recipient');
     return who;
-  }
-
-  private localMarkerId(scope: HandoffScope): string {
-    return scope.kind === 'work_item'
-      ? `local-${scope.work_item_id}`
-      : `local-session__${scope.session_id}`;
   }
 
   private consumedMarkerPath(recipient: string, markerId: string): string {

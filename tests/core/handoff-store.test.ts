@@ -381,25 +381,6 @@ describe('HandoffStore', () => {
     }
     expect(await store.exists(stale.id)).toBe(true); // still active, not lost
   });
-
-  // ac-7: consume is SOFT — it returns the bodies + writes consumed-markers but does
-  // NOT move the files (the age-sweep is the sole hard cleanup), so a failed resume
-  // never loses a handoff.
-  test('consume is soft — returns bodies + consumed-markers, leaving files active', async () => {
-    const wi = await workItem();
-    const store = new HandoffStore(repo);
-    await store.write(
-      buildHandoff({ workItem: wi, fromContext: 'ctx', currentState: 's', nextFirstCheck: 'c' }),
-    );
-    const active = await store.listActive();
-    expect(active).toHaveLength(1);
-    expect(active[0]?.body).toContain('# Handoff');
-    const consumed = await store.consume('alice');
-    expect(consumed).toHaveLength(1);
-    // SOFT: still active (no move) + a per-recipient consumed-marker recorded.
-    expect(await store.exists(wi.id)).toBe(true);
-    expect(await store.hasConsumedMarker('alice', `local-${wi.id}`)).toBe(true);
-  });
 });
 
 // ac-6 (wi_260627jhh): critical_decisions + irreversible_risks as SEPARATE

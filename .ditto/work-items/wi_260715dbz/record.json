@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260715dbz",
+  "title": "[harness] handoff no-arg consume() dead-code 정리 (재설계로 대부분 superseded, #32 후속)",
+  "source_request": "[harness] handoff no-arg consume() dead-code 정리 (재설계로 대부분 superseded, #32 후속)\n\n> **상태 업데이트 (재조사, main `a33e188`)**: 이 이슈는 다른 세션의 handoff 재설계(wi_260714xpw, #32 후속 — committed-remote per-scope 채널·`--remote` producer·ADR-20260714-handoff-remote-committed-tier)로 **대부분 초과 해결(superseded)**됐다. 남은 실질 범위는 아래 잔여 1건뿐이다.\n\n## 해결됨 (재설계가 처리)\n\n- **수동 handoff 로드 UX 공백 → 구현됨.** 새 `ditto handoff list`가 두 tier(local active + committed remote)를 wi·stem·kind·created_at·from_context·consume-id까지 나열한다(`src/cli/commands/handoff.ts:224-284`, 백엔드 `handoff-store.ts:listActiveDetailed()`/`listRemote()`). 원래 제안한 no-arg `--show`와 형태는 다르지만 \"wi를 몰라도 active handoff를 나열\"하는 공백은 닫혔다. (기존 `ditto work handoff <wi> --show`는 work-item 스코프로 그대로 유지.)\n- **consumeFor() dead-code → 재배선됨(정리 불요).** `consumeFor()`는 이제 `ditto handoff consume <id>`(`handoff.ts:336`)가 호출 → 더는 dead 아님.\n\n## 잔여 (실제 남은 범위)\n\n- **no-arg `consume()`(벌크 consume-all)는 여전히 프로덕션 호출자 0개**(`handoff-store.ts` 정의, src 내 호출 없음). 재설계는 per-recipient/`consumeFor` 경로만 배선했고 벌크 `consume()`는 손대지 않았다. 사소하므로 일반 dead-code 정리로 흡수하거나, 유지할 이유가 없으면 제거.\n\n---\n\n<원 배경 유지>\n\n#32 조사 후속. #32의 결론은 \"handoff 자동 픽업/회전 미동작은 버그가 아니라 wi_260708700(자동로드 제거)+wi_260708xgo(수동 `--show` 대체)의 의도된 설계\"였다. 재설계도 이 \"무자동주입\"을 유지하고 그 위에 committed-remote pull 채널을 얹었을 뿐이라 #32 결론은 유효하다.",
+  "goal": "[harness] handoff no-arg consume() dead-code 정리 (재설계로 대부분 superseded, #32 후속)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "파라미터 없는 벌크 consume()(모든 local active handoff를 한 번에 소비하는 메서드)가 src/core/handoff-store.ts에서 제거되고 그것만 검증하던 테스트도 제거되며, grep '\\.consume(' 로 프로덕션 소스(src/)에 벌크 consume() 호출이 0건임이 확인되고 전체 테스트가 green이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash /private/tmp/claude-501/-Users-ecoletree-dev-project-ditto/14aade9f-fc17-4b67-b9b6-96cdd23e1ebe/scratchpad/verify-ac1.sh",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "consumeFor의 workItemId 파라미터가 scope-중립 이름(session·work_item 두 stem을 모두 받음이 드러나는 이름)으로 바뀌고 동작이 불변이며 유일 호출부(src/cli/commands/handoff.ts의 handoff consume)가 영향받지 않고 전체 테스트가 green이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash /private/tmp/claude-501/-Users-ecoletree-dev-project-ditto/14aade9f-fc17-4b67-b9b6-96cdd23e1ebe/scratchpad/verify-ac2.sh",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 40
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "aa1995f08545fdfdde49a1ed9682378b5493dc98",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_34d61b25850dff27.json",
+    ".ditto/memory/events/memevt_retro_adbf256104143ce6.json",
+    ".ditto/memory/events/memevt_retro_bd0767dd39a62619.json",
+    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json",
+    ".ditto/work-items/wi_2607156f8/",
+    ".ditto/work-items/wi_260715dbz/",
+    ".ditto/work-items/wi_260715ujg/"
+  ],
+  "created_at": "2026-07-15T09:32:30.901Z",
+  "updated_at": "2026-07-15T09:44:44.319Z",
+  "closed_at": "2026-07-15T09:44:44.318Z"
+}

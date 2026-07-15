@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715dbz",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "2772026ccb68ec111813384893ca58d9d210f901d3351754f94b5731f97dcc9e",
+  "ts": "2026-07-15T09:44:35.340Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash /private/tmp/claude-501/-Users-ecoletree-dev-project-ditto/14aade9f-fc17-4b67-b9b6-96cdd23e1ebe/scratchpad/verify-ac2.sh",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
