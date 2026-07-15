@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715zgo",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "05be2592c44bb853ec906356582af9fd650876f259002bc56a55601d9dd24078",
+  "ts": "2026-07-15T07:32:01.682Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bunx biome check src/core/question-context.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

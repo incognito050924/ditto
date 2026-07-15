@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715zgo",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "cc61d4cc1efde02999990d9563db48c0a070e3aae2c931d70d48aea3f3636df2",
+  "ts": "2026-07-15T07:32:02.555Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bunx biome check src tests scripts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
