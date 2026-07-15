@@ -78,10 +78,7 @@ const EXPLANATORY_WORD = '[가-힣]{2,}|[A-Za-z]{3,}';
 // trailing `-slug`/`-number` or adjacent prose is exactly the "dash + explanatory word" shape
 // isGlossed reads as a gloss, which would false-negative the very doc-ref. A section number / ADR
 // id cannot be "explained" by adjacent prose, so a match is flagged regardless of surrounding gloss.
-const DOC_SECTION_PATTERNS: readonly RegExp[] = [
-  /§\d+(?:-\d+)?/g,
-  /ADR-\d{8}-[a-z0-9-]+|ADR-\d+/g,
-];
+const DOC_SECTION_PATTERNS: readonly RegExp[] = [/§\d+(?:-\d+)?/g, /ADR-\d{8}-[a-z0-9-]+|ADR-\d+/g];
 
 const stripCode = (s: string): string => s.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`]*`/g, ' ');
 
@@ -253,7 +250,8 @@ export function validateQuestionContext(
 // a broken/typographic char to a plain char that is not itself a rule input, so a second pass is a
 // no-op.
 export function normalizePresentedText(s: string): string {
-  const CONTROL = new RegExp('[\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F]', 'g');
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional — this transform's PURPOSE is to strip C0/C1 control chars from displayed text, so the control-char ranges ARE the intended input.
+  const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
   return (
     s
       // Unicode replacement char (U+FFFD) — the "broken char" marker.

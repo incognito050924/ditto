@@ -20027,10 +20027,7 @@ var IDENTIFIER_PATTERNS = [
   /(?:wi|orch|memevt|adr|prism)_[0-9a-z]+/g
 ];
 var EXPLANATORY_WORD = "[\uAC00-\uD7A3]{2,}|[A-Za-z]{3,}";
-var DOC_SECTION_PATTERNS = [
-  /\u00A7\d+(?:-\d+)?/g,
-  /ADR-\d{8}-[a-z0-9-]+|ADR-\d+/g
-];
+var DOC_SECTION_PATTERNS = [/\u00A7\d+(?:-\d+)?/g, /ADR-\d{8}-[a-z0-9-]+|ADR-\d+/g];
 var stripCode = (s2) => s2.replace(/```[\s\S]*?```/g, " ").replace(/`[^`]*`/g, " ");
 var hasIdentifierBoundary = (text, start, end) => {
   const before = start === 0 || !/[A-Za-z0-9_-]/.test(text[start - 1] ?? "");
@@ -20139,7 +20136,7 @@ function validateQuestionContext(candidate, opaqueVocab = []) {
   return { ok: violations.length === 0, violations };
 }
 function normalizePresentedText(s2) {
-  const CONTROL = new RegExp("[\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F]", "g");
+  const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
   return s2.replace(/\uFFFD/g, "").replace(CONTROL, "").replace(/[\u2013\u2014]/g, "-").replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'").replace(/\u2026/g, "...");
 }
 var LOANWORD_SEED = [
@@ -58952,4 +58949,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=a2b314545cb3ba04fe41cb17fcab8ae6504d01711e5eb6820b99a54b5766bed1
+//# ditto-src-stamp=0cfc52ffa589fed865858a7d0e74af14e5d9ccd04b3ecc97ebe9e601c8ea734c
