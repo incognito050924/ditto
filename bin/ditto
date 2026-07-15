@@ -47,7 +47,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = import.meta.require;
 
-// ../../../../node_modules/consola/dist/chunks/prompt.mjs
+// node_modules/consola/dist/chunks/prompt.mjs
 var exports_prompt = {};
 __export(exports_prompt, {
   prompt: () => prompt,
@@ -803,7 +803,7 @@ var init_prompt = __esm(() => {
   kCancel = Symbol.for("cancel");
 });
 
-// ../../../../node_modules/smol-toml/dist/error.js
+// node_modules/smol-toml/dist/error.js
 function getLineColFromPtr(string, ptr) {
   let lines = string.slice(0, ptr).split(/\r\n|\n|\r/g);
   return [lines.length, lines.pop().length + 1];
@@ -875,7 +875,7 @@ ${codeblock}`, options);
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/util.js
+// node_modules/smol-toml/dist/util.js
 function isEscaped(str, ptr) {
   let i2 = 0;
   while (str[ptr - ++i2] === "\\")
@@ -991,7 +991,7 @@ var init_util = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/date.js
+// node_modules/smol-toml/dist/date.js
 var DATE_TIME_RE, TomlDate;
 var init_date = __esm(() => {
   /*!
@@ -1113,7 +1113,7 @@ var init_date = __esm(() => {
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/primitive.js
+// node_modules/smol-toml/dist/primitive.js
 function parseString(str, ptr = 0, endPtr = str.length) {
   let isLiteral = str[ptr] === "'";
   let isMultiline = str[ptr++] === str[ptr] && str[ptr] === str[ptr + 1];
@@ -1291,7 +1291,7 @@ var init_primitive = __esm(() => {
   };
 });
 
-// ../../../../node_modules/smol-toml/dist/extract.js
+// node_modules/smol-toml/dist/extract.js
 function sliceAndTrimEndOf(str, startPtr, endPtr) {
   let value = str.slice(startPtr, endPtr);
   let commentIdx = value.indexOf("#");
@@ -1392,7 +1392,7 @@ var init_extract = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/struct.js
+// node_modules/smol-toml/dist/struct.js
 function parseKey(str, ptr, end = "=") {
   let dot = ptr - 1;
   let parsed = [];
@@ -1576,7 +1576,7 @@ var init_struct = __esm(() => {
   KEY_PART_RE = /^[a-zA-Z0-9-_]+[ \t]*$/;
 });
 
-// ../../../../node_modules/smol-toml/dist/parse.js
+// node_modules/smol-toml/dist/parse.js
 function peekTable(key, table, meta, type) {
   let t2 = table;
   let m2 = meta;
@@ -1723,7 +1723,7 @@ var init_parse = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/stringify.js
+// node_modules/smol-toml/dist/stringify.js
 var init_stringify = __esm(() => {
   /*!
    * Copyright (c) Squirrel Chat et al., All rights reserved.
@@ -1754,7 +1754,7 @@ var init_stringify = __esm(() => {
    */
 });
 
-// ../../../../node_modules/smol-toml/dist/index.js
+// node_modules/smol-toml/dist/index.js
 var init_dist = __esm(() => {
   init_parse();
   init_stringify();
@@ -1789,7 +1789,7 @@ var init_dist = __esm(() => {
    */
 });
 
-// ../../../../node_modules/yaml/dist/nodes/identity.js
+// node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS((exports) => {
   var ALIAS = Symbol.for("yaml.alias");
   var DOC = Symbol.for("yaml.document");
@@ -1843,7 +1843,7 @@ var require_identity = __commonJS((exports) => {
   exports.isSeq = isSeq;
 });
 
-// ../../../../node_modules/yaml/dist/visit.js
+// node_modules/yaml/dist/visit.js
 var require_visit = __commonJS((exports) => {
   var identity = require_identity();
   var BREAK = Symbol("break visit");
@@ -1998,7 +1998,7 @@ var require_visit = __commonJS((exports) => {
   exports.visitAsync = visitAsync;
 });
 
-// ../../../../node_modules/yaml/dist/doc/directives.js
+// node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2150,7 +2150,7 @@ var require_directives = __commonJS((exports) => {
   exports.Directives = Directives;
 });
 
-// ../../../../node_modules/yaml/dist/doc/anchors.js
+// node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS((exports) => {
   var identity = require_identity();
   var visit = require_visit();
@@ -2212,7 +2212,7 @@ var require_anchors = __commonJS((exports) => {
   exports.findNewAnchor = findNewAnchor;
 });
 
-// ../../../../node_modules/yaml/dist/doc/applyReviver.js
+// node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS((exports) => {
   function applyReviver(reviver, obj, key, val) {
     if (val && typeof val === "object") {
@@ -2259,7 +2259,7 @@ var require_applyReviver = __commonJS((exports) => {
   exports.applyReviver = applyReviver;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/toJS.js
+// node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS((exports) => {
   var identity = require_identity();
   function toJS(value, arg, ctx) {
@@ -2286,7 +2286,7 @@ var require_toJS = __commonJS((exports) => {
   exports.toJS = toJS;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Node.js
+// node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS((exports) => {
   var applyReviver = require_applyReviver();
   var identity = require_identity();
@@ -2323,7 +2323,7 @@ var require_Node = __commonJS((exports) => {
   exports.NodeBase = NodeBase;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Alias.js
+// node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS((exports) => {
   var anchors = require_anchors();
   var visit = require_visit();
@@ -2433,7 +2433,7 @@ var require_Alias = __commonJS((exports) => {
   exports.Alias = Alias;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Scalar.js
+// node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Node = require_Node();
@@ -2461,7 +2461,7 @@ var require_Scalar = __commonJS((exports) => {
   exports.isScalarValue = isScalarValue;
 });
 
-// ../../../../node_modules/yaml/dist/doc/createNode.js
+// node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -2533,7 +2533,7 @@ var require_createNode = __commonJS((exports) => {
   exports.createNode = createNode;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Collection.js
+// node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS((exports) => {
   var createNode = require_createNode();
   var identity = require_identity();
@@ -2648,7 +2648,7 @@ var require_Collection = __commonJS((exports) => {
   exports.isEmptyPath = isEmptyPath;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyComment.js
+// node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS((exports) => {
   var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
   function indentComment(comment, indent) {
@@ -2665,7 +2665,7 @@ var require_stringifyComment = __commonJS((exports) => {
   exports.stringifyComment = stringifyComment;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/foldFlowLines.js
+// node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS((exports) => {
   var FOLD_FLOW = "flow";
   var FOLD_BLOCK = "block";
@@ -2802,7 +2802,7 @@ ${indent}${text.slice(fold + 1, end2)}`;
   exports.foldFlowLines = foldFlowLines;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyString.js
+// node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var foldFlowLines = require_foldFlowLines();
@@ -3100,7 +3100,7 @@ ${indent}`);
   exports.stringifyString = stringifyString;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringify.js
+// node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS((exports) => {
   var anchors = require_anchors();
   var identity = require_identity();
@@ -3221,7 +3221,7 @@ ${ctx.indent}${str}`;
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyPair.js
+// node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3357,7 +3357,7 @@ ${ctx.indent}`;
   exports.stringifyPair = stringifyPair;
 });
 
-// ../../../../node_modules/yaml/dist/log.js
+// node_modules/yaml/dist/log.js
 var require_log = __commonJS((exports) => {
   var node_process = __require("process");
   function debug(logLevel, ...messages) {
@@ -3376,7 +3376,7 @@ var require_log = __commonJS((exports) => {
   exports.warn = warn;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -3433,7 +3433,7 @@ var require_merge = __commonJS((exports) => {
   exports.merge = merge;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/addPairToJSMap.js
+// node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS((exports) => {
   var log = require_log();
   var merge = require_merge();
@@ -3494,7 +3494,7 @@ var require_addPairToJSMap = __commonJS((exports) => {
   exports.addPairToJSMap = addPairToJSMap;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/Pair.js
+// node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyPair = require_stringifyPair();
@@ -3532,7 +3532,7 @@ var require_Pair = __commonJS((exports) => {
   exports.createPair = createPair;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyCollection.js
+// node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -3684,7 +3684,7 @@ ${indent}${end}`;
   exports.stringifyCollection = stringifyCollection;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/YAMLMap.js
+// node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS((exports) => {
   var stringifyCollection = require_stringifyCollection();
   var addPairToJSMap = require_addPairToJSMap();
@@ -3811,7 +3811,7 @@ var require_YAMLMap = __commonJS((exports) => {
   exports.findPair = findPair;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/map.js
+// node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLMap = require_YAMLMap();
@@ -3830,7 +3830,7 @@ var require_map = __commonJS((exports) => {
   exports.map = map;
 });
 
-// ../../../../node_modules/yaml/dist/nodes/YAMLSeq.js
+// node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS((exports) => {
   var createNode = require_createNode();
   var stringifyCollection = require_stringifyCollection();
@@ -3923,7 +3923,7 @@ var require_YAMLSeq = __commonJS((exports) => {
   exports.YAMLSeq = YAMLSeq;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/seq.js
+// node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS((exports) => {
   var identity = require_identity();
   var YAMLSeq = require_YAMLSeq();
@@ -3942,7 +3942,7 @@ var require_seq = __commonJS((exports) => {
   exports.seq = seq;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/string.js
+// node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS((exports) => {
   var stringifyString = require_stringifyString();
   var string = {
@@ -3958,7 +3958,7 @@ var require_string = __commonJS((exports) => {
   exports.string = string;
 });
 
-// ../../../../node_modules/yaml/dist/schema/common/null.js
+// node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var nullTag = {
@@ -3973,7 +3973,7 @@ var require_null = __commonJS((exports) => {
   exports.nullTag = nullTag;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/bool.js
+// node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var boolTag = {
@@ -3994,7 +3994,7 @@ var require_bool = __commonJS((exports) => {
   exports.boolTag = boolTag;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyNumber.js
+// node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS((exports) => {
   function stringifyNumber({ format, minFractionDigits, tag, value }) {
     if (typeof value === "bigint")
@@ -4018,7 +4018,7 @@ var require_stringifyNumber = __commonJS((exports) => {
   exports.stringifyNumber = stringifyNumber;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/float.js
+// node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4061,7 +4061,7 @@ var require_float = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/int.js
+// node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4103,7 +4103,7 @@ var require_int = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// ../../../../node_modules/yaml/dist/schema/core/schema.js
+// node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4128,7 +4128,7 @@ var require_schema = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/json/schema.js
+// node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var map = require_map();
@@ -4192,7 +4192,7 @@ var require_schema2 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS((exports) => {
   var node_buffer = __require("buffer");
   var Scalar = require_Scalar();
@@ -4247,7 +4247,7 @@ var require_binary = __commonJS((exports) => {
   exports.binary = binary;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4322,7 +4322,7 @@ ${cn.comment}` : item.comment;
   exports.resolvePairs = resolvePairs;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS((exports) => {
   var identity = require_identity();
   var toJS = require_toJS();
@@ -4394,7 +4394,7 @@ var require_omap = __commonJS((exports) => {
   exports.omap = omap;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function boolStringify({ value, source }, ctx) {
@@ -4423,7 +4423,7 @@ var require_bool2 = __commonJS((exports) => {
   exports.trueTag = trueTag;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/float.js
+// node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var stringifyNumber = require_stringifyNumber();
@@ -4469,7 +4469,7 @@ var require_float2 = __commonJS((exports) => {
   exports.floatNaN = floatNaN;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/int.js
+// node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -4545,7 +4545,7 @@ var require_int2 = __commonJS((exports) => {
   exports.intOct = intOct;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/set.js
+// node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -4628,7 +4628,7 @@ var require_set = __commonJS((exports) => {
   exports.set = set;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS((exports) => {
   var stringifyNumber = require_stringifyNumber();
   function parseSexagesimal(str, asBigInt) {
@@ -4710,7 +4710,7 @@ var require_timestamp = __commonJS((exports) => {
   exports.timestamp = timestamp;
 });
 
-// ../../../../node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4751,7 +4751,7 @@ var require_schema3 = __commonJS((exports) => {
   exports.schema = schema;
 });
 
-// ../../../../node_modules/yaml/dist/schema/tags.js
+// node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS((exports) => {
   var map = require_map();
   var _null = require_null();
@@ -4842,7 +4842,7 @@ var require_tags = __commonJS((exports) => {
   exports.getTags = getTags;
 });
 
-// ../../../../node_modules/yaml/dist/schema/Schema.js
+// node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS((exports) => {
   var identity = require_identity();
   var map = require_map();
@@ -4872,7 +4872,7 @@ var require_Schema = __commonJS((exports) => {
   exports.Schema = Schema;
 });
 
-// ../../../../node_modules/yaml/dist/stringify/stringifyDocument.js
+// node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS((exports) => {
   var identity = require_identity();
   var stringify2 = require_stringify();
@@ -4952,7 +4952,7 @@ var require_stringifyDocument = __commonJS((exports) => {
   exports.stringifyDocument = stringifyDocument;
 });
 
-// ../../../../node_modules/yaml/dist/doc/Document.js
+// node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS((exports) => {
   var Alias = require_Alias();
   var Collection = require_Collection();
@@ -5187,7 +5187,7 @@ var require_Document = __commonJS((exports) => {
   exports.Document = Document;
 });
 
-// ../../../../node_modules/yaml/dist/errors.js
+// node_modules/yaml/dist/errors.js
 var require_errors = __commonJS((exports) => {
   class YAMLError extends Error {
     constructor(name, pos, code, message) {
@@ -5252,7 +5252,7 @@ ${pointer}
   exports.prettifyError = prettifyError;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-props.js
+// node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS((exports) => {
   function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
     let spaceBefore = false;
@@ -5382,7 +5382,7 @@ var require_resolve_props = __commonJS((exports) => {
   exports.resolveProps = resolveProps;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-contains-newline.js
+// node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS((exports) => {
   function containsNewline(key) {
     if (!key)
@@ -5422,7 +5422,7 @@ var require_util_contains_newline = __commonJS((exports) => {
   exports.containsNewline = containsNewline;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-flow-indent-check.js
+// node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS((exports) => {
   var utilContainsNewline = require_util_contains_newline();
   function flowIndentCheck(indent, fc, onError) {
@@ -5437,7 +5437,7 @@ var require_util_flow_indent_check = __commonJS((exports) => {
   exports.flowIndentCheck = flowIndentCheck;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-map-includes.js
+// node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS((exports) => {
   var identity = require_identity();
   function mapIncludes(ctx, items, search) {
@@ -5450,7 +5450,7 @@ var require_util_map_includes = __commonJS((exports) => {
   exports.mapIncludes = mapIncludes;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-map.js
+// node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS((exports) => {
   var Pair = require_Pair();
   var YAMLMap = require_YAMLMap();
@@ -5557,7 +5557,7 @@ var require_resolve_block_map = __commonJS((exports) => {
   exports.resolveBlockMap = resolveBlockMap;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-seq.js
+// node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS((exports) => {
   var YAMLSeq = require_YAMLSeq();
   var resolveProps = require_resolve_props();
@@ -5605,7 +5605,7 @@ var require_resolve_block_seq = __commonJS((exports) => {
   exports.resolveBlockSeq = resolveBlockSeq;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-end.js
+// node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS((exports) => {
   function resolveEnd(end, offset, reqSpace, onError) {
     let comment = "";
@@ -5645,7 +5645,7 @@ var require_resolve_end = __commonJS((exports) => {
   exports.resolveEnd = resolveEnd;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-flow-collection.js
+// node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Pair = require_Pair();
@@ -5836,7 +5836,7 @@ var require_resolve_flow_collection = __commonJS((exports) => {
   exports.resolveFlowCollection = resolveFlowCollection;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-collection.js
+// node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -5898,7 +5898,7 @@ var require_compose_collection = __commonJS((exports) => {
   exports.composeCollection = composeCollection;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-block-scalar.js
+// node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   function resolveBlockScalar(ctx, scalar, onError) {
@@ -6091,7 +6091,7 @@ var require_resolve_block_scalar = __commonJS((exports) => {
   exports.resolveBlockScalar = resolveBlockScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS((exports) => {
   var Scalar = require_Scalar();
   var resolveEnd = require_resolve_end();
@@ -6308,7 +6308,7 @@ var require_resolve_flow_scalar = __commonJS((exports) => {
   exports.resolveFlowScalar = resolveFlowScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-scalar.js
+// node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS((exports) => {
   var identity = require_identity();
   var Scalar = require_Scalar();
@@ -6386,7 +6386,7 @@ var require_compose_scalar = __commonJS((exports) => {
   exports.composeScalar = composeScalar;
 });
 
-// ../../../../node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS((exports) => {
   function emptyScalarPosition(offset, before, pos) {
     if (before) {
@@ -6413,7 +6413,7 @@ var require_util_empty_scalar_position = __commonJS((exports) => {
   exports.emptyScalarPosition = emptyScalarPosition;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-node.js
+// node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS((exports) => {
   var Alias = require_Alias();
   var identity = require_identity();
@@ -6516,7 +6516,7 @@ var require_compose_node = __commonJS((exports) => {
   exports.composeNode = composeNode;
 });
 
-// ../../../../node_modules/yaml/dist/compose/compose-doc.js
+// node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS((exports) => {
   var Document = require_Document();
   var composeNode = require_compose_node();
@@ -6556,7 +6556,7 @@ var require_compose_doc = __commonJS((exports) => {
   exports.composeDoc = composeDoc;
 });
 
-// ../../../../node_modules/yaml/dist/compose/composer.js
+// node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS((exports) => {
   var node_process = __require("process");
   var directives = require_directives();
@@ -6747,7 +6747,7 @@ ${end.comment}` : end.comment;
   exports.Composer = Composer;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-scalar.js
+// node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS((exports) => {
   var resolveBlockScalar = require_resolve_block_scalar();
   var resolveFlowScalar = require_resolve_flow_scalar();
@@ -6937,7 +6937,7 @@ var require_cst_scalar = __commonJS((exports) => {
   exports.setScalarValue = setScalarValue;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-stringify.js
+// node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS((exports) => {
   var stringify2 = (cst) => ("type" in cst) ? stringifyToken(cst) : stringifyItem(cst);
   function stringifyToken(token) {
@@ -6995,7 +6995,7 @@ var require_cst_stringify = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst-visit.js
+// node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS((exports) => {
   var BREAK = Symbol("break visit");
   var SKIP = Symbol("skip children");
@@ -7054,7 +7054,7 @@ var require_cst_visit = __commonJS((exports) => {
   exports.visit = visit;
 });
 
-// ../../../../node_modules/yaml/dist/parse/cst.js
+// node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS((exports) => {
   var cstScalar = require_cst_scalar();
   var cstStringify = require_cst_stringify();
@@ -7155,7 +7155,7 @@ var require_cst = __commonJS((exports) => {
   exports.tokenType = tokenType;
 });
 
-// ../../../../node_modules/yaml/dist/parse/lexer.js
+// node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS((exports) => {
   var cst = require_cst();
   function isEmpty(ch) {
@@ -7752,7 +7752,7 @@ var require_lexer = __commonJS((exports) => {
   exports.Lexer = Lexer;
 });
 
-// ../../../../node_modules/yaml/dist/parse/line-counter.js
+// node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS((exports) => {
   class LineCounter {
     constructor() {
@@ -7780,7 +7780,7 @@ var require_line_counter = __commonJS((exports) => {
   exports.LineCounter = LineCounter;
 });
 
-// ../../../../node_modules/yaml/dist/parse/parser.js
+// node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS((exports) => {
   var node_process = __require("process");
   var cst = require_cst();
@@ -8636,7 +8636,7 @@ var require_parser = __commonJS((exports) => {
   exports.Parser = Parser;
 });
 
-// ../../../../node_modules/yaml/dist/public-api.js
+// node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS((exports) => {
   var composer = require_composer();
   var Document = require_Document();
@@ -8730,7 +8730,7 @@ var require_public_api = __commonJS((exports) => {
   exports.stringify = stringify2;
 });
 
-// ../../../../node_modules/yaml/dist/index.js
+// node_modules/yaml/dist/index.js
 var composer, Document, Schema, errors, Alias, identity, Pair, Scalar, YAMLMap, YAMLSeq, cst, lexer, lineCounter, parser, publicApi, visit, $Composer, $Document, $Schema, $YAMLError, $YAMLParseError, $YAMLWarning, $Alias, $isAlias, $isCollection, $isDocument, $isMap, $isNode, $isPair, $isScalar, $isSeq, $Pair, $Scalar, $YAMLMap, $YAMLSeq, $Lexer, $LineCounter, $Parser, $parse, $parseAllDocuments, $parseDocument, $stringify, $visit, $visitAsync;
 var init_dist2 = __esm(() => {
   composer = require_composer();
@@ -8847,7 +8847,7 @@ var init_shared = __esm(() => {
   init_dist2();
 });
 
-// ../../../../node_modules/zod/v3/helpers/util.js
+// node_modules/zod/v3/helpers/util.js
 var util, objectUtil, ZodParsedType, getParsedType = (data) => {
   const t2 = typeof data;
   switch (t2) {
@@ -8978,7 +8978,7 @@ var init_util2 = __esm(() => {
   ]);
 });
 
-// ../../../../node_modules/zod/v3/ZodError.js
+// node_modules/zod/v3/ZodError.js
 var ZodIssueCode, quotelessJson = (obj) => {
   const json = JSON.stringify(obj, null, 2);
   return json.replace(/"([^"]+)":/g, "$1:");
@@ -9099,7 +9099,7 @@ var init_ZodError = __esm(() => {
   };
 });
 
-// ../../../../node_modules/zod/v3/locales/en.js
+// node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -9206,7 +9206,7 @@ var init_en = __esm(() => {
   en_default = errorMap;
 });
 
-// ../../../../node_modules/zod/v3/errors.js
+// node_modules/zod/v3/errors.js
 function setErrorMap(map) {
   overrideErrorMap = map;
 }
@@ -9219,7 +9219,7 @@ var init_errors = __esm(() => {
   overrideErrorMap = en_default;
 });
 
-// ../../../../node_modules/zod/v3/helpers/parseUtil.js
+// node_modules/zod/v3/helpers/parseUtil.js
 function addIssueToContext(ctx, issueData) {
   const overrideMap = getErrorMap();
   const issue = makeIssue({
@@ -9324,10 +9324,10 @@ var init_parseUtil = __esm(() => {
   });
 });
 
-// ../../../../node_modules/zod/v3/helpers/typeAliases.js
+// node_modules/zod/v3/helpers/typeAliases.js
 var init_typeAliases = () => {};
 
-// ../../../../node_modules/zod/v3/helpers/errorUtil.js
+// node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 var init_errorUtil = __esm(() => {
   (function(errorUtil2) {
@@ -9336,7 +9336,7 @@ var init_errorUtil = __esm(() => {
   })(errorUtil || (errorUtil = {}));
 });
 
-// ../../../../node_modules/zod/v3/types.js
+// node_modules/zod/v3/types.js
 class ParseInputLazyPath {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -12687,7 +12687,7 @@ var init_types = __esm(() => {
   NEVER = INVALID;
 });
 
-// ../../../../node_modules/zod/v3/external.js
+// node_modules/zod/v3/external.js
 var exports_external = {};
 __export(exports_external, {
   void: () => voidType,
@@ -12807,7 +12807,7 @@ var init_external = __esm(() => {
   init_ZodError();
 });
 
-// ../../../../node_modules/zod/index.js
+// node_modules/zod/index.js
 var init_zod = __esm(() => {
   init_external();
   init_external();
@@ -15713,7 +15713,7 @@ var init_cleanup_archive = __esm(() => {
   };
 });
 
-// ../../../../node_modules/sisteransi/src/index.js
+// node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC2 = "\x1B";
   var CSI2 = `${ESC2}[`;
@@ -15771,7 +15771,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// ../../../../node_modules/consola/dist/core.mjs
+// node_modules/consola/dist/core.mjs
 var LogLevels = {
   silent: Number.NEGATIVE_INFINITY,
   fatal: 0,
@@ -16167,7 +16167,7 @@ Consola.prototype.resume = Consola.prototype.resumeLogs;
 function createConsola(options = {}) {
   return new Consola(options);
 }
-// ../../../../node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
+// node_modules/consola/dist/shared/consola.DRwqZj3T.mjs
 import { formatWithOptions } from "util";
 import { sep } from "path";
 function parseStack(stack, message) {
@@ -16244,10 +16244,10 @@ ${indent}`);
   }
 }
 
-// ../../../../node_modules/consola/dist/index.mjs
+// node_modules/consola/dist/index.mjs
 import g$1 from "process";
 
-// ../../../../node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
+// node_modules/consola/dist/shared/consola.DXBYu-KD.mjs
 import * as tty from "tty";
 var {
   env = {},
@@ -16460,7 +16460,7 @@ function box(text, _opts = {}) {
 `);
 }
 
-// ../../../../node_modules/consola/dist/index.mjs
+// node_modules/consola/dist/index.mjs
 var r2 = Object.create(null);
 var i = (e2) => globalThis.process?.env || import.meta.env || globalThis.Deno?.env.toObject() || globalThis.__env__ || (e2 ? r2 : globalThis);
 var o2 = new Proxy(r2, { get(e2, s) {
@@ -16743,7 +16743,7 @@ function _getDefaultLogLevel() {
   return LogLevels.info;
 }
 var consola = createConsola2();
-// ../../../../node_modules/citty/dist/index.mjs
+// node_modules/citty/dist/index.mjs
 function toArray(val) {
   if (Array.isArray(val)) {
     return val;
@@ -24074,9 +24074,19 @@ import { join as join23 } from "path";
 // src/schemas/handoff.ts
 init_zod();
 init_common();
-var handoff = exports_external.object({
+var handoffScope = exports_external.discriminatedUnion("kind", [
+  exports_external.object({
+    kind: exports_external.literal("work_item"),
+    work_item_id: workItemId
+  }).describe("Anchored to a work item \u2014 required key is work_item_id"),
+  exports_external.object({
+    kind: exports_external.literal("session"),
+    session_id: exports_external.string().min(1).describe("The session this handoff resumes \u2014 its own required key, no work_item_id")
+  }).describe("Anchored to a session, not a work item \u2014 required key is session_id")
+]).describe("Handoff anchor: work_item (work_item_id) or session (session_id)");
+var handoffObject = exports_external.object({
   schema_version: schemaVersion,
-  work_item_id: workItemId,
+  scope: handoffScope,
   autopilot_id: autopilotId.optional().describe("Same autopilot_id the next session resumes under (\xA76.10)"),
   from_context: exports_external.string().min(1).describe("Where this handoff is written from: session/agent and its state"),
   to_owner: exports_external.string().min(1).optional().describe("Profile or handle expected to pick up"),
@@ -24105,6 +24115,13 @@ var handoff = exports_external.object({
   artifact_available: exports_external.boolean().default(true).describe("False when raw artifacts are absent from this clone/session (\xA76.10)"),
   created_at: isoDateTime
 }).describe("Minimal context for resuming across session/context/agent boundaries (\xA76.10)");
+var handoff = exports_external.preprocess((raw) => {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw) && raw.scope === undefined && raw.work_item_id !== undefined) {
+    const obj = raw;
+    return { ...obj, scope: { kind: "work_item", work_item_id: obj.work_item_id } };
+  }
+  return raw;
+}, handoffObject).describe("Minimal context for resuming across session/context/agent boundaries (\xA76.10)");
 
 // src/core/handoff-store.ts
 init_ditto_paths();
@@ -24126,7 +24143,7 @@ function buildHandoff(input) {
   guardBlockedHandoffDecision(input);
   return handoff.parse({
     schema_version: "0.1.0",
-    work_item_id: input.workItem.id,
+    scope: { kind: "work_item", work_item_id: input.workItem.id },
     ...input.autopilotId ? { autopilot_id: input.autopilotId } : {},
     from_context: input.fromContext,
     ...input.toOwner ? { to_owner: input.toOwner } : {},
@@ -24146,9 +24163,61 @@ function buildHandoff(input) {
     created_at: (input.now ?? new Date).toISOString()
   });
 }
+function buildSessionHandoff(input) {
+  return handoff.parse({
+    schema_version: "0.1.0",
+    scope: { kind: "session", session_id: input.sessionId },
+    ...input.autopilotId ? { autopilot_id: input.autopilotId } : {},
+    from_context: input.fromContext,
+    ...input.toOwner ? { to_owner: input.toOwner } : {},
+    original_intent: input.originalIntent,
+    current_state: input.currentState,
+    decisions_made: input.decisionsMade ?? [],
+    critical_decisions: input.criticalDecisions ?? [],
+    irreversible_risks: input.irreversibleRisks ?? [],
+    changed_files: input.changedFiles ?? [],
+    evidence_refs: input.evidenceRefs ?? [],
+    failed_or_unverified: input.failedOrUnverified ?? [],
+    open_threads: input.openThreads ?? [],
+    next_first_check: input.nextFirstCheck,
+    forbidden_scope_creep: input.forbiddenScopeCreep ?? [],
+    artifact_available: input.artifactAvailable ?? true,
+    created_at: (input.now ?? new Date).toISOString()
+  });
+}
+function scopeKey(scope) {
+  return scope.kind === "work_item" ? scope.work_item_id : scope.session_id;
+}
+function assertSafeKey(value, label) {
+  if (value.length === 0)
+    throw new Error(`handoff ${label} must not be empty`);
+  if (value.startsWith("-"))
+    throw new Error(`handoff ${label} must not start with '-': ${value}`);
+  if (/[\\/]/.test(value))
+    throw new Error(`handoff ${label} must not contain a path separator: ${value}`);
+  if (value.includes(".."))
+    throw new Error(`handoff ${label} must not contain '..': ${value}`);
+  if ([...value].some((c3) => c3.charCodeAt(0) === 0))
+    throw new Error(`handoff ${label} must not contain a NUL byte`);
+}
+function slugifyAuthor(raw) {
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+function gitAuthorSlug(repoRoot) {
+  const read = (key) => {
+    const r3 = Bun.spawnSync(["git", "config", "--get", key], {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+    return r3.exitCode === 0 ? (r3.stdout?.toString() ?? "").trim() : "";
+  };
+  const slug = slugifyAuthor(read("user.email") || read("user.name"));
+  return slug.length > 0 ? slug : "anon";
+}
 function renderHandoff(h2) {
   const lines = [];
-  lines.push(`# Handoff: ${h2.work_item_id}`);
+  lines.push(`# Handoff: ${scopeKey(h2.scope)}`);
   if (h2.autopilot_id)
     lines.push(`autopilot: ${h2.autopilot_id}`);
   lines.push("", `from: ${h2.from_context}`, "");
@@ -24244,9 +24313,62 @@ function parseHandoffFile(text) {
   const body = rest.slice(end + 4).replace(/^\n+/, "");
   return { handoff: handoff2, body };
 }
+function scrubDeep(value) {
+  if (typeof value === "string")
+    return scrubTokens(value);
+  if (Array.isArray(value))
+    return value.map(scrubDeep);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k2, v2]) => [k2, scrubDeep(v2)]));
+  }
+  return value;
+}
+function scrubHandoffForCommit(h2) {
+  const { scope, schema_version, created_at, ...rest } = h2;
+  return handoff.parse({
+    scope,
+    schema_version,
+    created_at,
+    ...scrubDeep(rest)
+  });
+}
+
+class HandoffRemoteWriteError extends Error {
+  code;
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = "HandoffRemoteWriteError";
+  }
+}
+function runGit(repoRoot, args) {
+  const maxAttempts = 5;
+  let last = { exitCode: 1, stdout: "", stderr: "" };
+  for (let attempt = 0;attempt < maxAttempts; attempt++) {
+    const proc = Bun.spawnSync(["git", ...args], {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+    last = {
+      exitCode: proc.exitCode,
+      stdout: proc.stdout?.toString() ?? "",
+      stderr: proc.stderr?.toString() ?? ""
+    };
+    if (last.exitCode === 0)
+      return last;
+    if (/index\.lock/.test(last.stderr) && attempt < maxAttempts - 1) {
+      Bun.sleepSync(20 * (attempt + 1));
+      continue;
+    }
+    return last;
+  }
+  return last;
+}
 function stamp(now) {
   return now.toISOString().replace(/[:.]/g, "-");
 }
+var WORK_ITEM_BRANCH_PREFIX2 = "ditto/";
 var STALE_ACTIVE_RETENTION_DAYS = 7;
 var STALE_ACTIVE_RETENTION_MS = STALE_ACTIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
@@ -24258,14 +24380,20 @@ class HandoffStore {
   dir() {
     return localDir(this.repoRoot, "handoff");
   }
+  remoteDir() {
+    return join23(dittoDir(this.repoRoot), "handoff");
+  }
   activePath(workItemId2) {
     return join23(this.dir(), `${workItemId2}.md`);
   }
   activeRel(workItemId2) {
     return `.ditto/local/handoff/${workItemId2}.md`;
   }
-  archiveRel(workItemId2, ts) {
-    return `.ditto/local/handoff/archive/${workItemId2}__${ts}.md`;
+  archiveKeyForScope(scope) {
+    return scope.kind === "work_item" ? scope.work_item_id : `session__${scope.session_id}`;
+  }
+  archiveRelForScope(scope, ts) {
+    return `.ditto/local/handoff/archive/${this.archiveKeyForScope(scope)}__${ts}.md`;
   }
   archiveRelFromBasename(name, ts) {
     const stem = name.replace(/\.md$/, "");
@@ -24278,46 +24406,113 @@ class HandoffStore {
     }
   }
   async write(h2) {
-    await atomicWriteText(this.activePath(h2.work_item_id), serialize(h2));
-    const rel = this.activeRel(h2.work_item_id);
-    await this.link(h2.work_item_id, rel);
-    return rel;
+    if (h2.scope.kind === "work_item") {
+      const id = h2.scope.work_item_id;
+      await atomicWriteText(this.activePath(id), serialize(h2));
+      const rel = this.activeRel(id);
+      await this.link(id, rel);
+      return rel;
+    }
+    assertSafeKey(h2.scope.session_id, "session_id");
+    const name = `session__${h2.scope.session_id}.md`;
+    await atomicWriteText(join23(this.dir(), name), serialize(h2));
+    return `.ditto/local/handoff/${name}`;
   }
   async writeArchived(h2, now = new Date) {
-    const rel = this.archiveRel(h2.work_item_id, stamp(now));
+    const rel = this.archiveRelForScope(h2.scope, stamp(now));
     await atomicWriteText(join23(this.repoRoot, rel), serialize(h2));
-    await this.link(h2.work_item_id, rel);
+    if (h2.scope.kind === "work_item")
+      await this.link(h2.scope.work_item_id, rel);
     return rel;
   }
-  async listActive() {
+  async writeRemote(h2, opts = {}) {
+    const author = opts.author !== undefined ? slugifyAuthor(opts.author) : gitAuthorSlug(this.repoRoot);
+    assertSafeKey(author, "author-slug");
+    const key = scopeKey(h2.scope);
+    assertSafeKey(key, h2.scope.kind === "work_item" ? "work_item_id" : "session_id");
+    const stem = h2.scope.kind === "work_item" ? `${key}__${author}` : `session__${key}__${author}`;
+    const rel = `.ditto/handoff/${stem}.md`;
+    const expected = opts.expectedBranch ?? (h2.scope.kind === "work_item" ? `${WORK_ITEM_BRANCH_PREFIX2}${key}` : undefined);
+    const current = this.currentBranch();
+    if (current === null) {
+      throw new HandoffRemoteWriteError("detached", "HEAD is detached \u2014 refusing to commit a remote handoff to an orphan commit");
+    }
+    if (expected !== undefined && current !== expected) {
+      throw new HandoffRemoteWriteError("branch_mismatch", `refusing remote handoff: on branch '${current}', expected '${expected}'`);
+    }
+    if (this.isGitIgnored(rel)) {
+      throw new HandoffRemoteWriteError("gitignored", `committed handoff path ${rel} is gitignored \u2014 git add would be a silent no-op`);
+    }
+    const committed = scrubHandoffForCommit(h2);
+    await atomicWriteText(join23(this.repoRoot, rel), serialize(committed));
+    const add = runGit(this.repoRoot, ["add", "--", rel]);
+    if (add.exitCode !== 0) {
+      throw new HandoffRemoteWriteError("add_failed", `git add failed: ${add.stderr.trim()}`);
+    }
+    const commit = runGit(this.repoRoot, [
+      "commit",
+      "-m",
+      `chore(handoff): ${stem} (remote handoff, no-push)`,
+      "--",
+      rel
+    ]);
+    if (commit.exitCode !== 0 && !/nothing to commit/i.test(`${commit.stdout}${commit.stderr}`)) {
+      throw new HandoffRemoteWriteError("commit_failed", `git commit failed: ${(commit.stderr || commit.stdout).trim()}`);
+    }
+    const sha = runGit(this.repoRoot, ["rev-parse", "HEAD"]).stdout.trim();
+    return { rel, branch: current, commit: sha, author, stem };
+  }
+  currentBranch() {
+    const r3 = runGit(this.repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    if (r3.exitCode !== 0)
+      return null;
+    const name = r3.stdout.trim();
+    return name === "" || name === "HEAD" ? null : name;
+  }
+  isGitIgnored(rel) {
+    return runGit(this.repoRoot, ["check-ignore", "-q", "--", rel]).exitCode === 0;
+  }
+  async listActiveDetailed() {
     let names;
     try {
       names = await readdir9(this.dir());
     } catch {
-      return [];
+      return { active: [], failures: [] };
     }
-    const out = [];
+    const active = [];
+    const failures = [];
     for (const name of names) {
       if (!name.endsWith(".md"))
         continue;
       const path = join23(this.dir(), name);
       try {
         const { handoff: handoff2, body } = parseHandoffFile(await Bun.file(path).text());
-        out.push({ handoff: handoff2, body, path });
-      } catch {}
+        active.push({ handoff: handoff2, body, path });
+      } catch (err) {
+        failures.push({
+          path,
+          scope: name.startsWith("session__") ? "session" : /^wi_[a-z0-9]+\.md$/.test(name) ? "work_item" : "unknown",
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
     }
-    return out.sort((a2, b2) => a2.handoff.created_at.localeCompare(b2.handoff.created_at));
+    active.sort((a2, b2) => a2.handoff.created_at.localeCompare(b2.handoff.created_at));
+    return { active, failures };
   }
-  async consume(now = new Date) {
+  async listActive() {
+    return (await this.listActiveDetailed()).active;
+  }
+  async consume(recipient, now = new Date) {
     const active = await this.listActive();
     if (active.length === 0)
       return [];
-    await ensureDir(join23(this.dir(), "archive"));
+    const who = this.recipient(recipient);
     for (const a2 of active) {
-      const dest = join23(this.repoRoot, this.archiveRel(a2.handoff.work_item_id, stamp(now)));
-      try {
-        await rename3(a2.path, dest);
-      } catch {}
+      await this.writeConsumedMarker(who, this.localMarkerId(a2.handoff.scope), {
+        source: "local",
+        ref: a2.path,
+        consumed_at: now.toISOString()
+      });
     }
     return active;
   }
@@ -24352,16 +24547,80 @@ class HandoffStore {
       return null;
     }
   }
-  async consumeFor(workItemId2, now = new Date) {
+  async consumeFor(workItemId2, recipient, now = new Date) {
     const active = await this.getActive(workItemId2);
     if (active === null)
       return null;
-    await ensureDir(join23(this.dir(), "archive"));
-    const dest = join23(this.repoRoot, this.archiveRel(workItemId2, stamp(now)));
-    try {
-      await rename3(active.path, dest);
-    } catch {}
+    await this.writeConsumedMarker(this.recipient(recipient), `local-${workItemId2}`, {
+      source: "local",
+      ref: active.path,
+      consumed_at: now.toISOString()
+    });
     return active;
+  }
+  async listRemote(recipient) {
+    const who = this.recipient(recipient);
+    const dir = this.remoteDir();
+    let names;
+    try {
+      names = await readdir9(dir);
+    } catch {
+      return { handoffs: [], failures: [] };
+    }
+    const handoffs = [];
+    const failures = [];
+    for (const name of names) {
+      if (!name.endsWith(".md"))
+        continue;
+      const stem = name.replace(/\.md$/, "");
+      const rel = `.ditto/handoff/${name}`;
+      let parsed;
+      try {
+        parsed = parseHandoffFile(await Bun.file(join23(dir, name)).text());
+      } catch (err) {
+        failures.push({
+          path: join23(dir, name),
+          scope: stem.startsWith("session__") ? "session" : "work_item",
+          error: err instanceof Error ? err.message : String(err)
+        });
+        continue;
+      }
+      if (await this.hasConsumedMarker(who, `remote-${stem}`))
+        continue;
+      handoffs.push({ handoff: parsed.handoff, body: parsed.body, path: rel, stem });
+    }
+    handoffs.sort((a2, b2) => a2.handoff.created_at.localeCompare(b2.handoff.created_at));
+    return { handoffs, failures };
+  }
+  async consumeRemote(remote, recipient, now = new Date) {
+    await this.writeConsumedMarker(this.recipient(recipient), `remote-${remote.stem}`, {
+      source: "remote",
+      ref: remote.path,
+      consumed_at: now.toISOString()
+    });
+    return remote;
+  }
+  recipient(recipient) {
+    const who = recipient !== undefined ? slugifyAuthor(recipient) : gitAuthorSlug(this.repoRoot);
+    assertSafeKey(who, "recipient");
+    return who;
+  }
+  localMarkerId(scope) {
+    return scope.kind === "work_item" ? `local-${scope.work_item_id}` : `local-session__${scope.session_id}`;
+  }
+  consumedMarkerPath(recipient, markerId) {
+    assertSafeKey(recipient, "recipient");
+    assertSafeKey(markerId, "marker id");
+    return join23(this.dir(), "consumed", recipient, `${markerId}.json`);
+  }
+  async hasConsumedMarker(recipient, markerId) {
+    return Bun.file(this.consumedMarkerPath(recipient, markerId)).exists();
+  }
+  async writeConsumedMarker(recipient, markerId, meta) {
+    const path = this.consumedMarkerPath(recipient, markerId);
+    await atomicWriteText(path, `${JSON.stringify({ marker_id: markerId, recipient, ...meta }, null, 2)}
+`);
+    return path;
   }
   async sweepStaleActive(now = new Date) {
     const dir = this.dir();
@@ -24391,7 +24650,7 @@ class HandoffStore {
       } catch {
         handoff2 = null;
       }
-      const archivePath = handoff2 ? this.archiveRel(handoff2.work_item_id, stamp(now)) : this.archiveRelFromBasename(name, stamp(now));
+      const archivePath = handoff2 ? this.archiveRelForScope(handoff2.scope, stamp(now)) : this.archiveRelFromBasename(name, stamp(now));
       if (!ensured) {
         await ensureDir(join23(dir, "archive"));
         ensured = true;
@@ -26307,7 +26566,7 @@ async function computePostCost(repoRoot, workItemId2, graph) {
     driftEvents = (await new WorkItemStore(repoRoot).readMetrics(workItemId2)).length;
   } catch {}
   try {
-    handoffRounds = (await new HandoffStore(repoRoot).listActive()).filter((h2) => h2.handoff.work_item_id === workItemId2).length;
+    handoffRounds = (await new HandoffStore(repoRoot).listActive()).filter((h2) => h2.handoff.scope.kind === "work_item" && h2.handoff.scope.work_item_id === workItemId2).length;
   } catch {}
   return driftEvents + reworkAttempts + retrySwitch + handoffRounds;
 }
@@ -30168,6 +30427,30 @@ async function checkE2eCompletionGate(repoRoot, input) {
 // src/cli/commands/autopilot.ts
 init_fs();
 
+// src/core/github-coord.ts
+function canonicalizeRepo(repo) {
+  return repo.trim().replace(/\.git$/i, "").toLowerCase();
+}
+function sameRepoCoord(a2, b2) {
+  return canonicalizeRepo(a2) === canonicalizeRepo(b2);
+}
+function parseRemoteUrlToRepo(url) {
+  const m2 = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return m2 ? `${m2[1]}/${m2[2]}` : null;
+}
+function boardItemMatchesRepoNumber(item, issueNumber, linkedRepo) {
+  const content = item?.content;
+  if (!content || content.number !== issueNumber)
+    return false;
+  const repository = item.repository;
+  if (typeof repository !== "string")
+    return false;
+  const normalizedRepo = parseRemoteUrlToRepo(repository);
+  if (normalizedRepo === null)
+    return false;
+  return sameRepoCoord(normalizedRepo, linkedRepo);
+}
+
 // src/core/github-reflection.ts
 function selectStatusField(fieldList) {
   if (typeof fieldList !== "object" || fieldList === null)
@@ -30201,10 +30484,22 @@ function applyBoardStatusOption(deps, workItem2, optionId) {
     notices.push("Project board: project node_id unknown in config \u2014 board status update skipped.");
     return { statusUpdated: false, notices };
   }
-  const itemId = workItem2.github_issue?.project_item_id;
-  if (!itemId) {
+  const gi = workItem2.github_issue;
+  if (!gi?.project_item_id) {
     notices.push("Project board: issue not on the board (no project_item_id) \u2014 board status update skipped.");
     return { statusUpdated: false, notices };
+  }
+  const itemId = gi.project_item_id;
+  const board = deps.client.projectItemList(cfg.project.owner, cfg.project.number);
+  if (board.ok) {
+    const items = board.value?.items;
+    if (Array.isArray(items)) {
+      const card = items.find((it) => it?.id === itemId);
+      if (card && !boardItemMatchesRepoNumber(card, gi.number, gi.repo)) {
+        notices.push(`Project board: persisted project_item_id points at a card whose coordinate does not match ${gi.repo}#${gi.number} \u2014 board status update skipped (stale/mispopulated id).`);
+        return { statusUpdated: false, notices };
+      }
+    }
   }
   const fieldList = deps.client.projectFieldList(cfg.project.owner, cfg.project.number);
   if (!fieldList.ok) {
@@ -30995,12 +31290,6 @@ function parseIssueCoord(raw) {
     return null;
   return { repo: `${m2[1]}/${m2[2]}`, number: Number(m2[3]) };
 }
-function canonicalizeRepo(repo) {
-  return repo.trim().replace(/\.git$/i, "").toLowerCase();
-}
-function sameRepoCoord(a2, b2) {
-  return canonicalizeRepo(a2) === canonicalizeRepo(b2);
-}
 function readIssue(value) {
   const v2 = value ?? {};
   return {
@@ -31058,7 +31347,7 @@ async function pullIssue(deps, coord) {
   const view = deps.client.issueView(coord.repo, coord.number);
   if (!view.ok)
     return { kind: "degraded", reason: view.reason, detail: view.detail };
-  const projectItemId = resolveProjectItemId({ client: deps.client, config: deps.config }, coord.number);
+  const projectItemId = resolveProjectItemId({ client: deps.client, config: deps.config }, coord.number, coord.repo);
   const id = await createWorkItemFromIssue(deps.store, coord, readIssue(view.value), projectItemId);
   return { kind: "created", id, coord };
 }
@@ -31157,7 +31446,7 @@ async function linkIssue(store, workId, coord, opts) {
   }
   if (existing)
     return { kind: "conflict", id: workId, existing, coord };
-  const projectItemId = opts ? resolveProjectItemId({ client: opts.client, config: opts.config }, coord.number) : null;
+  const projectItemId = opts ? resolveProjectItemId({ client: opts.client, config: opts.config }, coord.number, coord.repo) : null;
   await store.update(workId, (cur) => ({
     ...cur,
     github_issue: {
@@ -31167,10 +31456,6 @@ async function linkIssue(store, workId, coord, opts) {
     }
   }));
   return { kind: "linked", id: workId, coord, alreadyLinked: false };
-}
-function parseRemoteUrlToRepo(url) {
-  const m2 = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.trim());
-  return m2 ? `${m2[1]}/${m2[2]}` : null;
 }
 function resolveSessionRepoCoord(repoRoot) {
   const proc = Bun.spawnSync(["git", "-C", repoRoot, "remote", "get-url", "origin"], {
@@ -31724,13 +32009,12 @@ var workSetCriteria = defineCommand({
     }
   }
 });
-function parseBoardPosition(itemList, issueNumber) {
+function parseBoardPosition(itemList, issueNumber, linkedRepo) {
   const items = itemList?.items;
   if (!Array.isArray(items))
     return null;
   for (const it of items) {
-    const content = it?.content;
-    if (!content || content.number !== issueNumber)
+    if (!boardItemMatchesRepoNumber(it, issueNumber, linkedRepo))
       continue;
     const id = it.id;
     const status = it.status;
@@ -31743,14 +32027,14 @@ function parseBoardPosition(itemList, issueNumber) {
   }
   return null;
 }
-function resolveProjectItemId(deps, issueNumber) {
+function resolveProjectItemId(deps, issueNumber, repo) {
   if (!deps.config)
     return null;
   const { owner, number } = deps.config.project;
   const itemList = deps.client.projectItemList(owner, number);
   if (!itemList.ok)
     return null;
-  return parseBoardPosition(itemList.value, issueNumber)?.itemId ?? null;
+  return parseBoardPosition(itemList.value, issueNumber, repo)?.itemId ?? null;
 }
 function statusOptionNameById(fieldList) {
   const out = new Map;
@@ -31829,7 +32113,7 @@ function loadBoardView(deps, item) {
       unavailable: { reason: itemList.reason, detail: itemList.detail }
     };
   }
-  const position = parseBoardPosition(itemList.value, gi.number);
+  const position = parseBoardPosition(itemList.value, gi.number, gi.repo);
   if (!position) {
     return {
       coord,
@@ -32052,6 +32336,11 @@ var workHandoff = defineCommand({
       description: "Read and print the EXISTING handoff (active, else latest archived) instead of generating one \u2014 the manual handoff load. Read-only; never regenerates.",
       default: false
     },
+    remote: {
+      type: "boolean",
+      description: "Also commit the handoff to the work branch (.ditto/handoff/, git-tracked, delivered to a fetch/checkout recipient) \u2014 the committed-remote tier. Never pushes (push is a separate user-gated act).",
+      default: false
+    },
     output: {
       type: "string",
       description: "Output format: human|json",
@@ -32110,6 +32399,26 @@ var workHandoff = defineCommand({
         }
         throw err;
       }
+      let remote;
+      if (args.remote === true) {
+        const hstore = new HandoffStore(repoRoot);
+        const latest = await hstore.readLatest(args.workId);
+        if (!latest) {
+          writeError(`work handoff --remote: no handoff body found for ${args.workId} to commit`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        try {
+          remote = await hstore.writeRemote(latest.handoff);
+        } catch (err) {
+          if (err instanceof HandoffRemoteWriteError) {
+            writeError(`work handoff --remote refused: ${err.message}`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          throw err;
+        }
+      }
       if (format === "json") {
         writeJson2({
           work_item_id: args.workId,
@@ -32117,7 +32426,15 @@ var workHandoff = defineCommand({
           handoff_path: result2.handoffPath,
           completion_path: result2.completionPath,
           base_used: result2.baseUsed,
-          changed_files: result2.collectedChangedFiles
+          changed_files: result2.collectedChangedFiles,
+          ...remote ? {
+            remote: true,
+            path: remote.rel,
+            branch: remote.branch,
+            commit: remote.commit,
+            author: remote.author,
+            stem: remote.stem
+          } : {}
         });
       } else {
         writeHuman(`Handoff for ${args.workId}`);
@@ -32126,6 +32443,10 @@ var workHandoff = defineCommand({
         writeHuman(`  changed_files:  ${result2.collectedChangedFiles.length}`);
         writeHuman(`  handoff:        ${result2.handoffPath}`);
         writeHuman(`  completion.json: ${result2.completionPath}`);
+        if (remote) {
+          writeHuman(`  remote:         ${remote.rel} (git-tracked on ${remote.branch}, delivered on checkout \u2014 NOT pushed)`);
+          writeHuman(`  pick up:        ditto handoff list  \u2192  ditto handoff consume ${remote.stem}`);
+        }
       }
     } catch (err) {
       writeError(`work handoff failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -41934,7 +42255,7 @@ function defaultIntentQualityDeps(repoRoot) {
     readInterview: async (id) => await interviews.exists(id) ? interviews.get(id) : null,
     readAutopilot: async (id) => await autopilots.exists(id) ? autopilots.get(id) : null,
     readDecisions: (id) => autopilots.readDecisions(id),
-    countHandoffRounds: async (id) => (await handoffs.listActive()).filter((h2) => h2.handoff.work_item_id === id).length,
+    countHandoffRounds: async (id) => (await handoffs.listActive()).filter((h2) => h2.handoff.scope.kind === "work_item" && h2.handoff.scope.work_item_id === id).length,
     readMetrics: (id) => workItems.readMetrics(id),
     readQuestionRounds: (id) => workItems.readQuestionRounds(id)
   };
@@ -42384,12 +42705,12 @@ async function multiSelect(io, message, choices) {
 // src/cli/wizard/prompt-io.ts
 import { createInterface } from "readline/promises";
 
-// ../../../../node_modules/@clack/core/dist/index.mjs
+// node_modules/@clack/core/dist/index.mjs
 import { styleText } from "util";
 import { stdout as stdout3, stdin as stdin2 } from "process";
 import l__default from "readline";
 
-// ../../../../node_modules/fast-string-truncated-width/dist/utils.js
+// node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = (() => {
   const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
   return (input) => {
@@ -42408,7 +42729,7 @@ var isWideNotCJKTNotEmoji = (x2) => {
   return x2 === 8987 || x2 === 9001 || x2 >= 12272 && x2 <= 12287 || x2 >= 12289 && x2 <= 12350 || x2 >= 12441 && x2 <= 12543 || x2 >= 12549 && x2 <= 12591 || x2 >= 12593 && x2 <= 12686 || x2 >= 12688 && x2 <= 12771 || x2 >= 12783 && x2 <= 12830 || x2 >= 12832 && x2 <= 12871 || x2 >= 12880 && x2 <= 19903 || x2 >= 65040 && x2 <= 65049 || x2 >= 65072 && x2 <= 65106 || x2 >= 65108 && x2 <= 65126 || x2 >= 65128 && x2 <= 65131 || x2 >= 127488 && x2 <= 127490 || x2 >= 127504 && x2 <= 127547 || x2 >= 127552 && x2 <= 127560 || x2 >= 131072 && x2 <= 196605 || x2 >= 196608 && x2 <= 262141;
 };
 
-// ../../../../node_modules/fast-string-truncated-width/dist/index.js
+// node_modules/fast-string-truncated-width/dist/index.js
 var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
 var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
 var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
@@ -42507,7 +42828,7 @@ var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {})
 };
 var dist_default = getStringTruncatedWidth;
 
-// ../../../../node_modules/fast-string-width/dist/index.js
+// node_modules/fast-string-width/dist/index.js
 var NO_TRUNCATION2 = {
   limit: Infinity,
   ellipsis: "",
@@ -42518,7 +42839,7 @@ var fastStringWidth = (input, options = {}) => {
 };
 var dist_default2 = fastStringWidth;
 
-// ../../../../node_modules/fast-wrap-ansi/lib/main.js
+// node_modules/fast-wrap-ansi/lib/main.js
 var ESC = "\x1B";
 var CSI = "\x9B";
 var END_CODE = 39;
@@ -42730,7 +43051,7 @@ function wrapAnsi(string, columns, options) {
 `);
 }
 
-// ../../../../node_modules/@clack/core/dist/index.mjs
+// node_modules/@clack/core/dist/index.mjs
 var import_sisteransi = __toESM(require_src(), 1);
 function findCursor(s2, o3, l2) {
   if (!l2.some((r3) => !r3.disabled))
@@ -43522,7 +43843,7 @@ class a3 extends V2 {
   }
 }
 
-// ../../../../node_modules/@clack/prompts/dist/index.mjs
+// node_modules/@clack/prompts/dist/index.mjs
 import { styleText as styleText2, stripVTControlCharacters } from "util";
 import process$1 from "process";
 var import_sisteransi2 = __toESM(require_src(), 1);
@@ -47977,6 +48298,339 @@ var githubCommand = defineCommand({
   subCommands: { setup: githubSetupCommand }
 });
 
+// src/cli/commands/handoff.ts
+import { randomBytes as randomBytes3 } from "crypto";
+import { basename as basename5 } from "path";
+init_fs();
+function stemOf(relPath) {
+  return basename5(relPath).replace(/\.md$/, "");
+}
+function generateSessionId() {
+  const stamp2 = new Date().toISOString().replace(/[:.]/g, "-").toLowerCase();
+  return `sess-${stamp2}-${randomBytes3(3).toString("hex")}`;
+}
+var writeArgs = {
+  session: {
+    type: "string",
+    description: "Session id this handoff resumes (session/author scope). Omit to generate a safe one.",
+    required: false
+  },
+  intent: {
+    type: "string",
+    description: "Original user intent (required \u2014 there is no work item to derive it from).",
+    required: false
+  },
+  from: {
+    type: "string",
+    description: "Where this handoff is written from: session/agent and its state (required).",
+    required: false
+  },
+  state: {
+    type: "string",
+    description: "Where things stand now (required).",
+    required: false
+  },
+  next: {
+    type: "string",
+    description: "The single first thing the next agent should check (required).",
+    required: false
+  },
+  autopilot: {
+    type: "string",
+    description: "The autopilot_id the next session resumes under, if this resumes a run.",
+    required: false
+  },
+  remote: {
+    type: "boolean",
+    description: "Commit the handoff to the work branch (.ditto/handoff/, git-tracked, delivered to a fetch/checkout recipient) instead of the gitignored LOCAL store. Never pushes (push is a separate user-gated act).",
+    default: false
+  },
+  output: {
+    type: "string",
+    description: "Output format: human|json",
+    default: "human"
+  }
+};
+async function runWrite({ args }) {
+  let format;
+  try {
+    format = parseOutputFormat(args.output);
+  } catch (err) {
+    writeError(err instanceof Error ? err.message : String(err));
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const required = [
+    ["--intent", args.intent],
+    ["--from", args.from],
+    ["--state", args.state],
+    ["--next", args.next]
+  ];
+  const missing = required.filter(([, v2]) => typeof v2 !== "string" || v2.trim().length === 0).map(([flag]) => flag);
+  if (missing.length > 0) {
+    writeError(`ditto handoff: missing required ${missing.join(", ")} for a session handoff`);
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const sessionId = typeof args.session === "string" && args.session.trim().length > 0 ? args.session : generateSessionId();
+  const repoRoot = await resolveRepoRootForCreate();
+  try {
+    const handoff2 = buildSessionHandoff({
+      sessionId,
+      originalIntent: args.intent,
+      fromContext: args.from,
+      currentState: args.state,
+      nextFirstCheck: args.next,
+      ...typeof args.autopilot === "string" && args.autopilot.length > 0 ? { autopilotId: args.autopilot } : {}
+    });
+    const store = new HandoffStore(repoRoot);
+    if (args.remote === true) {
+      const res = await store.writeRemote(handoff2);
+      if (format === "json") {
+        writeJson2({
+          remote: true,
+          path: res.rel,
+          branch: res.branch,
+          commit: res.commit,
+          author: res.author,
+          stem: res.stem,
+          scope: handoff2.scope
+        });
+      } else {
+        writeHuman(`Committed remote handoff ${res.stem}`);
+        writeHuman(`  scope:   session (${sessionId})`);
+        writeHuman(`  branch:  ${res.branch}`);
+        writeHuman(`  path:    ${res.rel} (git-tracked, delivered on checkout \u2014 NOT pushed)`);
+        writeHuman(`  pick up: ditto handoff list  \u2192  ditto handoff consume ${res.stem}`);
+      }
+      return;
+    }
+    const rel = await store.write(handoff2);
+    if (format === "json") {
+      writeJson2({ path: rel, scope: handoff2.scope, stem: stemOf(rel) });
+    } else {
+      writeHuman(`Wrote session handoff ${stemOf(rel)}`);
+      writeHuman(`  scope:   session (${sessionId})`);
+      writeHuman(`  path:    ${rel}`);
+      writeHuman(`  pick up: ditto handoff list  \u2192  ditto handoff consume ${stemOf(rel)}`);
+    }
+  } catch (err) {
+    writeError(`ditto handoff write failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(USAGE_ERROR_EXIT);
+  }
+}
+var handoffWrite = defineCommand({
+  meta: {
+    name: "write",
+    description: "Write a session/author-scope handoff (no work item)."
+  },
+  args: writeArgs,
+  run: runWrite
+});
+function activeView(a4) {
+  return {
+    id: stemOf(a4.path),
+    kind: a4.handoff.scope.kind,
+    scope_key: scopeKey(a4.handoff.scope),
+    created_at: a4.handoff.created_at,
+    from_context: a4.handoff.from_context,
+    ...a4.handoff.autopilot_id ? { autopilot_id: a4.handoff.autopilot_id } : {},
+    path: a4.path
+  };
+}
+function remoteView(r4) {
+  return {
+    id: r4.stem,
+    tier: "remote",
+    kind: r4.handoff.scope.kind,
+    scope_key: scopeKey(r4.handoff.scope),
+    created_at: r4.handoff.created_at,
+    from_context: r4.handoff.from_context,
+    ...r4.handoff.autopilot_id ? { autopilot_id: r4.handoff.autopilot_id } : {},
+    path: r4.path
+  };
+}
+var handoffList = defineCommand({
+  meta: {
+    name: "list",
+    description: "Discover pending LOCAL handoffs (explicit pull). Shows the active set AND any files that failed to parse \u2014 never silently dropped."
+  },
+  args: {
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const store = new HandoffStore(repoRoot);
+    const { active, failures } = await store.listActiveDetailed();
+    const { handoffs: remote, failures: remoteFailures } = await store.listRemote();
+    const allFailures = [...failures, ...remoteFailures];
+    if (format === "json") {
+      writeJson2({
+        active: active.map(activeView),
+        remote: remote.map(remoteView),
+        failures: allFailures
+      });
+      return;
+    }
+    if (active.length === 0 && remote.length === 0) {
+      writeHuman("No pending handoffs.");
+    }
+    if (active.length > 0) {
+      writeHuman("Pending LOCAL handoffs (consume by id):");
+      for (const a4 of active) {
+        writeHuman(`  ${stemOf(a4.path)}	[${a4.handoff.scope.kind}]	${a4.handoff.created_at}	${a4.handoff.from_context}`);
+      }
+    }
+    if (remote.length > 0) {
+      writeHuman("Committed REMOTE handoffs (consume by id):");
+      for (const r4 of remote) {
+        writeHuman(`  ${r4.stem}	[${r4.handoff.scope.kind}]	${r4.handoff.created_at}	${r4.handoff.from_context}	(remote)`);
+      }
+    }
+    if (allFailures.length > 0) {
+      writeHuman("Unparsable handoff files (surfaced, not dropped):");
+      for (const f4 of allFailures) {
+        writeHuman(`  ! ${f4.path}	(${f4.scope})	${f4.error}`);
+      }
+    }
+  }
+});
+var handoffConsume = defineCommand({
+  meta: {
+    name: "consume",
+    description: "Soft-consume a handoff by id: load the body on-demand + record a consumed-marker. Does NOT move/delete the file (age-sweep is the sole hard cleanup)."
+  },
+  args: {
+    id: {
+      type: "positional",
+      description: "Handoff id (the stem `list` prints: a work item `<wi>`, or `session__<sid>`).",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    try {
+      const store = new HandoffStore(repoRoot);
+      const { handoffs: remote } = await store.listRemote();
+      const remoteMatch = remote.find((r4) => r4.stem === args.id);
+      if (remoteMatch) {
+        const consumed2 = await store.consumeRemote(remoteMatch);
+        if (format === "json") {
+          writeJson2({
+            id: consumed2.stem,
+            tier: "remote",
+            scope: consumed2.handoff.scope,
+            path: consumed2.path,
+            body: consumed2.body
+          });
+        } else {
+          writeHuman(`Handoff ${consumed2.stem} (${consumed2.path}, remote):
+`);
+          writeHuman(consumed2.body);
+        }
+        return;
+      }
+      const consumed = await store.consumeFor(args.id);
+      if (!consumed) {
+        if (format === "json")
+          writeJson2({ id: args.id, handoff: null });
+        else
+          writeHuman(`No active handoff for ${args.id}.`);
+        return;
+      }
+      if (format === "json") {
+        writeJson2({
+          id: stemOf(consumed.path),
+          scope: consumed.handoff.scope,
+          path: consumed.path,
+          body: consumed.body
+        });
+      } else {
+        writeHuman(`Handoff ${stemOf(consumed.path)} (${consumed.path}):
+`);
+        writeHuman(consumed.body);
+      }
+    } catch (err) {
+      writeError(`ditto handoff consume failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(USAGE_ERROR_EXIT);
+    }
+  }
+});
+var handoffShow = defineCommand({
+  meta: {
+    name: "show",
+    description: "Read-only view of an active handoff by id (no consumed-marker, does not consume)."
+  },
+  args: {
+    id: {
+      type: "positional",
+      description: "Handoff id (the stem `list` prints).",
+      required: true
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: async ({ args }) => {
+    let format;
+    try {
+      format = parseOutputFormat(args.output);
+    } catch (err) {
+      writeError(err instanceof Error ? err.message : String(err));
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+    const repoRoot = await resolveRepoRootForCreate();
+    const found = await new HandoffStore(repoRoot).getActive(args.id);
+    if (!found) {
+      if (format === "json")
+        writeJson2({ id: args.id, handoff: null });
+      else
+        writeHuman(`No active handoff for ${args.id}.`);
+      return;
+    }
+    if (format === "json") {
+      writeJson2({
+        id: stemOf(found.path),
+        scope: found.handoff.scope,
+        path: found.path,
+        body: found.body
+      });
+    } else {
+      writeHuman(`Handoff ${stemOf(found.path)} (${found.path}):
+`);
+      writeHuman(found.body);
+    }
+  }
+});
+var handoffCommand = defineCommand({
+  meta: {
+    name: "handoff",
+    description: "Write / discover / consume handoffs. `write` produces a session-scope handoff (no work item); `list` discovers pending ones (explicit pull); `consume <id>` loads a body on-demand; `show <id>` is read-only. `ditto work handoff <id>` remains the work-item producer."
+  },
+  subCommands: {
+    write: handoffWrite,
+    list: handoffList,
+    consume: handoffConsume,
+    show: handoffShow
+  }
+});
+
 // src/hooks/io.ts
 init_fs();
 
@@ -50315,7 +50969,7 @@ import { resolve as resolve21 } from "path";
 init_fs();
 
 // src/core/init-scaffold.ts
-import { basename as basename5, join as join77 } from "path";
+import { basename as basename6, join as join77 } from "path";
 
 // src/schemas/glossary.ts
 init_zod();
@@ -50399,7 +51053,7 @@ async function initScaffold(repoRoot, now) {
   for (const sub of SCAFFOLD_DIRS) {
     await ensureDirTracked(join77(dittoDir2, sub), join77(".ditto", sub), createdDirs);
   }
-  const projectName = basename5(repoRoot) || "project";
+  const projectName = basename6(repoRoot) || "project";
   await seedFileIfAbsent(glossaryAbs, join77(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
@@ -51334,7 +51988,7 @@ var knowledgeCommand = defineCommand({
 });
 
 // src/cli/commands/memory.ts
-import { randomBytes as randomBytes3 } from "crypto";
+import { randomBytes as randomBytes4 } from "crypto";
 import { readFile as readFile19, readdir as readdir26 } from "fs/promises";
 import { isAbsolute as isAbsolute15, join as join82 } from "path";
 init_ditto_paths();
@@ -52169,7 +52823,7 @@ var memoryBuild = defineCommand({
           return;
         }
         const merged = mergeIrFragments(parsed.data);
-        const stamp2 = `${Date.now().toString(36)}${randomBytes3(3).toString("hex")}`;
+        const stamp2 = `${Date.now().toString(36)}${randomBytes4(3).toString("hex")}`;
         const ir = assembleSemanticIr(merged, {
           ir_version: `ir_${stamp2}`,
           generated_at: new Date().toISOString(),
@@ -53114,7 +53768,7 @@ var modeCommand = defineCommand({
 });
 
 // src/cli/commands/prism.ts
-import { randomBytes as randomBytes4 } from "crypto";
+import { randomBytes as randomBytes5 } from "crypto";
 init_fs();
 
 // src/core/prism/designdoc.ts
@@ -53275,7 +53929,7 @@ async function runOpponentDissentRound(store, workItemId2, config) {
 // src/cli/commands/prism.ts
 init_work_item_store();
 function prismNodeId() {
-  return `prism_${randomBytes4(6).toString("hex")}`;
+  return `prism_${randomBytes5(6).toString("hex")}`;
 }
 function asArray3(value) {
   if (value === undefined)
@@ -56376,7 +57030,7 @@ function defaultRegistry() {
 // src/core/setup.ts
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm4, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename6, dirname as dirname19, isAbsolute as isAbsolute16, join as join92, resolve as resolve24 } from "path";
+import { basename as basename7, dirname as dirname19, isAbsolute as isAbsolute16, join as join92, resolve as resolve24 } from "path";
 
 // src/core/charter-region.ts
 function leadingPrefixOffsets(content) {
@@ -56649,7 +57303,7 @@ async function installResource(decision, resourcesDir, charterShas) {
     scope: decision.scope,
     destPath: decision.destPath
   };
-  const name = basename6(decision.destPath);
+  const name = basename7(decision.destPath);
   if (name === "AGENTS.md") {
     const bundledCharter = await readFile20(join92(resourcesDir, decision.filename), "utf8");
     const existed = await fileExists(decision.destPath);
@@ -56784,8 +57438,8 @@ async function setup(opts) {
   const hosts = setupHosts(opts.host);
   const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   const ordered = [
-    ...decisions.filter((d2) => basename6(d2.destPath) !== "CLAUDE.md"),
-    ...decisions.filter((d2) => basename6(d2.destPath) === "CLAUDE.md")
+    ...decisions.filter((d2) => basename7(d2.destPath) !== "CLAUDE.md"),
+    ...decisions.filter((d2) => basename7(d2.destPath) === "CLAUDE.md")
   ];
   const charterShas = await loadCharterShas(resourcesDir);
   const resources = [];
@@ -57593,7 +58247,7 @@ init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
 import { existsSync as existsSync16, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
-import { basename as basename7, dirname as dirname22, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
+import { basename as basename8, dirname as dirname22, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
   return env2[LOCAL_CLONE_ENV_FLAG] === "1";
@@ -57630,7 +58284,7 @@ function realpathNearestExisting(p2) {
     const parent = dirname22(cur);
     if (parent === cur)
       return join97(realpathSync2(cur), ...tail);
-    tail.unshift(basename7(cur));
+    tail.unshift(basename8(cur));
     cur = parent;
   }
   return tail.length === 0 ? realpathSync2(cur) : join97(realpathSync2(cur), ...tail);
@@ -58176,6 +58830,7 @@ var main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand,
     work: workCommand,
+    handoff: handoffCommand,
     github: githubCommand,
     worktree: worktreeCommand,
     workspace: workspaceCommand,
@@ -58216,4 +58871,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=c99e3cf646be146c861d1a363bc36dadad08a724eb5a258f3f08a1d9aaf901c5
+//# ditto-src-stamp=6f7dc02e79212df21b36e8b490cfb87b716ade303de5045c207e4fd0fee35fde

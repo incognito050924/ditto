@@ -504,7 +504,7 @@ async function computePostCost(
   }
   try {
     handoffRounds = (await new HandoffStore(repoRoot).listActive()).filter(
-      (h) => h.handoff.work_item_id === workItemId,
+      (h) => h.handoff.scope.kind === 'work_item' && h.handoff.scope.work_item_id === workItemId,
     ).length;
   } catch {
     /* handoffs absent ⇒ 0 */

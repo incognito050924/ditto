@@ -614,6 +614,67 @@ describe('userPromptSubmitHandler', () => {
     });
   });
 
+  // ac-9 (wi_260714xpw handoff redesign): NO hook auto-injects a handoff BODY or a
+  // handoff NOTIFICATION into context — discovery/consumption is EXPLICIT pull only
+  // (`ditto handoff list` → consume / skill), never an automatic prompt-turn read.
+  //
+  // The sibling wi_260708700 test above checks a single currentState marker; this
+  // locks the invariant COMPREHENSIVELY. Seed an active handoff whose rendered body
+  // carries a distinct marker in EVERY section (original_intent, from_context,
+  // current_state, decisions, next_first_check), bind the session to its OWN work
+  // item — the strongest auto-inject temptation — then assert the injected
+  // additionalContext contains NONE of those body markers, no rendered-body title,
+  // no handoff-store path, no "Pending handoff" announcement, and that the handoff
+  // is NOT auto-consumed (stays active for an explicit CLI/skill pull). Edge pinned:
+  // even bound directly to the handoff's work item, nothing is injected/announced/
+  // consumed automatically.
+  describe('ac-9: no hook auto-injects handoff body or notification (explicit pull only)', () => {
+    test('an active handoff for the bound work item is neither injected, announced, nor consumed', async () => {
+      const wi = await new WorkItemStore(repo).create({
+        title: 'prior',
+        source_request: 'SRCREQ_AC9_MARKER original intent text',
+        goal: 'g',
+        acceptance_criteria: [{ id: 'ac-1', statement: 's', verdict: 'unverified', evidence: [] }],
+      });
+      const hs = new HandoffStore(repo);
+      await hs.write(
+        buildHandoff({
+          workItem: wi,
+          fromContext: 'FROMCTX_AC9_MARKER',
+          currentState: 'CURSTATE_AC9_MARKER',
+          nextFirstCheck: 'NEXTCHECK_AC9_MARKER',
+          decisionsMade: ['DECISION_AC9_MARKER'],
+        }),
+      );
+      // Bind the session to the handoff's OWN work item (loaded path, no guide).
+      await new SessionPointerStore(repo).set('sess-ac9', wi.id);
+
+      const ctx = additionalContext(
+        (await run({ session_id: 'sess-ac9', prompt: '이어서 진행해줘' })).stdout,
+      );
+
+      // No handoff BODY: none of the rendered body markers leak into context.
+      for (const marker of [
+        'SRCREQ_AC9_MARKER',
+        'FROMCTX_AC9_MARKER',
+        'CURSTATE_AC9_MARKER',
+        'NEXTCHECK_AC9_MARKER',
+        'DECISION_AC9_MARKER',
+      ]) {
+        expect(ctx).not.toContain(marker);
+      }
+      // No handoff NOTIFICATION: no rendered-body title, no store path, no
+      // pending-handoff announcement triggered by the on-disk handoff.
+      expect(ctx).not.toContain('# Handoff:');
+      expect(ctx).not.toContain('.ditto/local/handoff/');
+      expect(ctx).not.toContain('Pending handoff');
+
+      // No auto-CONSUMPTION: the handoff stays active for an explicit CLI/skill pull.
+      expect(await hs.exists(wi.id)).toBe(true);
+      expect(await hs.listActive()).toHaveLength(1);
+    });
+  });
+
   // wi_2606289nt: the consume path also sweeps STALE active handoffs into archive
   // (move-not-delete) so an un-picked-up handoff can never re-inject forever.
   describe('stale active sweep on prompt', () => {

@@ -118,7 +118,9 @@ export function defaultIntentQualityDeps(repoRoot: string): IntentQualityDeps {
     readAutopilot: async (id) => ((await autopilots.exists(id)) ? autopilots.get(id) : null),
     readDecisions: (id) => autopilots.readDecisions(id),
     countHandoffRounds: async (id) =>
-      (await handoffs.listActive()).filter((h) => h.handoff.work_item_id === id).length,
+      (await handoffs.listActive()).filter(
+        (h) => h.handoff.scope.kind === 'work_item' && h.handoff.scope.work_item_id === id,
+      ).length,
     readMetrics: (id) => workItems.readMetrics(id),
     readQuestionRounds: (id) => workItems.readQuestionRounds(id),
   };

@@ -18,6 +18,7 @@ import { doctorCommand } from './commands/doctor';
 import { e2eCommand } from './commands/e2e';
 import { fitnessCommand } from './commands/fitness';
 import { githubCommand } from './commands/github';
+import { handoffCommand } from './commands/handoff';
 import { hookCommand } from './commands/hook';
 import { impactCommand } from './commands/impact';
 import { initCommand } from './commands/init';
@@ -51,6 +52,7 @@ const main = defineCommand({
     uninstall: teardownCommand,
     teardown: teardownCommand, // alias of uninstall (기존 참조·setup/teardown 대칭 호환)
     work: workCommand,
+    handoff: handoffCommand,
     github: githubCommand,
     worktree: worktreeCommand,
     workspace: workspaceCommand,

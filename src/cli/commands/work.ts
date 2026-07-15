@@ -38,7 +38,11 @@ import {
 } from '~/core/github-coord';
 import { postUnpostedDecisions } from '~/core/github-progress';
 import { reflectTermination } from '~/core/github-reflection';
-import { HandoffStore } from '~/core/handoff-store';
+import {
+  HandoffRemoteWriteError,
+  HandoffStore,
+  type RemoteWriteResult,
+} from '~/core/handoff-store';
 import { IntentStore } from '~/core/intent-store';
 import {
   InvalidBaseRefError,
@@ -1788,6 +1792,12 @@ const workHandoff = defineCommand({
         'Read and print the EXISTING handoff (active, else latest archived) instead of generating one — the manual handoff load. Read-only; never regenerates.',
       default: false,
     },
+    remote: {
+      type: 'boolean',
+      description:
+        'Also commit the handoff to the work branch (.ditto/handoff/, git-tracked, delivered to a fetch/checkout recipient) — the committed-remote tier. Never pushes (push is a separate user-gated act).',
+      default: false,
+    },
     output: {
       type: 'string',
       description: 'Output format: human|json',
@@ -1849,6 +1859,34 @@ const workHandoff = defineCommand({
         }
         throw err;
       }
+      // --remote: ALSO commit the just-built work_item handoff to the work branch
+      // `ditto/<wi>` via the store's writeRemote (git-tracked `.ditto/handoff/<stem>.md`,
+      // delivered to a fetch/checkout recipient, NEVER pushed — cross-machine delivery is
+      // a separate user-gated push). The full local flow above is unchanged (completion.json,
+      // status transition, handoff_path link); this layers the committed-remote delivery
+      // tier on top, reusing the store's git/scrub/branch routing (no reimplementation).
+      // Mirrors the session producer `ditto handoff write --remote`. A refusal (wrong branch /
+      // detached / gitignored path) is surfaced by the store as HandoffRemoteWriteError.
+      let remote: RemoteWriteResult | undefined;
+      if (args.remote === true) {
+        const hstore = new HandoffStore(repoRoot);
+        const latest = await hstore.readLatest(args.workId);
+        if (!latest) {
+          writeError(`work handoff --remote: no handoff body found for ${args.workId} to commit`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        try {
+          remote = await hstore.writeRemote(latest.handoff);
+        } catch (err) {
+          if (err instanceof HandoffRemoteWriteError) {
+            writeError(`work handoff --remote refused: ${err.message}`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          throw err;
+        }
+      }
       if (format === 'json') {
         writeJson({
           work_item_id: args.workId,
@@ -1857,6 +1895,16 @@ const workHandoff = defineCommand({
           completion_path: result.completionPath,
           base_used: result.baseUsed,
           changed_files: result.collectedChangedFiles,
+          ...(remote
+            ? {
+                remote: true,
+                path: remote.rel,
+                branch: remote.branch,
+                commit: remote.commit,
+                author: remote.author,
+                stem: remote.stem,
+              }
+            : {}),
         });
       } else {
         writeHuman(`Handoff for ${args.workId}`);
@@ -1865,6 +1913,14 @@ const workHandoff = defineCommand({
         writeHuman(`  changed_files:  ${result.collectedChangedFiles.length}`);
         writeHuman(`  handoff:        ${result.handoffPath}`);
         writeHuman(`  completion.json: ${result.completionPath}`);
+        if (remote) {
+          writeHuman(
+            `  remote:         ${remote.rel} (git-tracked on ${remote.branch}, delivered on checkout — NOT pushed)`,
+          );
+          writeHuman(
+            `  pick up:        ditto handoff list  →  ditto handoff consume ${remote.stem}`,
+          );
+        }
       }
     } catch (err) {
       writeError(`work handoff failed: ${err instanceof Error ? err.message : String(err)}`);
