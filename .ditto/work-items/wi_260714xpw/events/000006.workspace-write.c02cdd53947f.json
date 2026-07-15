@@ -1,0 +1,70 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714xpw",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "c02cdd53947f76c9912bd98792b81db30e9f27f7eb17c18b121df5ba0759cdcd",
+  "ts": "2026-07-14T11:07:42.717Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260714xpw/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "whole-project 0 errors (union migration type-clean; 14 sibling errors resolved)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/handoff-store.test.ts tests/conformance/m4.conformance.test.ts tests/core/work-item-handoff.test.ts tests/core/intent-quality-doctor.test.ts",
+        "summary": "70 pass / 0 fail (driver fresh re-run) — store+m4+caller suites"
+      },
+      {
+        "kind": "command",
+        "command": "git check-ignore -v .ditto/handoff/probe.md",
+        "summary": "exit 1 = NOT ignored (committed-remote path .ditto/handoff/ is git-tracked); .ditto/local/handoff/ stays ignored"
+      },
+      {
+        "kind": "command",
+        "command": "disable branch-guard + scrub -> RED (wrong-branch commit + raw ghp_ token) -> restore -> green",
+        "summary": "non-vacuity: ac-4 branch-target + secret-scrub guards proven to have teeth"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/handoff-store.ts",
+        "summary": "scope-union + author-slug routing(assertSafeKey charset guard); committed-remote .ditto/handoff/<stem>.md(git-tracked, runtime check-ignore guard, ditto/<wi> branch target, index.lock retry, fail-closed, NO push); scrubTokens on committed body(fail-closed); soft consume(body+per-recipient marker, no move); listActiveDetailed surfaces parse failures(ac-3)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/knowledge/adr/ADR-20260714-handoff-remote-committed-tier.md",
+        "summary": "신규 ADR: 원격 핸드오프=작업 브랜치 커밋(git-tracked), 로컬=gitignored 불변. ADR-20260706 handoff-tier 분류만 좁게 부분 supersede. 설계 제약(gitignored 밖 커밋경로·per-recipient 마커·스크럽) receipts + 기각대안 + 변경조건. ac-4 authorize."
+      },
+      {
+        "kind": "command",
+        "command": "ditto knowledge adr-check",
+        "summary": "adr-check: OK (exit 0) — 파일명/id 형식 유효·고유"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (settled-tree barrier, run twice)",
+        "summary": "4738 pass/13 skip/7 fail — 1 regression (SKILL YAML, ac-6) + 6 environmental (worktree missing surfaces.json/work-items, AC-unrelated)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "0 errors"
+      },
+      {
+        "kind": "command",
+        "command": "yaml.parse SKILL.md frontmatter current vs HEAD",
+        "summary": "CURRENT parse FAIL, HEAD OK — regression proof"
+      }
+    ]
+  }
+}

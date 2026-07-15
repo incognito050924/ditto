@@ -1,0 +1,100 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714xpw",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "1701326b6f7228bb2ecfbebd61041166707973dbfd11345446c9d949838a4688",
+  "ts": "2026-07-14T11:07:42.716Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260714xpw/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/schemas/handoff.test.ts",
+        "summary": "red-first: RED exit1 (5 AC fails) -> GREEN exit0 8/8 (driver fresh re-run confirms green)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/schemas/gate-fixtures.test.ts",
+        "summary": "23/23 back-compat: handoff/valid.json (old top-level work_item_id) parses, invalid.json rejected (ac-5)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/conformance/m0.conformance.test.ts -t handoff",
+        "summary": "2/2 handoff conformance"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "4 changed files type-clean; remaining errors confined to sibling handoff-store.ts + m4.conformance.test.ts (impl-store scope)"
+      },
+      {
+        "kind": "file",
+        "path": "src/schemas/handoff.ts",
+        "summary": "handoffScope discriminatedUnion(kind: work_item{work_item_id}|session{session_id}) + z.preprocess lifting legacy {work_item_id,no-scope} -> {scope:{kind:work_item}} for ac-5 back-compat"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "whole-project 0 errors (union migration type-clean; 14 sibling errors resolved)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/handoff-store.test.ts tests/conformance/m4.conformance.test.ts tests/core/work-item-handoff.test.ts tests/core/intent-quality-doctor.test.ts",
+        "summary": "70 pass / 0 fail (driver fresh re-run) — store+m4+caller suites"
+      },
+      {
+        "kind": "command",
+        "command": "git check-ignore -v .ditto/handoff/probe.md",
+        "summary": "exit 1 = NOT ignored (committed-remote path .ditto/handoff/ is git-tracked); .ditto/local/handoff/ stays ignored"
+      },
+      {
+        "kind": "command",
+        "command": "disable branch-guard + scrub -> RED (wrong-branch commit + raw ghp_ token) -> restore -> green",
+        "summary": "non-vacuity: ac-4 branch-target + secret-scrub guards proven to have teeth"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/handoff-store.ts",
+        "summary": "scope-union + author-slug routing(assertSafeKey charset guard); committed-remote .ditto/handoff/<stem>.md(git-tracked, runtime check-ignore guard, ditto/<wi> branch target, index.lock retry, fail-closed, NO push); scrubTokens on committed body(fail-closed); soft consume(body+per-recipient marker, no move); listActiveDetailed surfaces parse failures(ac-3)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (settled-tree barrier, run twice)",
+        "summary": "4738 pass/13 skip/7 fail — 1 regression (SKILL YAML, ac-6) + 6 environmental (worktree missing surfaces.json/work-items, AC-unrelated)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "0 errors"
+      },
+      {
+        "kind": "command",
+        "command": "yaml.parse SKILL.md frontmatter current vs HEAD",
+        "summary": "CURRENT parse FAIL, HEAD OK — regression proof"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/schemas/handoff.test.ts",
+        "summary": "8 pass/0 fail (schema union + back-compat)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/intent-quality-doctor.test.ts",
+        "summary": "8 pass/0 fail (adapted consumer)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "0 errors"
+      }
+    ]
+  }
+}
