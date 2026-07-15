@@ -29,7 +29,13 @@ import { execFileSync } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classifyPushRejection, landBranchToOrigin, listChangedFiles } from '~/core/git';
+import {
+  LAND_PUSH_TIMEOUT_MS,
+  LAND_RECOVERY_TIMEOUT_MS,
+  classifyPushRejection,
+  landBranchToOrigin,
+  listChangedFiles,
+} from '~/core/git';
 
 let repo: string;
 
@@ -127,6 +133,29 @@ describe('classifyPushRejection (C5 rejection classes)', () => {
     expect(classifyPushRejection('fatal: could not read from remote repository')).toBe(
       'auth-network',
     );
+  });
+});
+
+// ─── C2 land-timeout regression (wi_2607156f8 review — HIGH) ─────────────────
+// BACKGROUND — why these tests exist:
+// The land push fires the pre-push gate (a full `bun test`, minutes long; the push-gate
+// force-kills a hung suite at its own ~10-min internal budget). An earlier fix capped
+// EVERY land subprocess at 120_000 ms, which SIGTERM'd the gate-running push MID-GATE,
+// before the ref update — so a would-be-successful land timed out and was misclassified as
+// a hung/non-FF attempt → non-ff-retry-exhausted (a normal land could NEVER complete, and
+// a real success looked like a failure). The fix splits the bound: the gate-running PUSH
+// gets a budget that comfortably exceeds the gate, while the pure fetch/rebase RECOVERY
+// steps (no gate) keep the shorter fail-fast bound — that is where the hung-subprocess
+// protection actually belongs. These pin the invariant so the too-short cap can't recur.
+describe('land timeouts (C2 regression: push clears the gate, recovery stays fast)', () => {
+  // A realistic full-suite pre-push gate runs for minutes; the push-gate's own internal
+  // timeout is ~10 min. The land push must clear that floor with margin.
+  const GATE_FLOOR_MS = 600_000;
+  test('the land PUSH timeout comfortably exceeds a realistic pre-push gate', () => {
+    expect(LAND_PUSH_TIMEOUT_MS).toBeGreaterThanOrEqual(GATE_FLOOR_MS);
+  });
+  test('the pure fetch/rebase RECOVERY timeout stays shorter (fast-fail a genuine hang)', () => {
+    expect(LAND_RECOVERY_TIMEOUT_MS).toBeLessThan(LAND_PUSH_TIMEOUT_MS);
   });
 });
 

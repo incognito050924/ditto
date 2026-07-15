@@ -240,8 +240,22 @@ export interface LandToOriginResult {
   reason: string;
 }
 
-/** Default per-attempt wall clock for a land subprocess (push/fetch/rebase). */
-export const LAND_ATTEMPT_TIMEOUT_MS = 120_000;
+/**
+ * Per-attempt wall clock for the LANDING push. The push fires the pre-push gate
+ * (`.githooks/pre-push` → `ditto push-gate` → the recipe test_command, a full suite that
+ * legitimately runs for minutes), which itself force-kills a hung suite at its own
+ * ~10-minute internal budget (`PUSH_GATE_TIMEOUT_MS`). This bound must therefore CLEAR
+ * that gate with margin: a shorter cap SIGTERMs the push MID-GATE, before the ref update,
+ * so a would-be success is misread as a hung/non-FF attempt and the land never completes.
+ * Kept finite so a genuinely hung push still fails eventually.
+ */
+export const LAND_PUSH_TIMEOUT_MS = 11 * 60 * 1000; // 11 min — exceeds the push-gate's ~10-min internal timeout
+/**
+ * Per-attempt wall clock for the pure recovery steps (`git fetch` / `git rebase`). These
+ * do NOT run the pre-push gate, so a genuine network/git hang there should fail FAST and
+ * feed the bounded retry — this is where the hung-subprocess protection actually applies.
+ */
+export const LAND_RECOVERY_TIMEOUT_MS = 120_000;
 /** Default bound on fetch+rebase+re-push recovery attempts after a non-FF rejection. */
 export const LAND_MAX_RETRIES = 3;
 
@@ -295,16 +309,18 @@ export function landBranchToOrigin(
   cwd: string,
   branch: string,
   defaultBranch: string,
-  opts: { maxRetries?: number; attemptTimeoutMs?: number } = {},
+  opts: { maxRetries?: number; pushTimeoutMs?: number; recoveryTimeoutMs?: number } = {},
 ): LandToOriginResult {
   const maxRetries = opts.maxRetries ?? LAND_MAX_RETRIES;
-  const timeout = opts.attemptTimeoutMs ?? LAND_ATTEMPT_TIMEOUT_MS;
+  // The push runs the pre-push gate so it needs the long budget; fetch/rebase do not.
+  const pushTimeout = opts.pushTimeoutMs ?? LAND_PUSH_TIMEOUT_MS;
+  const recoveryTimeout = opts.recoveryTimeoutMs ?? LAND_RECOVERY_TIMEOUT_MS;
   const refspec = `${branch}:${defaultBranch}`;
   const originRef = `refs/remotes/origin/${defaultBranch}`;
 
   // attempt 0 = the initial push; up to `maxRetries` fetch+rebase+re-push recoveries.
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const push = runGitBounded(cwd, ['push', 'origin', '--', refspec], timeout);
+    const push = runGitBounded(cwd, ['push', 'origin', '--', refspec], pushTimeout);
     if (push.ok) return { status: 'landed', reason: '' };
 
     if (!push.timedOut) {
@@ -323,7 +339,7 @@ export function landBranchToOrigin(
         reason: push.stderr || push.stdout || 'push retries exhausted',
       };
     }
-    const terminal = recoverForRetry(cwd, defaultBranch, originRef, timeout);
+    const terminal = recoverForRetry(cwd, defaultBranch, originRef, recoveryTimeout);
     if (terminal) return terminal;
   }
   return { status: 'non-ff-retry-exhausted', reason: 'push retries exhausted' };

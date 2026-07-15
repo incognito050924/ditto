@@ -13017,11 +13017,12 @@ function runGitBounded(cwd, args, timeoutMs) {
 }
 function landBranchToOrigin(cwd, branch, defaultBranch, opts = {}) {
   const maxRetries = opts.maxRetries ?? LAND_MAX_RETRIES;
-  const timeout = opts.attemptTimeoutMs ?? LAND_ATTEMPT_TIMEOUT_MS;
+  const pushTimeout = opts.pushTimeoutMs ?? LAND_PUSH_TIMEOUT_MS;
+  const recoveryTimeout = opts.recoveryTimeoutMs ?? LAND_RECOVERY_TIMEOUT_MS;
   const refspec = `${branch}:${defaultBranch}`;
   const originRef = `refs/remotes/origin/${defaultBranch}`;
   for (let attempt = 0;attempt <= maxRetries; attempt++) {
-    const push = runGitBounded(cwd, ["push", "origin", "--", refspec], timeout);
+    const push = runGitBounded(cwd, ["push", "origin", "--", refspec], pushTimeout);
     if (push.ok)
       return { status: "landed", reason: "" };
     if (!push.timedOut) {
@@ -13040,7 +13041,7 @@ ${push.stdout}`);
         reason: push.stderr || push.stdout || "push retries exhausted"
       };
     }
-    const terminal = recoverForRetry(cwd, defaultBranch, originRef, timeout);
+    const terminal = recoverForRetry(cwd, defaultBranch, originRef, recoveryTimeout);
     if (terminal)
       return terminal;
   }
@@ -13073,8 +13074,10 @@ function captureGitDiff(cwd) {
     }
   }
 }
-var LAND_ATTEMPT_TIMEOUT_MS = 120000, LAND_MAX_RETRIES = 3;
-var init_git = () => {};
+var LAND_PUSH_TIMEOUT_MS, LAND_RECOVERY_TIMEOUT_MS = 120000, LAND_MAX_RETRIES = 3;
+var init_git = __esm(() => {
+  LAND_PUSH_TIMEOUT_MS = 11 * 60 * 1000;
+});
 
 // src/schemas/intent-metric.ts
 var intentMetricHop, intentMetric;
@@ -59074,4 +59077,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=2d617a885d0c7144e12055eb765d3b32300798888bd3fd06b2f84d09205367a7
+//# ditto-src-stamp=1b2fc489e81f86d20201415f2ae60d57d70ae71fa1c7230248031d9ec45c0ff9
