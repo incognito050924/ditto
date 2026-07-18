@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260718srh",
+  "seq": 14,
+  "actor": "workspace-write",
+  "event_id": "ccacc982979d69e4a6f25b04ac74cdfcfe40fbe8161ebf7db3abd584b23fd013",
+  "ts": "2026-07-18T18:39:35.807Z",
+  "kind": "claim_release",
+  "payload": {
+    "claimed_branch": "hskim-ecoletree/seeded-defect",
+    "posted_claim_marker": "claim:hskim-ecoletree/seeded-defect"
+  }
+}

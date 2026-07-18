@@ -282,7 +282,7 @@
       ]
     }
   ],
-  "status": "blocked",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [
@@ -325,5 +325,6 @@
     ".ditto/work-items/wi_260718srh/"
   ],
   "created_at": "2026-07-18T16:24:43.752Z",
-  "updated_at": "2026-07-18T18:34:52.078Z"
+  "updated_at": "2026-07-18T18:39:33.147Z",
+  "closed_at": "2026-07-18T18:39:33.146Z"
 }
