@@ -1,8 +1,0 @@
-{
-  "schema_version": "0.1.0",
-  "work_item_id": "wi_intbad1",
-  "source_request": "x",
-  "goal": "y",
-  "acceptance_criteria": [],
-  "question_policy": "ask_only_if_user_only_can_answer"
-}

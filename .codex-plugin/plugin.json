@@ -1,7 +1,0 @@
-{
-  "name": "ditto",
-  "version": "0.9.3",
-  "description": "Autonomous work-orchestration harness: deep interview, autopilot graph, dialectic review, and convergence gates for coding agents.",
-  "skills": "./skills",
-  "hooks": "./hooks/hooks.json"
-}
