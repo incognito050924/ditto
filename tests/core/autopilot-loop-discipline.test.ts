@@ -616,6 +616,9 @@ describe('M5 per-AC (criterion) K counter — a multi-AC node does NOT conflate 
     expect(blockDecision?.reason).toContain('criterion');
     // And the structured criterion_ids field is written.
     expect(blockDecision?.criterion_ids).toEqual(['ac-1']);
+    // wi_260718srh (n3): the oracleSatisfaction gate FAIL that drove this append is
+    // attributed via the additive-optional gate_id (a gate-triggered site, not owner-result).
+    expect(blockDecision?.gate_id).toBe('oracle_satisfaction');
   });
 });
 
@@ -678,6 +681,9 @@ describe('M4 wrong-fixpoint reopen (oracle closed yet evidence mismatch → reop
       (d) => d.node_id === 'P' && d.reason.startsWith('oracle-unsatisfied'),
     );
     expect(reopenDecision.length).toBe(1);
+    // wi_260718srh (n3): the wrong-fixpoint reopen is driven by the SAME oracle authority,
+    // so it carries the oracle_satisfaction gate_id (shared parent id, no distinct sibling id).
+    expect(reopenDecision[0]?.gate_id).toBe('oracle_satisfaction');
   });
 
   test('collision guard: target already moved out of passed (blocked) → no illegal transition, no reopen', async () => {

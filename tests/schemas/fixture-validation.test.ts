@@ -9,6 +9,11 @@ import { languageChange, languageLedger } from '~/schemas/language-ledger';
 import { reviewerOutput } from '~/schemas/reviewer-output';
 import { runManifest } from '~/schemas/run-manifest';
 import { workItem } from '~/schemas/work-item';
+import {
+  corpusEntry,
+  parseCorpus,
+  runGate,
+} from '../fixtures/scenarios/gate-coverage/corpus-schema';
 
 const FIXTURE_ROOT = join(
   import.meta.dir,
@@ -373,5 +378,99 @@ describe('self-declared booleans require backing', () => {
     expect(() =>
       reviewerOutput.parse({ ...baseReview, different_provider_than_generator: false }),
     ).not.toThrow();
+  });
+});
+
+// ── seeded-defect corpus (gate-coverage substrate, wi_260718srh n5) ──────────
+// The corpus is the substrate the n6 harness runs down the real gate path to
+// measure per-gate catch-rate. These assertions pin: (1) the whole corpus passes
+// the shared manifest schema; (2) an unknown/mistyped expected_gate_id is rejected
+// fail-closed (the GATE_ID-derived enum, not a hand-copied literal set); (3) every
+// TARGETED defect's fixture_state actually drives its gate to FAIL while its
+// clean_pair drives the SAME gate to PASS — the specificity control, and the proof
+// each fixture sits STRICTLY past the threshold, not on the boundary.
+describe('seeded-defect gate-coverage corpus', () => {
+  const CORPUS_PATH = join(
+    import.meta.dir,
+    '..',
+    'fixtures',
+    'scenarios',
+    'gate-coverage',
+    'corpus.json',
+  );
+
+  async function loadCorpus() {
+    const raw = JSON.parse(await readFile(CORPUS_PATH, 'utf8'));
+    return parseCorpus(raw);
+  }
+
+  test('corpus.json passes the shared manifest schema', async () => {
+    const corpus = await loadCorpus();
+    expect(corpus.defects.length).toBeGreaterThanOrEqual(7);
+    expect(corpus.coverage_boundary.length).toBeGreaterThan(0);
+  });
+
+  test('corpus covers multiple distinct deterministic gates', async () => {
+    const corpus = await loadCorpus();
+    const gates = new Set(
+      corpus.defects.filter((d) => !d.is_expected_miss).map((d) => d.expected_gate_id),
+    );
+    // A single-gate corpus makes the catch-rate report vacuous.
+    expect(gates.size).toBeGreaterThanOrEqual(5);
+  });
+
+  test('includes 1..2 expected-miss defects (LLM-reviewer-layer, no gate)', async () => {
+    const corpus = await loadCorpus();
+    const misses = corpus.defects.filter((d) => d.is_expected_miss);
+    expect(misses.length).toBeGreaterThanOrEqual(1);
+    expect(misses.length).toBeLessThanOrEqual(2);
+    for (const m of misses) expect(m.expected_gate_id).toBeNull();
+  });
+
+  test('every targeted fixture_state drives its gate to FAIL, clean_pair to PASS', async () => {
+    const corpus = await loadCorpus();
+    const targeted = corpus.defects.filter((d) => !d.is_expected_miss);
+    expect(targeted.length).toBeGreaterThanOrEqual(7);
+    for (const d of targeted) {
+      const gateId = d.expected_gate_id;
+      if (gateId === null) throw new Error(`targeted defect ${d.defect_id} has null gate id`);
+      const failResult = runGate(gateId, d.fixture_state);
+      expect(
+        failResult.pass,
+        `${d.defect_id}: fixture_state must FAIL gate ${gateId} (got pass; boundary-strict?)`,
+      ).toBe(false);
+      const passResult = runGate(gateId, d.clean_pair);
+      expect(
+        passResult.pass,
+        `${d.defect_id}: clean_pair must PASS gate ${gateId} (got fail: ${passResult.reasons.join('; ')})`,
+      ).toBe(true);
+    }
+  });
+
+  test('unknown / mistyped expected_gate_id is rejected fail-closed', () => {
+    const typo = {
+      defect_id: 'seed-typo',
+      expected_gate_id: 'acceptance_testabel', // deliberate typo — not in GATE_ID
+      fixture_state: { statement: 'x' },
+      clean_pair: { statement: 'y' },
+      is_expected_miss: false,
+    };
+    expect(() => corpusEntry.parse(typo)).toThrow();
+  });
+
+  test('a whole manifest carrying an unknown gate id is rejected', () => {
+    const bad = {
+      coverage_boundary: 'deterministic gates only',
+      defects: [
+        {
+          defect_id: 'seed-bad',
+          expected_gate_id: 'not_a_real_gate',
+          fixture_state: {},
+          clean_pair: {},
+          is_expected_miss: false,
+        },
+      ],
+    };
+    expect(() => parseCorpus(bad)).toThrow();
   });
 });

@@ -75,6 +75,7 @@ import { CoverageStore } from './coverage-store';
 import { localDir } from './ditto-paths';
 import {
   type ConditionBDecision,
+  GATE_ID,
   type HandoffReason,
   assertFrozenTestsIntact,
   decisionConflictRequiresApproval,
@@ -3019,6 +3020,7 @@ async function recordResultCore(
           : reason,
         attempts: node.attempts,
         criterion_ids: unmet.criterionIds,
+        gate_id: GATE_ID.oracle_satisfaction,
       });
       return {
         node_id: node.id,
@@ -3101,6 +3103,7 @@ async function recordResultCore(
             : reason,
           attempts: target.attempts,
           criterion_ids: [fixpoint.criterion_id],
+          gate_id: GATE_ID.oracle_satisfaction,
         });
       }
     }

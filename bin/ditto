@@ -20807,6 +20807,24 @@ function capStatus(caps, usage) {
 function gate(reasons) {
   return { pass: reasons.length === 0, reasons };
 }
+var GATE_ID = {
+  interview_readiness: "interview_readiness",
+  acceptance_testable: "acceptance_testable",
+  resolvability: "resolvability",
+  pass_close_residual: "pass_close_residual",
+  oracle_satisfaction: "oracle_satisfaction",
+  frozen_tests_intact: "frozen_tests_intact",
+  completion: "completion",
+  completion_evidence: "completion_evidence",
+  non_pass_termination: "non_pass_termination",
+  convergence: "convergence",
+  decision_conflict: "decision_conflict",
+  intent_drift: "intent_drift",
+  direction_fork: "direction_fork",
+  knowledge_update: "knowledge_update",
+  interface_baseline_drift: "interface_baseline_drift",
+  land: "land"
+};
 function deterministicFloor(s2) {
   const raw = 0.05 * s2.open_required_sections + 0.1 * s2.conflicting + 0.05 * s2.assumption_ratio;
   return Math.min(1, Math.max(0, raw));
@@ -27923,7 +27941,8 @@ async function recordResultCore(repoRoot, input) {
         decision: blockNow ? "escalate" : "retry",
         reason: blockNow ? `${reason} (criterion ${unmet.criterionIds.join(", ")} failed its oracle ${priorFailures + 1}\u2265${k2} times \u2014 blocked, user decision needed)` : reason,
         attempts: node2.attempts,
-        criterion_ids: unmet.criterionIds
+        criterion_ids: unmet.criterionIds,
+        gate_id: GATE_ID.oracle_satisfaction
       });
       return {
         node_id: node2.id,
@@ -27973,7 +27992,8 @@ async function recordResultCore(repoRoot, input) {
           decision: blockTarget ? "escalate" : "retry",
           reason: blockTarget ? `${reason} (criterion ${fixpoint.criterion_id} failed its oracle ${priorFailures + 1}\u2265${k2} times \u2014 blocked, user decision needed)` : reason,
           attempts: target.attempts,
-          criterion_ids: [fixpoint.criterion_id]
+          criterion_ids: [fixpoint.criterion_id],
+          gate_id: GATE_ID.oracle_satisfaction
         });
       }
     }
@@ -59060,4 +59080,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=03ecdfb5eaff912868c983692b2d908dc5d51533224c05928f1dfc30f49a2376
+//# ditto-src-stamp=24ceb067554cb060eb6bd4a3cba0eb2fefc1f912b04b40c54867c1eacb4aa631

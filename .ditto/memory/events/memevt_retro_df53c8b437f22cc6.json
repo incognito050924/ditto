@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_df53c8b437f22cc6",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] sandbox-hermeticity: drive harness가 recordResult→directPostDecisions→gh issueComment로 host GitHub에 silent egress. 계획 n6-harness가 gh exec를 no-op mock 주입 + fixture WI에 github_issue 좌표 배제로 차단하고 이를 단언해 흡수. taxonomy 영구 등록(sandbox-hermeticity 렌즈)은 사용자 confirm 후속.\n[residual] 코퍼스가 인증성 게이트를 모델링하면 사각이 생기나 현재 게이트 집합에 인증 게이트 없음.\n[residual] seeded 결함이 authz 게이트를 흉내내면 오측 가능하나 스코프에 authz 게이트 없음.\n[residual] 없음 — 권한 모델은 계측 추가로 변하지 않음.\n[residual] harness가 POSIX mkdtemp·bun·쓰기가능 tmpdir baseline을 암묵 가정 — 그 없는 호스트에서 스위트 에러 가능.\n[residual] 오-시드 fixture가 false catch로 죽은 게이트를 가리는 metric-gaming은 data-integrity 소관으로 스윕.\n[residual] 리포트가 fixture 문자열을 명령/경로에 보간하면 여지 있으나 harness는 Store API·무 shell 보간.\n[residual] 코퍼스에 실제같은 비밀값을 결함 페이로드로 심으면 커밋·노출 가능하나 결함 소재는 거버넌스 게이트.\n[residual] 없음 — PII가 스코프에 없음.\n[residual] 없음 — 규제 대상 데이터/처리 미추가.\n[residual] gate_id/리포트 라벨이 훗날 에이전트-대면 메시지로 노출되면 오도 가능하나 현재 스코프에 없음.\n[close_reason] file_scope는 거버넌스 결정론 게이트·decision-log·스키마·fixture·계측 harness뿐. 인증 자격/세션 경로 없음, 심는 결함도 거버넌스 게이트 결함.\n[close_reason] 권한 검사 경로(claim/occupancy/push)를 안 건드림. 대상은 완료·랜드·리스크 거버넌스 판정, setup.ts read-only.\n[close_reason] 순수 내부 계측 스위트 구축으로 사용자-대면 권한 모델 의도 불변.\n[close_reason] LLM-free·무네트워크·mkdtemp·mock owner hermetic harness 요구. 외부 서비스 호출 경로 미추가.\n[close_reason] 런타임 공격 표면 없는 repo-local·LLM-free 테스트 harness. 악용 진입점 미추가.\n[close_reason] 정적 JSON fixture, mkdtemp+Store API 경로 구성, shell/SQL/eval 보간 경로 없음. gate_id는 코드 상수.\n[close_reason] gate_id는 정적 식별 상수, 코퍼스는 거버넌스-게이트 결함 모델. 자격증명을 decision-log/리포트에 흘리는 경로 없음.\n[close_reason] 스코프에 개인정보 데이터 경로 없음. 게이트·decision-log·fixture 모두 거버넌스 메타데이터.\n[close_reason] 내부 테스트 계측에 규제 준수 차원이 걸리지 않음.\n[close_reason] LLM-free이며 charter/배너 등 런타임 LLM-지시 문자열 미추가·미리라이트. gate_id는 내부 계측 상수이지 operative cue 아님.\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json\n[evidence] file: .ditto/local/runs/wi_260718srh/coverage.json",
+  "created_at": "2026-07-18T18:34:36.290Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

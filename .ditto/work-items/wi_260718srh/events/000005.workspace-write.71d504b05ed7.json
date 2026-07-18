@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260718srh",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "71d504b05ed79d536dd2715d21d2db9de4061774f561c140d686671c788334df",
+  "ts": "2026-07-18T18:34:51.776Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260718srh/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/schemas/fixture-validation.test.ts",
+        "summary": "34 pass/0 fail exit 0 — corpus schema + 7 gate FAIL/clean PASS drive + fail-closed negative"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "0 errors in gate-coverage/ or fixture-validation"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/gate-coverage/",
+        "summary": "33 pass/0 fail 147 assertions exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4971 pass/17 skip/1 fail; 1 fail pre-existing on baseline (doctor surface inventory), unrelated"
+      }
+    ]
+  }
+}

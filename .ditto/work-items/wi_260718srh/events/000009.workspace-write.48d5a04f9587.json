@@ -1,0 +1,35 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260718srh",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "48d5a04f958761b7f366112d845eb0e62d3dcfdac1633c8f2a804a9690c04a06",
+  "ts": "2026-07-18T18:34:51.780Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260718srh/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/gate-coverage/drive/",
+        "summary": "18 pass/0 fail 43 assertions exit 0 — 7 caught, 2 n/a, missed 0, hermeticity/HARNESS_ERROR/determinism asserted"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/gate-coverage/",
+        "summary": "33 pass/0 fail 147 assertions exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4971 pass/17 skip/1 fail; 1 fail pre-existing on baseline (doctor surface inventory), unrelated"
+      }
+    ]
+  }
+}
