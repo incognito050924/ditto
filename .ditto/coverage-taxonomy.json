@@ -9,6 +9,11 @@
       "id": "directive-fidelity",
       "lens": "매 프롬프트/세션에 주입되는 운영 지시(charter·배너 등 런타임 LLM 지시)를 재작성·평이화·번역할 때 모든 운영 신호(명령형 강제·금지·가중치 라우팅 임계·완료 게이트·모드배너 exit 지시)가 동일한 강도와 극성으로 보존되는가, 아니면 하나가 조용히 탈락/약화/반전되어 에이전트 행동이 문자열에서 멀리 떨어져 퇴행하는가? 유닛/목 테스트로는 안 잡히고(스냅샷은 바뀐 문자열을 고정할 뿐, 가독성 점수·약칭 검사는 운영 강도에 직교하거나 역행) 오직 before→after per-cue 대조나 실제 에이전트 행동에서만 드러난다.",
       "disposition": "code-verify"
+    },
+    {
+      "id": "sandbox-hermeticity",
+      "lens": "이 변경의 테스트·검증 경로가 밀폐(hermetic)한가 — 실제 네트워크 호출·외부 프로세스 spawn·실시계(Date.now/new Date)·랜덤·tmp 밖 파일 I/O 같은 외부 세계 의존이 새어들지 않나? egress 경로(gh·HTTP 등)가 존재하면 구조적으로 차단하고 0회 호출을 positive하게 단언하나?",
+      "disposition": "code-verify"
     }
   ]
 }
