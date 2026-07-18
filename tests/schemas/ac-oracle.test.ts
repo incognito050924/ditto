@@ -1,6 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { intentContract } from '~/schemas/intent';
 import { acceptanceCriterion } from '~/schemas/work-item';
 
@@ -105,20 +103,39 @@ describe('acceptanceCriterion.oracle — legacy round-trip (additive/optional)',
     expect(acceptanceCriterion.safeParse(baseAc()).success).toBe(true);
   });
 
-  test('on-disk intent.json fixtures still parse under the new schema', () => {
-    const repoRoot = join(import.meta.dir, '..', '..');
-    const wiDir = join(repoRoot, '.ditto', 'local', 'work-items');
-    const glob = new Bun.Glob('*/intent.json');
-    const files = [...glob.scanSync({ cwd: wiDir, absolute: true })];
-    // There are on-disk intents authored before the oracle field existed.
-    expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
-      const json = JSON.parse(readFileSync(file, 'utf8'));
-      const result = intentContract.safeParse(json);
-      if (!result.success) {
-        throw new Error(`legacy intent failed to parse: ${file}\n${result.error}`);
-      }
-      expect(result.success).toBe(true);
+  // A legacy intent.json authored before the `oracle` field existed: its ACs carry
+  // no `oracle`, and the intent omits the later-added optional fields
+  // (`follow_up_materialization`, `source_digest`). This shape is byte-for-byte what
+  // pre-oracle intents hold on disk. Kept as an inline fixture (not a live disk scan
+  // of `.ditto/local/work-items`, which is a gitignored per-developer tier — ADR-0012
+  // ③ — absent in a fresh worktree/CI checkout; same class as issue #42).
+  const legacyIntentFixture = {
+    schema_version: '0.1.0',
+    work_item_id: 'wi_260703moy',
+    source_request: 'original verbatim request',
+    goal: 'a verifiable goal stated in project terms',
+    in_scope: ['some in-scope item'],
+    out_of_scope: ['some out-of-scope item'],
+    acceptance_criteria: [
+      {
+        id: 'ac-1',
+        statement: 'observable behavior with no oracle field',
+        verdict: 'unverified',
+        evidence: [],
+      },
+    ],
+    unknowns: [],
+    follow_up_candidates: [],
+    question_policy: 'ask_only_if_user_only_can_answer',
+  };
+
+  test('legacy intent (no oracle field) still parses under the new schema', () => {
+    const result = intentContract.safeParse(legacyIntentFixture);
+    if (!result.success) {
+      throw new Error(`legacy intent failed to parse:\n${result.error}`);
     }
+    expect(result.success).toBe(true);
+    // The oracle field is additive + optional: a legacy AC round-trips without one.
+    expect(result.success && result.data.acceptance_criteria[0].oracle).toBeUndefined();
   });
 });
