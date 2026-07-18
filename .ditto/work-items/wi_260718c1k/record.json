@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260718c1k",
+  "title": "tidy wiring",
+  "source_request": "wire tidy",
+  "goal": "tidy stage runs on green implement",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "a",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "ce8f919f76593acae65d94fbae72c05d7d8344e7",
+  "created_at": "2026-06-01T00:00:00.000Z",
+  "updated_at": "2026-07-18T19:01:10.291Z"
+}
