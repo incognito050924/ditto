@@ -29,6 +29,39 @@ function gate(reasons: string[]): GateResult {
   return { pass: reasons.length === 0, reasons };
 }
 
+// ── stable gate identity (wi_260718srh, n3) ──────────────────────────────────
+// Each deterministic gate in this file has ONE stable `gate_id` — a machine-
+// attributable handle the decision log stamps on a gate-triggered entry
+// (autopilot-store.ts `AutopilotDecision.gate_id`, additive-optional). The corpus
+// is this HUMAN-PINNED literal set, NOT a reflective scan of "functions that return
+// GateResult": the gates span three return shapes (GateResult / *Result / blocker
+// string[]), so a reflective scan cannot delimit them. Every entry's key === value
+// (the id IS its own key), the value set is injective, and the key set is exactly the
+// gates enumerated here. Sibling classifiers SHARE their parent gate's id and get NO
+// distinct id: `riskRecordBlockers` → `resolvability`, `discoveredDefectCloseBlockers`
+// → `pass_close_residual`. Boolean predicates (highRiskAssumption, safeDefaultable,
+// knowledgeTriggerFired, isConditionB, …) and the G7 dispatch-guard fixable-downgrade
+// are NOT acceptance gates and are deliberately absent.
+export const GATE_ID = {
+  interview_readiness: 'interview_readiness',
+  acceptance_testable: 'acceptance_testable',
+  resolvability: 'resolvability',
+  pass_close_residual: 'pass_close_residual',
+  oracle_satisfaction: 'oracle_satisfaction',
+  frozen_tests_intact: 'frozen_tests_intact',
+  completion: 'completion',
+  completion_evidence: 'completion_evidence',
+  non_pass_termination: 'non_pass_termination',
+  convergence: 'convergence',
+  decision_conflict: 'decision_conflict',
+  intent_drift: 'intent_drift',
+  direction_fork: 'direction_fork',
+  knowledge_update: 'knowledge_update',
+  interface_baseline_drift: 'interface_baseline_drift',
+  land: 'land',
+} as const;
+export type GateId = (typeof GATE_ID)[keyof typeof GATE_ID];
+
 // ── deterministic ambiguity floor (ouroboros deterministic_floor) ───────────
 
 export interface AmbiguitySnapshot {

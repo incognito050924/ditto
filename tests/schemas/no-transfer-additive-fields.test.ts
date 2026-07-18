@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { type AutopilotDecision, synthesizeDecisionId } from '~/core/autopilot-store';
+import { GATE_ID } from '~/core/gates';
 import { autopilot } from '~/schemas/autopilot';
 import { completionContract } from '~/schemas/completion-contract';
 import { intentContract } from '~/schemas/intent';
@@ -249,5 +251,62 @@ describe('legacy artifacts round-trip unchanged', () => {
     expect(parsed.caps.switch_per_node).toBe(1);
     expect(parsed.caps.no_progress_rounds).toBe(3);
     expect(autopilot.parse(parsed)).toEqual(parsed);
+  });
+});
+
+// ── wi_260718srh (n3): AutopilotDecision.gate_id additive-optional round-trip ──
+// The decision log is NOT a zod schema (there is no decision schema in
+// src/schemas/autopilot.ts — verified); AutopilotDecision is the TS interface in
+// autopilot-store.ts and its persistence path is JSON.stringify → JSON.parse
+// (appendDecision / readDecisions). So the round-trip proof here is the JSON path,
+// and the idempotency proof is `synthesizeDecisionId` — the sha1 that
+// posted_decision_ids is keyed on.
+
+// A legacy decision-log line that pre-dates the gate_id field. Must survive untouched.
+function legacyDecisionLine(): AutopilotDecision {
+  return {
+    ts: '2026-01-01T00:00:00.000Z',
+    node_id: 'V',
+    failure_class: 'user_decision_needed',
+    decision: 'escalate',
+    reason: 'oracle-unsatisfied: ac-1 (legacy line, no gate_id)',
+    criterion_ids: ['ac-1'],
+  };
+}
+
+describe('AutopilotDecision gate_id (additive-optional, wi_260718srh)', () => {
+  test('a gate-stamped decision line round-trips through JSON preserving gate_id', () => {
+    const stamped: AutopilotDecision = {
+      ...legacyDecisionLine(),
+      gate_id: GATE_ID.oracle_satisfaction,
+    };
+    // the exact persistence path: appendDecision writes JSON.stringify; readDecisions parses.
+    const roundTripped = JSON.parse(JSON.stringify(stamped)) as AutopilotDecision;
+    expect(roundTripped.gate_id).toBe('oracle_satisfaction');
+    expect(roundTripped).toEqual(stamped);
+  });
+
+  test('a legacy line without gate_id round-trips unchanged — the field stays absent', () => {
+    const legacy = legacyDecisionLine();
+    const roundTripped = JSON.parse(JSON.stringify(legacy)) as AutopilotDecision;
+    expect(roundTripped.gate_id).toBeUndefined();
+    expect('gate_id' in roundTripped).toBe(false);
+    expect(roundTripped).toEqual(legacy);
+  });
+
+  test('posted_decision_ids idempotency: adding the optional field does NOT change a legacy hash', () => {
+    const legacy = legacyDecisionLine();
+    // synthesizeDecisionId = sha1(`${index} ${JSON.stringify(decision)}`). JSON.stringify
+    // omits an undefined key, so a decision carrying an explicit `gate_id: undefined`
+    // serializes BYTE-IDENTICALLY to a legacy line that lacks the key → identical hash at
+    // every index (the additive field never silently re-posts a legacy line). We assert on
+    // the serialization substrate itself (the hash is a pure function of it).
+    const withUndef = { ...legacy, gate_id: undefined };
+    expect(JSON.stringify(withUndef)).toBe(JSON.stringify(legacy));
+    // A line that actually CARRIES a gate_id takes a NEW hash (a stamped line is a distinct
+    // entry, fail-loud) — so only stamped lines change, legacy lines never do.
+    const stamped: AutopilotDecision = { ...legacy, gate_id: GATE_ID.oracle_satisfaction };
+    expect(synthesizeDecisionId(stamped, 0)).not.toBe(synthesizeDecisionId(legacy, 0));
+    expect(JSON.stringify(stamped)).not.toBe(JSON.stringify(legacy));
   });
 });

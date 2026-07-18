@@ -5,6 +5,7 @@ import { type Autopilot, type AutopilotNode, autopilot } from '~/schemas/autopil
 import { validateNodeAddition } from './autopilot-graph';
 import { localDir } from './ditto-paths';
 import { ensureDir, readJson, writeJson } from './fs';
+import type { GateId } from './gates';
 
 /**
  * AutopilotStore (M2.1) — the ONLY path that mutates the autopilot graph.
@@ -139,6 +140,15 @@ export interface AutopilotDecision {
     blast_radius: string;
     reverse_cost: string;
   };
+  // wi_260718srh (n3): the stable identity of the deterministic gate whose verdict drove
+  // this decision-log entry (gates.ts `GATE_ID`). Present ONLY on a gate-TRIGGERED append
+  // (e.g. the in-loop `oracleSatisfaction` downgrade), NOT on owner-result retry/surface
+  // entries — so a catch-rate denominator built from gate_id-stamped entries stays clean.
+  // Additive + optional (same convention as `criterion_ids?`/`direction_record?` — backward
+  // compatible, NO schema_version bump): `JSON.stringify` omits the undefined key, so a
+  // legacy line without it hashes byte-identically under `synthesizeDecisionId` (posted_
+  // decision_ids idempotency is preserved); only a stamped line takes a new hash.
+  gate_id?: GateId;
 }
 
 /**
