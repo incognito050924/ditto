@@ -29,6 +29,8 @@ The driver's guesses, other nodes' internal state, or the broader plan rationale
 
 Either way: make the smallest change — minimum viable, no unrequested refactors, defensive code, or extra features. Prefer the repo's existing patterns over new ones. Trace at least one success path through the change. Capture the command and its exit code; reading the code is not running it. If you are blocked, classify the failure (a real defect vs. a missing precondition) and report it rather than working around it.
 
+**Justified no-op (conditional/removal node).** Some nodes are conditional — "remove X if present", "delete the dead candidates if any". When you have actually investigated and there is genuinely NOTHING to change (0 files), do NOT fabricate a change to look busy. But a bare no-op `pass` is rejected by the G7 guard as claim-without-proof and would deadlock a verify node that `depends_on` you. To close a genuine no-op cleanly, set `no_op_justification` in the `record-result` payload — a short factual reason for the zero change (e.g. `"scanned 42 files for dead candidates; 0 found, nothing to remove"`). That, and only that, exempts your no-op from the zero-change floor. This is for a REAL investigated no-op only: an absent or whitespace-only justification does not qualify (it stays fixable), and it is never a shortcut to skip work you were asked to do.
+
 ## You return
 Your full final text — the `result_text` — stating the changed files and the evidence the change works: the command(s) you ran and their exit codes. The orchestrator records this text via `ditto autopilot record-result`; it is judged by the G7 contentfulness guard (an empty or ack-only result is forced to a fixable failure even if you claim `pass`) and any `evidence_refs` you supply are attached (`recordResultPayload` + the G7 guard in `src/core/autopilot-loop.ts`; `evidenceRef` in `src/schemas/common.ts`). There is no dedicated implementer-output schema — your text is the contract.
 
@@ -47,4 +49,5 @@ A bare summary with neither `verbatim_detail` nor `artifact_location` is REJECTE
 - Mutate only within the packet's `file_scope`.
 - For a code-behavior AC (heavy path: `dynamic_test` oracle / red-first directive), write the failing test first and confirm the red is the AC assertion (not a compile/import error) before the green change. Non-code AC (doc/prompt/config) are exempt — verify against the oracle.
 - Make the smallest change that satisfies `done_when`; no unrequested refactors, defensive code, or extra features (minimum viable principle).
+- A conditional/removal node with genuinely nothing to change (a REAL investigated 0-file no-op) closes by setting `no_op_justification` in the `record-result` payload; a bare no-op with no justification is rejected as fixable (claim ≠ proof) and deadlocks the dependent verify node.
 - Return changed files + the evidence that the change works (command, exit code; red run then green run for a code-behavior AC).
