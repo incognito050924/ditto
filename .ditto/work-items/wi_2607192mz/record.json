@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607192mz",
+  "title": "implementer 에이전트 doc에 정당화된 no-op(no_op_justification) 신고 지시 추가",
+  "source_request": "wi_2607194d0 후속: guardMutatingEvidence가 이제 정당화 신호(no_op_justification)를 동반한 implementer no-op(변경 0)을 통과시키도록 배선됐으나, agents/implementer.md는 그 신호를 언제·어떻게 신고하는지 전혀 안내하지 않는다. 조건부/제거 노드(예: '있으면 제거')가 진짜 바꿀 게 없을 때 bare no-op을 pass로 신고하면 G7 가드가 claim≠proof로 fixable 거부→depends_on verify 데드락. 배선(스키마·가드)은 됐으나 owner subagent가 실사용하도록 doc 지시가 필요.",
+  "goal": "agents/implementer.md에 조건부/제거 노드가 정당화된 0-file no-op을 no_op_justification으로 신고하는 지시를 추가하고 배포 플러그인에 반영",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "명령 grep -c no_op_justification agents/implementer.md 가 1 이상을 출력한다 — 소스 doc가 조건부/제거 노드의 정당화된 0-file no-op을 no_op_justification 필드로 신고하도록 지시하는 문단을 담는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "grep -c no_op_justification agents/implementer.md",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "명령 grep -c no_op_justification dist/plugin/agents/implementer.md 가 1 이상을 출력한다 — bun run build:plugin 재조립 후 배포본에 같은 지시가 반영된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "grep -c no_op_justification dist/plugin/agents/implementer.md",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_2607192mz/completion.json",
+    ".ditto/local/work-items/wi_2607192mz/work-item.json",
+    "agents/implementer.md"
+  ],
+  "worktrees": [],
+  "follows": "wi_2607194d0",
+  "risks": [],
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/archive/wi_2607192mz__2026-07-19T02-40-52-394Z.md",
+  "created_at": "2026-07-19T02:38:49.942Z",
+  "updated_at": "2026-07-19T02:40:52.451Z",
+  "closed_at": "2026-07-19T02:39:45.157Z"
+}

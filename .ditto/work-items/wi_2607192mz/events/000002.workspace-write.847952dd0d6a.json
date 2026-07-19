@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607192mz",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "847952dd0d6abf60da77090d91a74d1672fb0d3d29cf53f9a20f697c6c99f2ca",
+  "ts": "2026-07-19T02:39:36.518Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "grep -c no_op_justification dist/plugin/agents/implementer.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
