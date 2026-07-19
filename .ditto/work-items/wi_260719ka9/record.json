@@ -7,12 +7,42 @@
   "acceptance_criteria": [
     {
       "id": "ac-1",
-      "statement": "TBD — derive observable criteria during interview/planning",
-      "verdict": "unverified",
-      "evidence": []
+      "statement": "stale non-pass completion.json(final_verdict=partial)이 디스크에 존재하고 work item의 모든 AC verdict가 pass이며 각 AC에 command evidence가 있을 때 ditto work done이 exit code 0으로 종료하고 work item status가 done이 되며 디스크의 completion.json이 final_verdict=pass로 재기록된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts -t ac-1: stale partial completion",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "stale non-pass completion.json이 존재하고 work item AC verdict가 여전히 unverified(evidence 부재)일 때 ditto work done이 0이 아닌 exit code로 종료하고 completion.json은 final_verdict가 pass로 바뀌지 않으며 status는 done이 아니다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts -t ac-2: stale partial completion",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "기존 final_verdict=pass completion.json이 있을 때 ditto work done이 exit code 0으로 done 처리하고 completion.json의 declared_at/summary가 재합성으로 덮어써지지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts -t ac-3: pre-existing pass completion",
+          "summary": "exit 0"
+        }
+      ]
     }
   ],
-  "status": "draft",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
   "changed_files": [],
@@ -21,5 +51,6 @@
   "risks": [],
   "runs": [],
   "created_at": "2026-07-19T02:37:12.585Z",
-  "updated_at": "2026-07-19T02:37:12.585Z"
+  "updated_at": "2026-07-19T02:48:37.234Z",
+  "closed_at": "2026-07-19T02:48:37.234Z"
 }

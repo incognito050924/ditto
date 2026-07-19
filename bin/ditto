@@ -23292,9 +23292,12 @@ function guardChildResult(text) {
   }
   return { contentful: true };
 }
-function guardMutatingEvidence(owner, outcome, changedFiles) {
+function guardMutatingEvidence(owner, outcome, changedFiles, noOpJustification) {
   if (owner === "refactorer")
     return { contentful: true };
+  if (outcome === "pass" && owner === "implementer" && changedFiles.length === 0 && (noOpJustification?.trim().length ?? 0) > 0) {
+    return { contentful: true };
+  }
   if (outcome === "pass" && isMutatingOwner(owner) && changedFiles.length === 0) {
     return {
       contentful: false,
@@ -27424,6 +27427,7 @@ var recordResultPayload = exports_external.object({
   })).optional().describe("A judging node's per-AC verdicts (verifier/e2e). The node still records a single " + "pass/fail outcome, but a verify node can pass *as a node* while judging one criterion " + "partial/fail; persisting the per-AC verdicts here keeps `autopilot complete` from " + "over-closing that criterion to pass (false-green; claim \u2260 proof)."),
   changed_files: exports_external.array(relativePath).optional().describe("Repo-relative paths this node changed (#1). On a contentful pass they are unioned " + "into the work item changed_files so `autopilot complete` reads them without a manual " + "pin. The expected reporter is a mutating node (implementer/refactorer)."),
   reason: exports_external.string().optional().describe("2\u20133 line rationale recorded in the decision log"),
+  no_op_justification: exports_external.string().optional().describe('Implementer-declared justification for an intentional 0-file change (e.g. "0 dead ' + 'candidates to remove"); exempts an implementer no-op from the zero-change floor'),
   generated_nodes: exports_external.array(nodeProposal).optional().describe("Subgraph this node generated (A-3). Promoted to the graph via addNodes on a " + "contentful pass; a planner/design node uses this to grow the graph past the seed."),
   has_findings: exports_external.boolean().optional().describe("Reviewer/security verdict that findings remain (A-2). On a contentful review- or " + "security-node pass, true splices a forward fix+re-check round (\xA72.4) under the " + "convergence budget, false/absent closes the loop. Ignored for other node kinds."),
   tidy_bug_found: exports_external.boolean().optional().describe("Tidy failure policy. On a `refactor` (tidy) node FAIL, " + "true means the tidy pass uncovered a real defect in the implementation. The " + "engine then returns the implement node the tidy stage roots on to pending \u2014 it " + "does NOT fix the bug here and does NOT retry the tidy node in place (the fix " + "belongs to the implement node). Ignored for non-refactor nodes / on pass."),
@@ -27838,7 +27842,7 @@ async function recordResultCore(repoRoot, input) {
     }
   }
   if (contentful && outcome === "pass") {
-    const mut = guardMutatingEvidence(node2.owner, input.payload.outcome, input.payload.changed_files ?? []);
+    const mut = guardMutatingEvidence(node2.owner, input.payload.outcome, input.payload.changed_files ?? [], input.payload.no_op_justification);
     if (!mut.contentful) {
       contentful = false;
       outcome = "fail";
@@ -32790,7 +32794,8 @@ var workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
-      if (!await completions.exists(args.workId)) {
+      const existingCompletion = await completions.exists(args.workId) ? await completions.get(args.workId) : null;
+      if (existingCompletion === null || existingCompletion.final_verdict !== "pass") {
         const placeholders = item.acceptance_criteria.filter((c3) => c3.statement === PLACEHOLDER_AC_STATEMENT);
         if (placeholders.length > 0) {
           writeError(`work ${args.workId} still has placeholder acceptance criteria (${placeholders.map((c3) => c3.id).join(", ")}) \u2014 lock real criteria via /ditto:deep-interview, or \`ditto work abandon\` to give up`);
@@ -59080,4 +59085,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=24ceb067554cb060eb6bd4a3cba0eb2fefc1f912b04b40c54867c1eacb4aa631
+//# ditto-src-stamp=8ce7b178553c3ada5a3825a6b85688c676c561bad1baa0ca6331f7d49c6d5f59

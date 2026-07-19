@@ -2167,7 +2167,16 @@ const workDone = defineCommand({
       // verdicts/evidence (populated by `ditto verify`) through the SAME
       // buildCompletion + completionGate + completionEvidenceGate the autopilot path
       // uses. One evidence gate, no weaker parallel path; no intent.json/graph needed.
-      if (!(await completions.exists(args.workId))) {
+      // Re-synthesize ALSO when the on-disk completion is a stale NON-pass (e.g. a
+      // prior partial handoff left completion.json=partial): the work item's per-AC
+      // verdicts are the SoT, so if `ditto verify` has since graded them all pass, the
+      // same gate below supersedes the stale contract instead of reading it and
+      // blocking on "final_verdict=partial — cannot mark done" (wi_260719ka9). A
+      // pre-existing PASS completion is left untouched (no re-synthesis, no churn).
+      const existingCompletion = (await completions.exists(args.workId))
+        ? await completions.get(args.workId)
+        : null;
+      if (existingCompletion === null || existingCompletion.final_verdict !== 'pass') {
         const placeholders = item.acceptance_criteria.filter(
           (c) => c.statement === PLACEHOLDER_AC_STATEMENT,
         );

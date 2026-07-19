@@ -209,6 +209,80 @@ describe('ditto work done --status partial|blocked — lightweight resumable clo
   });
 });
 
+// wi_260719ka9: a prior partial handoff leaves a stale completion.json on disk
+// (final_verdict=partial). The lightweight close later grades every AC to pass via
+// `ditto verify`, but the synthesis was gated on `!completion.exists`, so `work
+// done` read the stale partial and blocked ("final_verdict=partial — cannot mark
+// done") instead of re-synthesizing from the work item's now-all-pass SoT verdicts.
+// The fix re-synthesizes when the on-disk completion is a non-pass, still through
+// the SAME completionGate + completionEvidenceGate (a stale partial cannot masquerade
+// as pass — the work item's own verdicts must actually be pass+evidence).
+describe('ditto work done — stale non-pass completion re-synthesis (wi_260719ka9)', () => {
+  test('ac-1: stale partial completion + all-pass AC verdicts → done closes, completion re-written to pass', async () => {
+    const wi = await workItemWithRealAC();
+    // Grade ac-1 pass with real command evidence (the SoT is now all-pass).
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wi.id, 'work-item.json');
+    expect(ditto(['verify', wi.id, '--criterion', 'ac-1', '--', 'cat', wiPath]).exitCode).toBe(0);
+
+    // Simulate a prior partial handoff: a stale completion.json=partial on disk.
+    const stale = buildCompletion({
+      workItem: wi,
+      declaredBy: 'main',
+      summary: 'stale partial handoff',
+      verdicts: [{ criterion_id: 'ac-1', verdict: 'partial', evidence: [] }],
+    });
+    expect(stale.final_verdict).toBe('partial');
+    await new CompletionStore(dir).write(stale);
+
+    const d = ditto(['work', 'done', wi.id, '--output', 'json']);
+    expect(d.exitCode).toBe(0);
+
+    const completion = await new CompletionStore(dir).get(wi.id);
+    expect(completion.final_verdict).toBe('pass');
+    expect(completion.acceptance.find((a) => a.criterion_id === 'ac-1')?.verdict).toBe('pass');
+    expect((await new WorkItemStore(dir).get(wi.id)).status).toBe('done');
+  });
+
+  test('ac-2: stale partial completion + unverified AC (no evidence) → done still refused, no pass', async () => {
+    const wi = await workItemWithRealAC(); // ac-1 stays unverified, no evidence
+    const stale = buildCompletion({
+      workItem: wi,
+      declaredBy: 'main',
+      summary: 'stale partial handoff',
+      verdicts: [{ criterion_id: 'ac-1', verdict: 'partial', evidence: [] }],
+    });
+    await new CompletionStore(dir).write(stale);
+
+    const d = ditto(['work', 'done', wi.id, '--output', 'json']);
+    expect(d.exitCode).not.toBe(0);
+    // Re-synthesis must not bless it: the on-disk completion is never flipped to pass.
+    expect((await new CompletionStore(dir).get(wi.id)).final_verdict).not.toBe('pass');
+    expect((await new WorkItemStore(dir).get(wi.id)).status).not.toBe('done');
+  });
+
+  test('ac-3: pre-existing pass completion is NOT re-synthesized (summary preserved)', async () => {
+    const wi = await workItemWithRealAC();
+    const passCompletion = buildCompletion({
+      workItem: wi,
+      declaredBy: 'verifier',
+      summary: 'autopilot run — do not overwrite',
+      verdicts: [
+        { criterion_id: 'ac-1', verdict: 'pass', evidence: [{ kind: 'command', summary: 'x → 0' }] },
+      ],
+    });
+    expect(passCompletion.final_verdict).toBe('pass');
+    await new CompletionStore(dir).write(passCompletion);
+
+    expect(ditto(['work', 'done', wi.id, '--output', 'json']).exitCode).toBe(0);
+
+    const completion = await new CompletionStore(dir).get(wi.id);
+    expect(completion.final_verdict).toBe('pass');
+    // The pass path skips re-synthesis, so the original summary survives verbatim.
+    expect(completion.summary).toBe('autopilot run — do not overwrite');
+    expect((await new WorkItemStore(dir).get(wi.id)).status).toBe('done');
+  });
+});
+
 // wi_260627273: the autopilot path writes completion.json with derived pass
 // verdicts but leaves work-item.json acceptance_criteria at `unverified`. `work
 // done` reading that pre-existing completion must mirror the verdicts (+ evidence)
