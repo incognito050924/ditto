@@ -1261,13 +1261,3 @@ export class WorkItemStore {
 
 // Re-export the input shape for type imports
 export type { WorkItem };
-
-// Helper for callers that want to validate ad-hoc work item objects
-export const workItemSchema = workItem;
-export const partialWorkItemSchema = workItem;
-export const acceptanceCriterionInputSchema = z
-  .object({
-    id: z.string().min(1),
-    statement: z.string().min(1),
-  })
-  .passthrough();

@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719b4l",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "31c6565c3ea25bd3b4023899f49e89600c55efa79c835c866171e2bfb6264f7f",
+  "ts": "2026-07-19T07:55:27.138Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719b4l/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4990 pass/17 skip/0 fail 전후 동일"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit2 동일 기존에러 1건만(범위밖 테스트파일)·새 에러0"
+      },
+      {
+        "kind": "command",
+        "command": "ditto doctor distribution",
+        "summary": "bin/ditto 재빌드 후 exit0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4990 pass/0 fail (fresh 재실행)"
+      },
+      {
+        "kind": "command",
+        "command": "ditto doctor distribution",
+        "summary": "exit0 binary_fresh ok"
+      }
+    ]
+  }
+}

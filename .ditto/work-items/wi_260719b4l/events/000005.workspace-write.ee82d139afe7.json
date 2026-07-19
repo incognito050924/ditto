@@ -1,0 +1,35 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719b4l",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "ee82d139afe7e650475543b26cdd3ca6d4e1515d9200cabf172001edec3401f2",
+  "ts": "2026-07-19T07:55:27.138Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719b4l/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/aggregate-findings.md",
+        "summary": "통합 findings 산출물(166/166·10 확정 제거후보·follow-up·ac-3)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4990 pass/0 fail (fresh 재실행)"
+      },
+      {
+        "kind": "command",
+        "command": "ditto doctor distribution",
+        "summary": "exit0 binary_fresh ok"
+      }
+    ]
+  }
+}

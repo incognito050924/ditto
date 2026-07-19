@@ -159,10 +159,6 @@ export async function loadProjection(repoRoot: string): Promise<ProjectionLoadRe
   return projectionFromSurface(await getHostAdapter('claude-code').loadInstructions(repoRoot));
 }
 
-export function sourceHasManagedMarker(content: string): boolean {
-  return content.includes('ditto:managed:start') || content.includes('ditto:managed:end');
-}
-
 export function checkCodexInstructions(
   source: InstructionSource | { kind: 'missing'; path: string },
 ): InstructionFinding[] {

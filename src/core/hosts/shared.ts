@@ -1,5 +1,5 @@
 import { readdir, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { parse as parseTomlText } from 'smol-toml';
 import { parse as parseYamlText } from 'yaml';
 
@@ -78,16 +78,6 @@ export async function listFiles(base: string): Promise<Array<{ id: string; path:
   }
 }
 
-export function expandHome(path: string, home: string): string {
-  if (path === '~') return home;
-  if (path.startsWith('~/')) return join(home, path.slice(2));
-  return path;
-}
-
 export function samePath(a: string, b: string): boolean {
   return resolve(a) === resolve(b);
-}
-
-export function parentDir(path: string): string {
-  return dirname(path);
 }

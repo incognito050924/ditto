@@ -8781,7 +8781,7 @@ var init_dist2 = __esm(() => {
 
 // src/core/hosts/shared.ts
 import { readdir, stat } from "fs/promises";
-import { dirname, join, resolve } from "path";
+import { join, resolve } from "path";
 async function fileExists(path) {
   try {
     await stat(path);
@@ -13587,7 +13587,7 @@ var init_id = () => {};
 // src/core/work-item-store.ts
 import { createHash } from "crypto";
 import { open, readdir as readdir2, rename, stat as stat2 } from "fs/promises";
-import { dirname as dirname2, join as join6 } from "path";
+import { dirname, join as join6 } from "path";
 function tryGitHeadSha(repoRoot) {
   const proc = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
     cwd: repoRoot,
@@ -14164,7 +14164,7 @@ class WorkItemStore {
     for (const t2 of targets) {
       if (await Bun.file(this.recordPath(t2.id)).exists()) {
         const dest = this.committedArchiveDir(label, t2.id);
-        await ensureDir(dirname2(dest));
+        await ensureDir(dirname(dest));
         await rename(committedWorkItemDir(this.repoRoot, t2.id), dest);
       }
       try {
@@ -14264,7 +14264,7 @@ class WorkItemStore {
     };
   }
   async appendJsonlAtPath(path, jsonLine) {
-    await ensureDir(dirname2(path));
+    await ensureDir(dirname(path));
     const file = Bun.file(path);
     const existing = await file.exists() ? await file.text() : "";
     const trimmedExisting = existing.endsWith(`
@@ -14311,9 +14311,8 @@ class WorkItemStore {
 `).filter((line) => line.trim().length > 0).map((line) => questionRound.parse(JSON.parse(line)));
   }
 }
-var TERMINAL_STEM_STATUSES, DONE_BLOCKING_SEVERITIES, TERMINAL_STATUSES, WorkItemEventCorruptError, acceptanceCriterionInputSchema;
+var TERMINAL_STEM_STATUSES, DONE_BLOCKING_SEVERITIES, TERMINAL_STATUSES, WorkItemEventCorruptError;
 var init_work_item_store = __esm(() => {
-  init_zod();
   init_intent_metric();
   init_language_ledger();
   init_question_round();
@@ -14335,10 +14334,6 @@ var init_work_item_store = __esm(() => {
       this.name = "WorkItemEventCorruptError";
     }
   };
-  acceptanceCriterionInputSchema = exports_external.object({
-    id: exports_external.string().min(1),
-    statement: exports_external.string().min(1)
-  }).passthrough();
 });
 
 // src/core/chain-drive.ts
@@ -14891,7 +14886,7 @@ var init_worktree = __esm(() => {
 import { randomBytes as randomBytes2 } from "crypto";
 import { mkdir as mkdir2, rename as rename2, unlink as unlink2, writeFile as writeFile2 } from "fs/promises";
 import { homedir as homedir3 } from "os";
-import { dirname as dirname3, extname, isAbsolute, join as join8, parse as parse2, relative as relative2, resolve as resolve2 } from "path";
+import { dirname as dirname2, extname, isAbsolute, join as join8, parse as parse2, relative as relative2, resolve as resolve2 } from "path";
 function isAtOrAboveHome(rel, isAbs = isAbsolute) {
   return rel === "" || !rel.startsWith("..") && !isAbs(rel);
 }
@@ -14914,7 +14909,7 @@ async function findRepoRoot(start = process.cwd(), homeDir = homedir3()) {
     }
     if (current === root)
       break;
-    current = dirname3(current);
+    current = dirname2(current);
   }
   if (firstGitMatch !== null)
     return firstGitMatch;
@@ -14931,7 +14926,7 @@ async function ensureDir(path) {
   await mkdir2(path, { recursive: true });
 }
 async function atomicWriteText(path, content) {
-  await ensureDir(dirname3(path));
+  await ensureDir(dirname2(path));
   const suffix = randomBytes2(6).toString("hex");
   const tmp = `${path}.${process.pid}.${suffix}.tmp`;
   try {
@@ -15235,7 +15230,7 @@ var init_memory_projection_manifest = __esm(() => {
 // src/core/memory-store.ts
 import { createHash as createHash4 } from "crypto";
 import { open as open2, readdir as readdir10 } from "fs/promises";
-import { dirname as dirname6, join as join25 } from "path";
+import { dirname as dirname5, join as join25 } from "path";
 
 class MemorySourceStore {
   repoRoot;
@@ -15290,7 +15285,7 @@ class MemoryEventStore {
   async append(event) {
     const validated = memoryEvent.parse(event);
     const path = this.path(validated.event_id);
-    await ensureDir(dirname6(path));
+    await ensureDir(dirname5(path));
     let handle;
     try {
       handle = await open2(path, "wx");
@@ -15780,7 +15775,7 @@ var init_cleanup_store = __esm(() => {
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync4 } from "child_process";
 import { mkdir as mkdir7, rm as rm2, stat as stat7 } from "fs/promises";
-import { dirname as dirname11, isAbsolute as isAbsolute7, join as join38, resolve as resolve10 } from "path";
+import { dirname as dirname10, isAbsolute as isAbsolute7, join as join38, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -15801,7 +15796,7 @@ async function assertRunExists(repoRoot, runId2) {
 async function archiveRun(repoRoot, runId2) {
   await assertRunExists(repoRoot, runId2);
   const zip = archiveZipPath(repoRoot, runId2);
-  await mkdir7(dirname11(zip), { recursive: true });
+  await mkdir7(dirname10(zip), { recursive: true });
   await rm2(zip, { force: true });
   execFileSync4("zip", ["-r", "-q", "-y", zip, runId2], {
     cwd: localDir(repoRoot, "cleanup"),
@@ -18317,7 +18312,7 @@ function ratifyCandidateSpec(candidate, opts) {
 import { join as join11 } from "path";
 
 // src/core/codeql/relations.ts
-import { dirname as dirname4, join as join10 } from "path";
+import { dirname as dirname3, join as join10 } from "path";
 
 // src/core/codeql/sarif.ts
 init_zod();
@@ -18796,7 +18791,7 @@ async function runRelationQuery(input, deps) {
   const binary = input.binary ?? CODEQL_BINARY2;
   const env2 = { set: {}, unset: ["LGTM_INDEX_FILTERS"] };
   if (!await deps.dirExists(input.dbPath)) {
-    await deps.ensureDir(dirname4(input.dbPath));
+    await deps.ensureDir(dirname3(input.dbPath));
     const buildMode = input.buildMode ?? selectBuildMode(input.language, input.buildCommand);
     const create = deps.spawn({
       binary,
@@ -22312,7 +22307,7 @@ init_fs();
 // src/core/lsp/client.ts
 import { existsSync as existsSync3 } from "fs";
 import { homedir as homedir5 } from "os";
-import { dirname as dirname5, join as join17 } from "path";
+import { dirname as dirname4, join as join17 } from "path";
 
 // src/core/provision/lsp-servers.ts
 import { existsSync as existsSync2 } from "fs";
@@ -22531,7 +22526,7 @@ async function getDiagnostics(filePath, opts = {}) {
   let proc;
   try {
     proc = Bun.spawn([binary, "--stdio"], {
-      cwd: dirname5(filePath),
+      cwd: dirname4(filePath),
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe"
@@ -22634,7 +22629,7 @@ async function getDiagnostics(filePath, opts = {}) {
       method: "initialize",
       params: {
         processId: process.pid,
-        rootUri: fileUri(dirname5(filePath)),
+        rootUri: fileUri(dirname4(filePath)),
         capabilities: {
           textDocument: { publishDiagnostics: {} },
           workspace: { configuration: true }
@@ -24997,7 +24992,7 @@ init_memory_store();
 init_ditto_paths();
 init_fs();
 import { appendFile as appendFile3 } from "fs/promises";
-import { dirname as dirname8 } from "path";
+import { dirname as dirname7 } from "path";
 
 // src/core/memory-flag.ts
 function isMemoryEnabled() {
@@ -25529,7 +25524,7 @@ async function memoryStatus(repoRoot) {
 
 // src/core/memory-query.ts
 import { appendFile as appendFile2, readFile as readFile2 } from "fs/promises";
-import { basename as basename2, dirname as dirname7, isAbsolute as isAbsolute3, join as join27 } from "path";
+import { basename as basename2, dirname as dirname6, isAbsolute as isAbsolute3, join as join27 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -25653,7 +25648,7 @@ function pullUsageLogPath(repoRoot) {
 }
 async function recordPullQuery(repoRoot, record) {
   const path = pullUsageLogPath(repoRoot);
-  await ensureDir(dirname7(path));
+  await ensureDir(dirname6(path));
   await appendFile2(path, `${JSON.stringify(record)}
 `, "utf8");
 }
@@ -25908,7 +25903,7 @@ class MemoryAuditLogStore {
   }
   async append(entry) {
     const p = this.path();
-    await ensureDir(dirname7(p));
+    await ensureDir(dirname6(p));
     await appendFile2(p, `${JSON.stringify(entry)}
 `, "utf8");
   }
@@ -25969,7 +25964,7 @@ function coverageRoots(graph, workItem2) {
 }
 async function recordUsage(repoRoot, record) {
   const path = usageLogPath(repoRoot, record.work_item_id);
-  await ensureDir(dirname8(path));
+  await ensureDir(dirname7(path));
   await appendFile3(path, `${JSON.stringify(record)}
 `, "utf8");
 }
@@ -29256,7 +29251,7 @@ function assembleRelevanceVerdicts(judgments, refutes = []) {
 
 // src/core/ditto-config.ts
 import { mkdir as mkdir3 } from "fs/promises";
-import { dirname as dirname9 } from "path";
+import { dirname as dirname8 } from "path";
 init_ditto_paths();
 async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
   const file = Bun.file(localDir(repoRoot, "config.json"));
@@ -29303,7 +29298,7 @@ async function writeGithubConfig(repoRoot, github) {
     } catch {}
   }
   const next = { ...existing, github };
-  await mkdir3(dirname9(path), { recursive: true });
+  await mkdir3(dirname8(path), { recursive: true });
   await Bun.write(path, `${JSON.stringify(next, null, 2)}
 `);
 }
@@ -29573,7 +29568,7 @@ import { join as join32 } from "path";
 import { createHash as createHash8 } from "crypto";
 import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname10, join as join31, relative as relative9, sep as sep5 } from "path";
+import { dirname as dirname9, join as join31, relative as relative9, sep as sep5 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -29656,7 +29651,7 @@ var e2eJourney = exports_external.object({
 init_ditto_paths();
 init_shared();
 function runnerScriptPath() {
-  return join31(dirname10(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join31(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
   const bunInstall = process.env.BUN_INSTALL ?? join31(homedir6(), ".bun");
@@ -42785,7 +42780,7 @@ async function collectPermissionFindings(adapters, repoRoot) {
 // src/core/plugin-root.ts
 import { existsSync as existsSync10, readFileSync as readFileSync5 } from "fs";
 import { homedir as homedir8 } from "os";
-import { dirname as dirname12, join as join64 } from "path";
+import { dirname as dirname11, join as join64 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 var PLUGIN_MANIFEST = [".claude-plugin", "plugin.json"];
 function isPluginRoot(dir, exists) {
@@ -42796,7 +42791,7 @@ function selfLocate(start, exists) {
   for (;; ) {
     if (isPluginRoot(dir, exists))
       return dir;
-    const parent = dirname12(dir);
+    const parent = dirname11(dir);
     if (parent === dir)
       return null;
     dir = parent;
@@ -42842,7 +42837,7 @@ function locatedStatus(findingCount, located) {
 function defaultPluginRootDeps() {
   return {
     getEnv: (key) => process.env[key],
-    startDir: dirname12(fileURLToPath2(import.meta.url)),
+    startDir: dirname11(fileURLToPath2(import.meta.url)),
     exists: (p) => existsSync10(p),
     readInstalledPlugins: () => {
       try {
@@ -45201,7 +45196,7 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir9, readFile as readFile16, readdir as readdir20 } from "fs/promises";
-import { basename as basename4, dirname as dirname15, isAbsolute as isAbsolute11, join as join69, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
+import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join69, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
 init_zod();
 init_ditto_paths();
 
@@ -45641,7 +45636,7 @@ import { join as join67 } from "path";
 // src/core/e2e/init-agents.ts
 init_zod();
 init_fs();
-import { dirname as dirname13 } from "path";
+import { dirname as dirname12 } from "path";
 var DITTO_AGENT_MARKER = "<!-- ditto:playwright-agent v1 -->";
 var PLAN_FORMAT_VERSION = "v1";
 var PLAYWRIGHT_MIN_VERSION = {
@@ -45751,7 +45746,7 @@ async function writeMergedMcpJson(mcpPath, freshServer = PLAYWRIGHT_TEST_MCP_SER
   const existing = exists ? await seam.readText(mcpPath) : null;
   const merged = mergeMcpServers(existing, freshServer);
   const backupPath = exists ? await seam.backupOnce(mcpPath) : null;
-  await seam.ensureDir(dirname13(mcpPath));
+  await seam.ensureDir(dirname12(mcpPath));
   await seam.writeText(mcpPath, `${JSON.stringify(merged, null, 2)}
 `);
   return { mcpPath, backupPath, servers: Object.keys(merged.mcpServers) };
@@ -45759,7 +45754,7 @@ async function writeMergedMcpJson(mcpPath, freshServer = PLAYWRIGHT_TEST_MCP_SER
 async function scaffoldIfAbsent(path, content, seam = nodeFsSeam) {
   if (await seam.exists(path))
     return "skipped-exists";
-  await seam.ensureDir(dirname13(path));
+  await seam.ensureDir(dirname12(path));
   await seam.writeText(path, content);
   return "created";
 }
@@ -45784,7 +45779,7 @@ function detectVersionSkew(record, expectedPlanFormat = PLAN_FORMAT_VERSION) {
 }
 async function writeE2eAgentsRecord(path, record, seam = nodeFsSeam) {
   const validated = e2eAgentsRecordSchema.parse(record);
-  await seam.ensureDir(dirname13(path));
+  await seam.ensureDir(dirname12(path));
   await seam.writeText(path, `${JSON.stringify(validated, null, 2)}
 `);
 }
@@ -46026,7 +46021,7 @@ async function runGenerator(input, seams) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile15, readdir as readdir19, unlink as unlink3 } from "fs/promises";
-import { basename as basename3, dirname as dirname14, isAbsolute as isAbsolute10, join as join68, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
+import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join68, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 init_zod();
@@ -46094,7 +46089,7 @@ async function runLifecycleAction(repoRoot, req) {
     return { ok: false, refusal: `journey DSL \uD30C\uC2F1 \uC2E4\uD328: ${parsed.error}` };
   }
   const slug = journeyName.slice(0, -".journey.md".length);
-  const generatedDir = resolve14(dirname14(journeyAbs), "..", "generated");
+  const generatedDir = resolve14(dirname13(journeyAbs), "..", "generated");
   const specAbs = join68(generatedDir, `${slug}.spec.ts`);
   const rel = (abs) => toPosix2(relative17(repoRoot, abs));
   const specText = await readOrNull(specAbs);
@@ -46158,7 +46153,7 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)} \uD5E4\uB354\uAC00 \uC774 journey\uB97C \uAC00\uB9AC\uD0A4\uC9C0 \uC54A\uB294\uB2E4 (@ditto-journey ${headerJourney ?? "\uC5C6\uC74C"} / @ditto-source ${headerSource ?? "\uC5C6\uC74C"} \u2260 ${journeyId} \xB7 ${rel(journeyAbs)}) \u2014 \uC0AD\uC81C \uAC70\uBD80`
     };
   }
-  const journeysDir = dirname14(journeyAbs);
+  const journeysDir = dirname13(journeyAbs);
   const referencedElsewhere = new Set;
   for (const name of (await readdir19(journeysDir)).filter((n3) => n3.endsWith(".journey.md"))) {
     const otherAbs = join68(journeysDir, name);
@@ -46623,8 +46618,8 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve15(args.journey);
       const generatedAbs = resolve15(args.generated);
-      const blocksDir = resolve15(args["blocks-dir"] ?? join69(dirname15(journeyAbs), "blocks"));
-      const supportDir = resolve15(args["support-dir"] ?? join69(dirname15(generatedAbs), "support"));
+      const blocksDir = resolve15(args["blocks-dir"] ?? join69(dirname14(journeyAbs), "blocks"));
+      const supportDir = resolve15(args["support-dir"] ?? join69(dirname14(generatedAbs), "support"));
       const journeyText = await readFile16(journeyAbs, "utf8");
       const generatedText = await readFile16(generatedAbs, "utf8");
       const blockTexts = {};
@@ -47117,7 +47112,7 @@ function slugFromJourney(journeyPath) {
 }
 async function loadBlockBodies(journeyAbs, useBlocks) {
   const out = {};
-  const blocksDir = join69(dirname15(journeyAbs), "blocks");
+  const blocksDir = join69(dirname14(journeyAbs), "blocks");
   for (const id of useBlocks) {
     try {
       const text = await readFile16(join69(blocksDir, `${id}.block.md`), "utf8");
@@ -49818,7 +49813,7 @@ import { spawnSync } from "child_process";
 import { createHash as createHash13 } from "crypto";
 import { existsSync as existsSync11, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir11 } from "os";
-import { dirname as dirname16, join as join72, resolve as resolve19 } from "path";
+import { dirname as dirname15, join as join72, resolve as resolve19 } from "path";
 function classifySession(pluginRoot, repoRoot) {
   if (pluginRoot === null)
     return "unknown";
@@ -49940,7 +49935,7 @@ function resolvePluginRoot2(env2, argv1) {
   if (argv1 === undefined)
     return null;
   if (argv1.replace(/\\/g, "/").endsWith("/bin/ditto")) {
-    return resolve19(dirname16(argv1), "..");
+    return resolve19(dirname15(argv1), "..");
   }
   return null;
 }
@@ -55302,7 +55297,7 @@ var prismCommand = defineCommand({
 // src/cli/commands/push-gate.ts
 import { mkdirSync, readFileSync as readFileSync8, writeFileSync } from "fs";
 import { homedir as homedir12 } from "os";
-import { dirname as dirname17, parse as parse4, relative as relative21, resolve as resolve22 } from "path";
+import { dirname as dirname16, parse as parse4, relative as relative21, resolve as resolve22 } from "path";
 init_fs();
 
 // src/core/push-gate.ts
@@ -55432,7 +55427,7 @@ async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir12()) {
   }
   const home = resolve22(homeDir);
   const fsRoot = parse4(start).root;
-  let current = dirname17(start);
+  let current = dirname16(start);
   while (true) {
     if (isAtOrAboveHome(relative21(current, home)))
       break;
@@ -55442,7 +55437,7 @@ async function resolvePushGateRoot(cwd, explicitRoot, homeDir = homedir12()) {
     }
     if (current === fsRoot)
       break;
-    current = dirname17(current);
+    current = dirname16(current);
   }
   const recipeRoot = await resolveRepoRootForCreate(start, homeDir);
   return { recipeRoot, repoRelDir: relative21(recipeRoot, start) };
@@ -55486,7 +55481,7 @@ function makeRecordGreen(cwd, cache) {
     try {
       const next = addGreenTree(cache, tree, command, new Date().toISOString());
       const path = greenCachePath(cwd);
-      mkdirSync(dirname17(path), { recursive: true });
+      mkdirSync(dirname16(path), { recursive: true });
       writeFileSync(path, `${JSON.stringify(next, null, 2)}
 `);
     } catch {}
@@ -56054,7 +56049,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat11, writeFile as writeFile5 } from "fs/promises";
-import { dirname as dirname18, join as join87, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
+import { dirname as dirname17, join as join87, relative as relative22, resolve as resolve23, sep as sep10 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -56128,7 +56123,7 @@ function parseRunnableProvider(provider) {
   throw new RunWithUsageError(`provider ${provider} is schema-valid but not runnable in v0.3`);
 }
 async function streamToFile(stream, path) {
-  await ensureDir(dirname18(path));
+  await ensureDir(dirname17(path));
   const bytes = await new Response(stream).arrayBuffer();
   await writeFile5(path, new Uint8Array(bytes));
 }
@@ -56286,7 +56281,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
   const tokens2 = command.split(/\s+/).filter(Boolean);
   const logAbsolute = runStore.pathFor(runId2, "verify.log");
   const logRelative = repoRelative2(repoRoot, logAbsolute);
-  await ensureDir(dirname18(logAbsolute));
+  await ensureDir(dirname17(logAbsolute));
   if (tokens2.length === 0) {
     await writeFile5(logAbsolute, "", "utf8");
     const entry2 = {
@@ -57155,7 +57150,7 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir14 } from "os";
-import { dirname as dirname21, join as join94, resolve as resolve26 } from "path";
+import { dirname as dirname20, join as join94, resolve as resolve26 } from "path";
 init_fs();
 init_shared();
 
@@ -57356,7 +57351,7 @@ function defaultRegistry() {
 // src/core/setup.ts
 import { execFileSync as execFileSync6 } from "child_process";
 import { chmod, cp, readFile as readFile20, rename as rename5, rm as rm4, writeFile as writeFile6 } from "fs/promises";
-import { basename as basename7, dirname as dirname19, isAbsolute as isAbsolute16, join as join92, resolve as resolve24 } from "path";
+import { basename as basename7, dirname as dirname18, isAbsolute as isAbsolute16, join as join92, resolve as resolve24 } from "path";
 
 // src/core/charter-region.ts
 function leadingPrefixOffsets(content) {
@@ -57656,7 +57651,7 @@ async function installResource(decision, resourcesDir, charterShas) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join92(dirname19(decision.destPath), "AGENTS.md");
+    const sourcePath = join92(dirname18(decision.destPath), "AGENTS.md");
     const projectionBody = await fileExists(sourcePath) ? await readFile20(sourcePath, "utf8") : await readFile20(join92(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
@@ -57676,7 +57671,7 @@ async function installResource(decision, resourcesDir, charterShas) {
 var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
 var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
 function defaultHookTemplatePath(resourcesDir) {
-  return join92(dirname19(resourcesDir), "hooks", "pre-push");
+  return join92(dirname18(resourcesDir), "hooks", "pre-push");
 }
 function customHooksPath(cwd) {
   try {
@@ -57790,19 +57785,19 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync16 } from "fs";
-import { dirname as dirname20, join as join93, resolve as resolve25 } from "path";
+import { dirname as dirname19, join as join93, resolve as resolve25 } from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
     return join93(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
-  const start = from ?? dirname20(fileURLToPath3(import.meta.url));
+  const start = from ?? dirname19(fileURLToPath3(import.meta.url));
   let dir = start;
   for (;; ) {
     const candidate = join93(dir, "resources", "managed");
     if (existsSync16(candidate))
       return candidate;
-    const parent = dirname20(dir);
+    const parent = dirname19(dir);
     if (parent === dir)
       break;
     dir = parent;
@@ -58026,7 +58021,7 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve26(resourcesDir, "..", "..");
-  const sibling = join94(dirname21(currentPluginRoot), "codex-plugin");
+  const sibling = join94(dirname20(currentPluginRoot), "codex-plugin");
   if (await fileExists(join94(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
   const currentDist = join94(currentPluginRoot, "dist", "codex-plugin");
@@ -58573,7 +58568,7 @@ init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
 import { existsSync as existsSync17, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
-import { basename as basename8, dirname as dirname22, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
+import { basename as basename8, dirname as dirname21, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
   return env2[LOCAL_CLONE_ENV_FLAG] === "1";
@@ -58607,7 +58602,7 @@ function realpathNearestExisting(p2) {
   let cur = resolve28(p2);
   const tail = [];
   while (!existsSync17(cur)) {
-    const parent = dirname22(cur);
+    const parent = dirname21(cur);
     if (parent === cur)
       return join97(realpathSync2(cur), ...tail);
     tail.unshift(basename8(cur));
@@ -59224,4 +59219,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=4a92851eeccae1d7f52b74c44d8dfb5493ae8028ca9ea2007c642843ffb595df
+//# ditto-src-stamp=b964208cd6a6aa759063c732a08c025ace52243727c77222c8cbcb507134b2c8

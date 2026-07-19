@@ -1,0 +1,90 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719b4l",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "61ccb99b2db6fb0bbfa9395fb3e2a74f258f933b8ca653fa21b0064d6203d1aa",
+  "ts": "2026-07-19T07:55:27.137Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719b4l/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-e2e.md",
+        "summary": "e2e 서브시스템 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-codeql.md",
+        "summary": "codeql 통합 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-prism-journey.md",
+        "summary": "prism/journey-authoring 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-distribution.md",
+        "summary": "distribution/runtime-seam 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-autopilot.md",
+        "summary": "autopilot 클러스터 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-workitem-intent.md",
+        "summary": "work-item/intent/interview 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-coverage.md",
+        "summary": "coverage 서브시스템 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-memory.md",
+        "summary": "memory 서브시스템 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-github-push-git.md",
+        "summary": "github/push/git 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-infra-runtime.md",
+        "summary": "infra/runtime primitives 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-governance-doctor.md",
+        "summary": "governance/doctor/charter 감사"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260719b4l/evidence/aggregate-findings.md",
+        "summary": "통합 findings 산출물(166/166·10 확정 제거후보·follow-up·ac-3)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4990 pass/0 fail (fresh 재실행)"
+      },
+      {
+        "kind": "command",
+        "command": "ditto doctor distribution",
+        "summary": "exit0 binary_fresh ok"
+      }
+    ]
+  }
+}

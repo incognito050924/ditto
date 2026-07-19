@@ -1,0 +1,270 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260719b4l",
+  "title": "src/core 엔진 전반(166파일/44K줄)의 복잡도 self-audit — dialectic로 얕음·단일사용·과잉 추상화를 모듈 단위로 식",
+  "source_request": "이번 세션에서 ditto 주요 동작 대상(게이트 16개+autopilot-loop+completion)만 감사했는데, 전체 엔진(src/core)으로 확장하여 감사 및 처리. 범위=src/core 44K줄, 산출물=식별-우선 findings(게이트 밖 코드는 catch-rate 방어가치 신호 없음)",
+  "goal": "src/core의 166개 비-test .ts 파일(44K줄) 전부를 모듈 단위 dialectic로 §4-3 복잡도(단일사용·얕은 추상화·과잉 엔지니어링) 관점에서 식별-우선 감사하고, 교차-산출물/교차-dispatch 도달불가 + 의도된 확장 seam 아님이 입증된 죽은 코드만 build+전체test+surface-inventory 게이트로 제거하며, 나머지 얕음/애매 후보는 전부 follow-up으로 등록한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "src/core의 166개 비-test .ts 파일 전부를 모듈 단위로 dialectic 감사하고, 파일/심볼별 얕음·단일사용·과잉 판정과 근거(file:line·프로덕션 호출부 수·인터페이스 폭)를 담은 findings 산출물이 존재한다. 근거 없는 '정상' 판정은 미완으로 본다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719b4l/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-e2e.md",
+          "summary": "e2e 서브시스템 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-codeql.md",
+          "summary": "codeql 통합 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-prism-journey.md",
+          "summary": "prism/journey-authoring 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-distribution.md",
+          "summary": "distribution/runtime-seam 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-autopilot.md",
+          "summary": "autopilot 클러스터 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-workitem-intent.md",
+          "summary": "work-item/intent/interview 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-coverage.md",
+          "summary": "coverage 서브시스템 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-memory.md",
+          "summary": "memory 서브시스템 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-github-push-git.md",
+          "summary": "github/push/git 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-infra-runtime.md",
+          "summary": "infra/runtime primitives 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/audit-governance-doctor.md",
+          "summary": "governance/doctor/charter 감사"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/aggregate-findings.md",
+          "summary": "통합 findings 산출물(166/166·10 확정 제거후보·follow-up·ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "4990 pass/0 fail (fresh 재실행)"
+        },
+        {
+          "kind": "command",
+          "command": "ditto doctor distribution",
+          "summary": "exit0 binary_fresh ok"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "제거된 각 항목은 (a)src 내 프로덕션 grep 0건일 뿐 아니라 4개 빌드 산출물(dist/ditto·bin/ditto·두 호스트 플러그인)과 동적 dispatch/registry 간접호출 경로를 가로질러 도달불가임이 근거로 입증되고 (b)의도된 확장 seam이 아님이 입증되며, 제거 후 build + bun test src tests + surface-inventory가 무회귀로 통과한다. 교차-산출물 도달성이 애매한 항목과 제거하지 않은 얕음 후보는 ditto work follow-up으로 등록된다. 삭제 0건도 정상 성공으로 인정한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719b4l/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "4990 pass/17 skip/0 fail 전후 동일"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit2 동일 기존에러 1건만(범위밖 테스트파일)·새 에러0"
+        },
+        {
+          "kind": "command",
+          "command": "ditto doctor distribution",
+          "summary": "bin/ditto 재빌드 후 exit0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "4990 pass/0 fail (fresh 재실행)"
+        },
+        {
+          "kind": "command",
+          "command": "ditto doctor distribution",
+          "summary": "exit0 binary_fresh ok"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "findings 산출물에 게이트 밖 코드의 catch-rate(seeded-defect 방어가치) 신호 부재가 명시되고, 제거 항목 목록의 각 항목이 교차-산출물/교차-dispatch 도달불가 + seam-아님 신호를 근거로 명시한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719b4l/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260719b4l/evidence/aggregate-findings.md",
+          "summary": "통합 findings 산출물(166/166·10 확정 제거후보·follow-up·ac-3)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "4990 pass/0 fail (fresh 재실행)"
+        },
+        {
+          "kind": "command",
+          "command": "ditto doctor distribution",
+          "summary": "exit0 binary_fresh ok"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260719b4l/completion.json",
+    ".ditto/local/work-items/wi_260719b4l/work-item.json",
+    "src/core/e2e/init-agents.ts",
+    "src/core/hosts/shared.ts",
+    "src/core/hosts/types.ts",
+    "src/core/instruction-bridge.ts",
+    "src/core/memory-build.ts",
+    "src/core/work-item-store.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "follow_ups": [
+    {
+      "kind": "bug",
+      "note": "autopilot barrier 재배선(promotedImplementFrontier, autopilot-graph.ts:62-68)이 promoted 'implement' kind만 처리 → planner decomposition이 mutating terminal로 'refactor'(0-removal 데드락 회피 위해 정당)를 쓰면 barrier가 seed implement에 남아 seed implement(N2)+seed verify(N3)가 supersede 안 되고 고아 중복 노드로 남음(supersededByPromotion survival 루프가 acs-less barrier의 N2 의존으로 N2 되살림). refactor/기타 mutating kind도 frontier에 포함하거나, mutating-terminal 일반화 필요. wi_260719b4l drive 중 수동 그래프 보정으로 우회.",
+      "materialized_wi": "wi_260719ljs"
+    },
+    {
+      "kind": "idea",
+      "note": "감사 데모트 [built-but-unwired 판단/오케스트레이션 로직, wire-or-drop 결정 필요]: ConvergenceStore/buildConvergence/appendLedgerEntry@convergence-store.ts:77/95/118(writer 미배선·stop.ts:745가 convergence.json read); routeForReview/resolveReviewDecision@question-context.ts:376-397(CLI seam 미노출); correlateFabrication@coverage-oracle.ts:277(JUDGE 半배선); absorbAcgIntoIr@memory-ir.ts:113(~180줄·test+design 백킹); knowledgeProjectionDrift@knowledge-bridge.ts:303; engageSemanticCritique@prism/opponent.ts:384; rejectForReauthor@autopilot-approval.ts:70(frozen-test-drift detector 미배선); toObjection/toObjections@codeql/sarif-adapter.ts:71/88(WI-4 park); filterHealPatch@e2e/healer-policy.ts:173(doc-promised guardrail); installAgentFile/hasDittoAgentMarker@e2e/init-agents.ts:263/254; partitionSpecFiles@e2e/journey-digest.ts:180. 상세=aggregate-findings.md"
+    },
+    {
+      "kind": "idea",
+      "note": "감사 데모트 [wired writer의 read-half 미배선]: PrismStore.readDecisions@prism/store.ts:105; JourneyAuthoringStore getStory@store.ts:66/activeJourneys:60/loadAllStories:76. writer는 배선됐으나 read 짝 미소비 → 배선하거나 제거 결정."
+    },
+    {
+      "kind": "idea",
+      "note": "감사 데모트 [doc↔code drift·중복·retired 잔재]: resolveServer(registry,lang)@provision/provisioner.ts:76(lsp/client.ts:72가 다른 impl 사용, charter §4-11 drift); projectAgents plural@agent-projection.ts:149(build-codex-plugin.mjs가 loop 재구현); readQuestionConfigDefaults@ditto-config.ts:26(retired tech-spec 잔재 vs under-wiring); autoChainArchive@cleanup-archive.ts:277(single_use passthrough·live caller→inline 검토); 중복 3쌍 loadCharterShas(setup/teardown)·globToRegExp(cleanup-scan/e2e)·sha256Hex(evidence-store/memory-store)."
+    },
+    {
+      "kind": "idea",
+      "note": "감사 데모트 [intent 결정 필요]: projectItemAdd@gh-client.ts:190/244/354 — 보드 auto-add 예약 seam(향후 github setup)인가 dead-since-built인가. 범위밖 관찰: bin/ditto.exe stale 99MB June-6 잔재(binary reachability 오염, cleanup 대상)."
+    }
+  ],
+  "follows": "wi_2607189u3",
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260719b4l",
+    "fresh_evidence_needed": [
+      "land aborted — 163 working-tree path(s) outside the declared change_surface: .: .ditto/coverage-taxonomy.json, .ditto/work-items/wi_26062227h/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_26062227h/events/000001.workspace-write.156fc8a60318.json, .ditto/work-items/wi_26062227h/events/000002.workspace-write.2f1461c077f0.json, .ditto/work-items/wi_26062227h/events/000003.workspace-write.e3b8a6dd498c.json, .ditto/work-items/wi_26062227h/events/000004.workspace-write.85506a66f33b.json, .ditto/work-items/wi_26062227h/events/000005.workspace-write.10839af1b0cf.json, .ditto/work-items/wi_26062227h/record.json, .ditto/work-items/wi_260624a6d/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_260624a6d/events/000001.workspace-write.a4c5d9fbc307.json, .ditto/work-items/wi_260624a6d/record.json, .ditto/work-items/wi_260625mrf/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_260625mrf/events/000001.workspace-write.9f48bf6808ed.json, .ditto/work-items/wi_260625mrf/events/000002.workspace-write.23fce09d4d53.json, .ditto/work-items/wi_260625mrf/record.json, .ditto/work-items/wi_2606276nc/events/000000.workspace-write.8096952847b5.json, .ditto/work-items/wi_2606276nc/events/000001.workspace-write.8f36f754b0f2.json, .ditto/work-items/wi_2606276nc/events/000002.workspace-write.003468d125a6.json, .ditto/work-items/wi_2606276nc/events/000003.workspace-write.8db0aff423a4.json, .ditto/work-items/wi_2606276nc/record.json, .ditto/work-items/wi_260628sx5/events/000000.workspace-write.051bf4df2e24.json, .ditto/work-items/wi_260628sx5/events/000001.workspace-write.15e863de3ba1.json, .ditto/work-items/wi_260628sx5/record.json, .ditto/work-items/wi_260706aka/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706aka/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260706aka/events/000002.workspace-write.f6144f82eae6.json, .ditto/work-items/wi_260706aka/events/000003.workspace-write.44d4ea0add69.json, .ditto/work-items/wi_260706aka/events/000004.workspace-write.81ca2c5e4f02.json, .ditto/work-items/wi_260706aka/events/000005.workspace-write.762cd40ce772.json, .ditto/work-items/wi_260706aka/events/000006.workspace-write.8c2429d7201b.json, .ditto/work-items/wi_260706aka/events/000007.workspace-write.de8b586b55f3.json, .ditto/work-items/wi_260706aka/events/000008.workspace-write.9ca996a1341d.json, .ditto/work-items/wi_260706aka/events/000009.workspace-write.e4724a31e425.json, .ditto/work-items/wi_260706aka/record.json, .ditto/work-items/wi_260706d0i/events/000000.workspace-write.939021107f6c.json, .ditto/work-items/wi_260706d0i/record.json, .ditto/work-items/wi_260706tu6/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706tu6/events/000001.workspace-write.f3f10706ee95.json, .ditto/work-items/wi_260706tu6/record.json, .ditto/work-items/wi_2607083ch/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607083ch/events/000001.workspace-write.ecb4f22736cd.json, .ditto/work-items/wi_2607083ch/events/000002.workspace-write.6987ff2df0eb.json, .ditto/work-items/wi_2607083ch/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_2607083ch/events/000004.workspace-write.0971cc3facde.json, .ditto/work-items/wi_2607083ch/record.json, .ditto/work-items/wi_260708700/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708700/events/000001.workspace-write.20262cda9cea.json, .ditto/work-items/wi_260708700/events/000002.workspace-write.d30a19a4ed08.json, .ditto/work-items/wi_260708700/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708700/events/000004.workspace-write.5ba66cbdf53a.json, .ditto/work-items/wi_260708700/record.json, .ditto/work-items/wi_260708e1x/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708e1x/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260708e1x/events/000002.workspace-write.479ef70041cc.json, .ditto/work-items/wi_260708e1x/record.json, .ditto/work-items/wi_260708xgo/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260708xgo/events/000001.workspace-write.74cc633dca6e.json, .ditto/work-items/wi_260708xgo/events/000002.workspace-write.a89fc0dbc3c1.json, .ditto/work-items/wi_260708xgo/events/000003.workspace-write.9ced3369f539.json, .ditto/work-items/wi_260708xgo/events/000004.workspace-write.b1a1cdb16e7d.json, .ditto/work-items/wi_260708xgo/record.json, .ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json, .ditto/work-items/wi_260709ft1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260709ft1/events/000001.workspace-write.ad8d984eea64.json, .ditto/work-items/wi_260709ft1/events/000002.workspace-write.92cee662b9d6.json, .ditto/work-items/wi_260709ft1/events/000003.workspace-write.55d9b7d5086b.json, .ditto/work-items/wi_260709ft1/events/000004.workspace-write.c01ad576a99f.json, .ditto/work-items/wi_260709ft1/events/000005.workspace-write.571c6f91f1b5.json, .ditto/work-items/wi_260709ft1/record.json, .ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json, .ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json, .ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json, .ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json, .ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json, .ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json, .ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json, .ditto/work-items/wi_260711dp9/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260711dp9/events/000001.workspace-write.4b76752cf8b7.json, .ditto/work-items/wi_260711dp9/record.json, .ditto/work-items/wi_2607141uq/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607141uq/events/000001.workspace-write.9fa231ecf9d3.json, .ditto/work-items/wi_2607141uq/events/000002.workspace-write.5348b77194af.json, .ditto/work-items/wi_2607141uq/events/000003.workspace-write.f57128a313a1.json, .ditto/work-items/wi_2607141uq/record.json, .ditto/work-items/wi_260714f4p/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714f4p/events/000001.workspace-write.1bd5fb7feb5f.json, .ditto/work-items/wi_260714f4p/events/000002.workspace-write.9ab842c0a015.json, .ditto/work-items/wi_260714f4p/events/000003.workspace-write.69b4e69af646.json, .ditto/work-items/wi_260714f4p/events/000004.workspace-write.6cada70ca91c.json, .ditto/work-items/wi_260714f4p/record.json, .ditto/work-items/wi_260714m9w/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714m9w/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714m9w/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714m9w/events/000003.workspace-write.3c5e7921a0ee.json, .ditto/work-items/wi_260714m9w/events/000004.workspace-write.51ace740a65c.json, .ditto/work-items/wi_260714m9w/events/000005.workspace-write.0e10e7cc76eb.json, .ditto/work-items/wi_260714m9w/record.json, .ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json, .ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json, .ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json, .ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json, .ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json, .ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json, .ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json, .ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json, .ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json, .ditto/work-items/wi_260714mfx/record.json, .ditto/work-items/wi_260714pjs/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714pjs/events/000001.workspace-write.ef6117b8e41a.json, .ditto/work-items/wi_260714pjs/events/000002.workspace-write.9ab22168ce87.json, .ditto/work-items/wi_260714pjs/events/000003.workspace-write.69b4e69af646.json, .ditto/work-items/wi_260714pjs/events/000004.workspace-write.eb88d07f14fd.json, .ditto/work-items/wi_260714pjs/record.json, .ditto/work-items/wi_260714pls/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260714pls/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260714pls/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260714pls/events/000003.workspace-write.c9b708211df4.json, .ditto/work-items/wi_260714pls/events/000004.workspace-write.fcdbb34bf3fc.json, .ditto/work-items/wi_260714pls/events/000005.workspace-write.7b03b59cc37a.json, .ditto/work-items/wi_260714pls/events/000006.workspace-write.d22029f6f722.json, .ditto/work-items/wi_260714pls/record.json, .ditto/work-items/wi_260718geb/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260718geb/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260718geb/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260718geb/events/000003.workspace-write.b4c70ec6bc4d.json, .ditto/work-items/wi_260718geb/events/000004.workspace-write.9e65c9de393d.json, .ditto/work-items/wi_260718geb/events/000005.workspace-write.e12d2fc8efa2.json, .ditto/work-items/wi_260718geb/events/000006.workspace-write.2024e864e965.json, .ditto/work-items/wi_260718geb/events/000007.workspace-write.ac4f70291432.json, .ditto/work-items/wi_260718geb/record.json, .ditto/work-items/wi_260718srh/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260718srh/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260718srh/events/000002.workspace-write.e6161d32fa4f.json, .ditto/work-items/wi_260718srh/events/000003.workspace-write.42b0e0e958d2.json, .ditto/work-items/wi_260718srh/events/000004.workspace-write.0057560e4cfe.json, .ditto/work-items/wi_260718srh/events/000005.workspace-write.71d504b05ed7.json, .ditto/work-items/wi_260718srh/events/000006.workspace-write.4fdb89658ff0.json, .ditto/work-items/wi_260718srh/events/000007.workspace-write.a5520818a635.json, .ditto/work-items/wi_260718srh/events/000008.workspace-write.6d0afd9e2bfe.json, .ditto/work-items/wi_260718srh/events/000009.workspace-write.48d5a04f9587.json, .ditto/work-items/wi_260718srh/events/000010.workspace-write.48b75bf87bf4.json, .ditto/work-items/wi_260718srh/events/000011.workspace-write.6c7967b8f6f1.json, .ditto/work-items/wi_260718srh/events/000012.workspace-write.ba21d399ceba.json, .ditto/work-items/wi_260718srh/events/000013.workspace-write.f09bb28b5197.json, .ditto/work-items/wi_260718srh/events/000014.workspace-write.ccacc982979d.json, .ditto/work-items/wi_260718srh/record.json, .ditto/work-items/wi_260719b4l/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260719b4l/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260719b4l/events/000002.workspace-write.b1ffb2860cfd.json, .ditto/work-items/wi_260719b4l/events/000003.workspace-write.61ccb99b2db6.json, .ditto/work-items/wi_260719b4l/events/000004.workspace-write.31c6565c3ea2.json, .ditto/work-items/wi_260719b4l/events/000005.workspace-write.ee82d139afe7.json, .ditto/work-items/wi_260719b4l/record.json, .ditto/work-items/wi_260719ka9/events/000001.workspace-write.f7343f3ee103.json, .ditto/work-items/wi_260719ka9/events/000002.workspace-write.a7a176feee7d.json, .ditto/work-items/wi_260719ka9/events/000003.workspace-write.5163aaf7a358.json, .ditto/work-items/wi_260719ka9/events/000004.workspace-write.8324203f6dd7.json, .ditto/work-items/wi_260719ljs/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260719ljs/record.json, reports/design/palimpsest-ditto-convergence-design.md. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260719b4l.md",
+  "started_at_sha": "cf71e0fc89bd25b277215502a95ef6999b666f3a",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260718geb/",
+    ".ditto/work-items/wi_260719b4l/",
+    ".ditto/work-items/wi_260719ka9/events/000001.workspace-write.f7343f3ee103.json",
+    ".ditto/work-items/wi_260719ka9/events/000002.workspace-write.a7a176feee7d.json",
+    ".ditto/work-items/wi_260719ka9/events/000003.workspace-write.5163aaf7a358.json",
+    ".ditto/work-items/wi_260719ka9/events/000004.workspace-write.8324203f6dd7.json",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
+  "created_at": "2026-07-19T01:39:43.087Z",
+  "updated_at": "2026-07-19T07:56:51.195Z",
+  "closed_at": "2026-07-19T07:56:51.194Z"
+}

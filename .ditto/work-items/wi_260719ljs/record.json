@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260719ljs",
+  "title": "bug: autopilot barrier 재배선(promotedImplementFrontier, autopilot-graph.ts:62-68)이 promoted 'implement' kind만 처리 → planner decomposition이 mutating terminal로 'refactor'(0-removal 데드락 회피 위해 정당)를 쓰면 barrie",
+  "source_request": "Discovered while working on wi_260719b4l: autopilot barrier 재배선(promotedImplementFrontier, autopilot-graph.ts:62-68)이 promoted 'implement' kind만 처리 → planner decomposition이 mutating terminal로 'refactor'(0-removal 데드락 회피 위해 정당)를 쓰면 barrier가 seed implement에 남아 seed implement(N2)+seed verify(N3)가 supersede 안 되고 고아 중복 노드로 남음(supersededByPromotion survival 루프가 acs-less barrier의 N2 의존으로 N2 되살림). refactor/기타 mutating kind도 frontier에 포함하거나, mutating-terminal 일반화 필요. wi_260719b4l drive 중 수동 그래프 보정으로 우회.",
+  "goal": "Fix: autopilot barrier 재배선(promotedImplementFrontier, autopilot-graph.ts:62-68)이 promoted 'implement' kind만 처리 → planner decomposition이 mutating terminal로 'refactor'(0-removal 데드락 회피 위해 정당)를 쓰면 barrier가 seed implement에 남아 seed implement(N2)+seed verify(N3)가 supersede 안 되고 고아 중복 노드로 남음(supersededByPromotion survival 루프가 acs-less barrier의 N2 의존으로 N2 되살림). refactor/기타 mutating kind도 frontier에 포함하거나, mutating-terminal 일반화 필요. wi_260719b4l drive 중 수동 그래프 보정으로 우회.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260719b4l",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-19T07:13:19.346Z",
+  "updated_at": "2026-07-19T07:13:19.346Z"
+}

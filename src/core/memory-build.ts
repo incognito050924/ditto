@@ -126,12 +126,6 @@ export type FragmentEdge = z.infer<typeof fragmentEdgeSchema>;
 export type IrFragment = z.infer<typeof irFragmentSchema>;
 
 /**
- * The function the host injects to actually run extraction for one chunk. ditto
- * never calls a provider directly (ADR-0001); tests pass a synthetic resolver.
- */
-export type ExtractFn = (chunk: ExtractionChunkRequest) => Promise<IrFragment>;
-
-/**
  * Concept-id normalization (frozen D1.a): lowercase, normalize all whitespace
  * AND punctuation runs to a single space, trim. Stable concept id =
  * `concept:<normalized-label>`.
@@ -349,18 +343,3 @@ export function findDanglingEdges(nodes: MemoryNode[], edges: MemoryEdge[]): str
   return edges.filter((e) => !ids.has(e.from) || !ids.has(e.to)).map((e) => e.id);
 }
 
-/**
- * Build the semantic graph by delegating extraction per chunk to the injected
- * `extract` fn, then merging deterministically. The reducer (not the LLM) owns
- * canonical content, so re-running with the same fragments is reproducible.
- */
-export async function buildSemanticGraph(
-  chunks: ExtractionChunkRequest[],
-  extract: ExtractFn,
-): Promise<{ nodes: MemoryNode[]; edges: MemoryEdge[] }> {
-  const fragments: IrFragment[] = [];
-  for (const chunk of chunks) {
-    fragments.push(await extract(chunk));
-  }
-  return mergeIrFragments(fragments);
-}

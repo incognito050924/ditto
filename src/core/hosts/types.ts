@@ -108,15 +108,6 @@ export type HookEventId =
   | 'PostToolUse'
   | 'PreToolUse';
 
-export const HOOK_EVENT_IDS: readonly HookEventId[] = [
-  'SessionStart',
-  'UserPromptSubmit',
-  'Stop',
-  'PreCompact',
-  'PostToolUse',
-  'PreToolUse',
-];
-
 export interface HostCapabilities {
   /** Hook events this host can actually run; [] = hooks unsupported. */
   hooks: HookEventId[];

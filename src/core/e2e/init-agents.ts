@@ -75,10 +75,6 @@ export const PLAYWRIGHT_TEST_MCP_SERVER: McpServerDef = {
   args: ['-y', '@playwright/mcp@latest'],
 };
 
-/** Constrained healer def is owned by the healer node; referenced here by path only. */
-export const HEALER_CONSTRAINED_MD_REL = 'resources/playwright-agents/healer.constrained.md';
-export const HEALER_CONSTRAINED_TOML_REL = 'resources/playwright-agents/healer.constrained.toml';
-
 /** Create-if-absent scaffold: a minimal Playwright config pointing at the generated dir. */
 export const PLAYWRIGHT_CONFIG_STUB = `${DITTO_AGENT_MARKER}
 import { defineConfig } from '@playwright/test';
