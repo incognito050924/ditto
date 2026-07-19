@@ -1,0 +1,375 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260719ayc",
+  "title": "완료 시점 changed_files 오염을 근본 차단한다 — lightweight/handoff의 collectChangedFiles가 워킹트리",
+  "source_request": "며칠간 반복 재발한 위생 문제: work item 완료 시 changed_files에 이 WI와 무관한 외래 파일이 섞인다. 최근 재현(#46 wi_2607189u3): 코드 무변경 감사였는데 work done이 collectChangedFiles로 현재 dirty tree의 외래 파일 74개(다른 WI 디렉토리·memory events·reports)를 changed_files에 박음. 검증된 근원(조사 완료): (1) 오염원은 work-item-handoff.ts:71 collectChangedFiles가 완료 시점 git status --porcelain 전체(미커밋 워킹트리)를 changed_files에 합치는 것. (2) 방어책이던 started_untracked_baseline(work-item-store.ts:781)은 draft→in_progress 시작 스냅샷이라 공유 트리에서 run 진행 중 유입되는 외래 dirt를 구조적으로 못 막고, baseline이 [] 이거나 부재(legacy/git불가/이미-in_progress 이어받기)면 fail-open으로 전부 통과. (3) autopilot 경로(autopilot-loop.ts:3907)는 owner가 명시 보고한 payload.changed_files를 union하므로 워킹트리를 추측하지 않아 이 오염과 무관하나, owner 오보고 시 baseline EXACT-SET fail-open으로 뚫림. (4) 미커밋을 changed_files에서 빼는 단순 해법은 회귀: landGate(gates.ts:1325)가 changed_files∩미커밋으로 verified-but-not-landed를 차단하고 landCommit(autopilot.ts:574→land-commit.ts)이 changed_files를 git add 대상으로 쓰므로, 커밋분만 담으면 두 안전장치가 무력화된다. (5) 오염이 land에 미치는 위험: 외래 경로가 changed_files에 들어가면 pathspec add로 실제 커밋되고 동시에 그 경로가 unrelatedDirt의 allowed에 포함돼 abort 안전망까지 무력화(비가역). push-readiness는 changed_files를 안 읽어 무관. 요구조건: 근본 해결, 그 어떤 경우에도 회귀 없음.",
+  "goal": "완료 시점 changed_files 오염을 근본 차단한다: lightweight/handoff의 collectChangedFiles가 워킹트리 git status 전체를 이 WI 변경으로 추측하는 것을 제거하고, changed_files를 결정적 소스(커밋된 base...HEAD diff + 명시 선언)에서만 유도하며, landGate·landCommit·e2e·barrier 등 기존 소비처에 회귀를 만들지 않는다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "collectChangedFiles(lightweight/handoff, work-item-handoff.ts)가 완료 시점 git status --porcelain 전체(미커밋 워킹트리)를 changed_files 소스로 사용하지 않는다 — changed_files는 오직 커밋된 base...HEAD diff와 명시 선언된 파일의 합집합에서만 유래한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts tests/core/completion-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (6 required scenarios)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts work-stem work-chain-drive termination-completeness-cli discovered-defect-close-cli",
+          "summary": "exit 0, 36 pass — regression recovered (narrow reading)"
+        },
+        {
+          "kind": "note",
+          "summary": "RED verified: re-introducing whole-tree scan → exit 1 on ac assertion (not compile error)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit; bunx biome check",
+          "summary": "4 files clean, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 30 pass (ac-1/ac-2)"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+        },
+        {
+          "kind": "command",
+          "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+          "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "30 pass; files only from committed diff union declared"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "동시 세션이 공유 워킹트리에 남긴 외래 dirt(시작 전 존재분과 run 중 유입분, untracked·tracked 모두)가 changed_files에 유입되지 않음을 재현하는 회귀 테스트가 존재하고 통과하며, 워킹트리 전체 스캔을 changed_files 생산에 재도입하면 이 테스트가 실패한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts tests/core/completion-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (6 required scenarios)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts work-stem work-chain-drive termination-completeness-cli discovered-defect-close-cli",
+          "summary": "exit 0, 36 pass — regression recovered (narrow reading)"
+        },
+        {
+          "kind": "note",
+          "summary": "RED verified: re-introducing whole-tree scan → exit 1 on ac assertion (not compile error)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit; bunx biome check",
+          "summary": "4 files clean, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 30 pass (ac-1/ac-2)"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+        },
+        {
+          "kind": "command",
+          "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+          "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+        },
+        {
+          "kind": "note",
+          "summary": "negative guard proven: whole-tree scan re-intro -> 4 fail"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "lightweight work done이 바꾼 파일을 명시 선언하는 입력을 갖고, 선언된 미커밋 파일이 landGate(verified-but-not-landed 차단)와 landCommit(git add 대상)에서 종전과 동일하게 소비된다(미커밋 changed_files 의존 회귀 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts tests/core/completion-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (6 required scenarios)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts work-stem work-chain-drive termination-completeness-cli discovered-defect-close-cli",
+          "summary": "exit 0, 36 pass — regression recovered (narrow reading)"
+        },
+        {
+          "kind": "note",
+          "summary": "RED verified: re-introducing whole-tree scan → exit 1 on ac assertion (not compile error)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit; bunx biome check",
+          "summary": "4 files clean, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 30 pass (ac-1/ac-2)"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+        },
+        {
+          "kind": "command",
+          "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+          "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+        },
+        {
+          "kind": "command",
+          "command": "bin/ditto work done --changed",
+          "summary": "runtime changed_files populated, exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "확정 소스(커밋 diff + 명시 선언)가 비어 실제 변경을 확정할 수 없는데 work done을 pass로 닫으려 하면 fail-closed로 차단되고, 명시된 정당화를 동반한 진짜 0-file 무변경만 예외로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts tests/core/completion-store.test.ts",
+          "summary": "exit 0, 43 pass / 0 fail (6 required scenarios)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts work-stem work-chain-drive termination-completeness-cli discovered-defect-close-cli",
+          "summary": "exit 0, 36 pass — regression recovered (narrow reading)"
+        },
+        {
+          "kind": "note",
+          "summary": "RED verified: re-introducing whole-tree scan → exit 1 on ac assertion (not compile error)"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit; bunx biome check",
+          "summary": "4 files clean, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 30 pass (ac-1/ac-2)"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+        },
+        {
+          "kind": "command",
+          "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+          "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+        },
+        {
+          "kind": "note",
+          "summary": "--no-op-justification undefined via mri --no- negation; override dead code"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/cli/work-done.test.ts -t dirty-tree no-op override flag parses",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "기존 changed_files 소비처(landGate, landCommit, e2e completion gate, barrier runs, autopilot owner union)가 전부 회귀 없이 동작하고 전체 테스트가 GREEN이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0, 30 pass (ac-1/ac-2)"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+        },
+        {
+          "kind": "command",
+          "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+          "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (full suite)",
+          "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+        },
+        {
+          "kind": "note",
+          "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+        },
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "4984 pass 0 fail"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "bin/ditto",
+    "src/cli/commands/work.ts",
+    "src/core/completion-store.ts",
+    "src/core/work-item-handoff.ts",
+    "tests/cli/work-done.test.ts",
+    "tests/core/work-item-handoff.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "risks": [
+    {
+      "description": "partial under-commit close justification (tree-dirt override): 외래 .ditto tracked dirt는 이전 세션들의 미커밋 잔재로 이 WI와 무관; 이 WI의 실제 변경 6파일은 7a26160으로 커밋됨",
+      "severity": "low"
+    }
+  ],
+  "runs": [],
+  "started_at_sha": "e0fe2181faeb9fe1ea2decbbae65e301729784a0",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260718geb/",
+    ".ditto/work-items/wi_260719ayc/",
+    ".ditto/work-items/wi_260719b4l/",
+    ".ditto/work-items/wi_260719ka9/events/000001.workspace-write.f7343f3ee103.json",
+    ".ditto/work-items/wi_260719ka9/events/000002.workspace-write.a7a176feee7d.json",
+    ".ditto/work-items/wi_260719ka9/events/000003.workspace-write.5163aaf7a358.json",
+    ".ditto/work-items/wi_260719ka9/events/000004.workspace-write.8324203f6dd7.json",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
+  "created_at": "2026-07-19T03:35:11.581Z",
+  "updated_at": "2026-07-19T05:59:05.185Z",
+  "closed_at": "2026-07-19T05:59:05.184Z"
+}

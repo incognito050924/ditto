@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719ayc",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "1bf1835bf1269f2a880efa2347fdfa3fb2c20e18b0fefca72e92f7691c403555",
+  "ts": "2026-07-19T05:34:08.269Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/work-item-handoff.test.ts",
+        "summary": "exit 0, 30 pass (ac-1/ac-2)"
+      },
+      {
+        "kind": "note",
+        "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+      },
+      {
+        "kind": "command",
+        "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+        "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full suite)",
+        "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+      },
+      {
+        "kind": "note",
+        "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "4984 pass 0 fail"
+      }
+    ]
+  }
+}

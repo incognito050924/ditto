@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719ayc",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "d18ffea63b881df532655c0bb4203079f1470dd8d7cf066dc30c9428ff64b178",
+  "ts": "2026-07-19T05:42:26.727Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719ayc/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/work-item-handoff.test.ts tests/core/completion-store.test.ts",
+        "summary": "exit 0, 43 pass / 0 fail (6 required scenarios)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-done.test.ts work-stem work-chain-drive termination-completeness-cli discovered-defect-close-cli",
+        "summary": "exit 0, 36 pass — regression recovered (narrow reading)"
+      },
+      {
+        "kind": "note",
+        "summary": "RED verified: re-introducing whole-tree scan → exit 1 on ac assertion (not compile error)"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit; bunx biome check",
+        "summary": "4 files clean, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/work-item-handoff.test.ts",
+        "summary": "exit 0, 30 pass (ac-1/ac-2)"
+      },
+      {
+        "kind": "note",
+        "summary": "ac-2 negative guard: re-introduced whole-tree scan → 4 fail on exact leak assertions"
+      },
+      {
+        "kind": "command",
+        "command": "bin/ditto work done <wi> --changed declared_uncommitted.txt (isolated repo)",
+        "summary": "ac-3: completion.json + work-item.json changed_files=[declared_uncommitted.txt], final_verdict=pass, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full suite)",
+        "summary": "ac-5: 4984 pass / 17 skip / 0 fail, exit 0, no regression"
+      },
+      {
+        "kind": "note",
+        "summary": "ac-4 fail repro: --no-op-justification x / =x / word all leave status=draft; citty parses key as op-justification"
+      },
+      {
+        "kind": "note",
+        "summary": "--no-op-justification undefined via mri --no- negation; override dead code"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-done.test.ts -t dirty-tree no-op override flag parses",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
