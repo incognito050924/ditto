@@ -9,6 +9,8 @@ import { HandoffStore, buildHandoff } from '~/core/handoff-store';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
+  collectChangedFiles,
+  sanitizeDeclaredPaths,
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -280,11 +282,12 @@ describe('writeWorkItemHandoff', () => {
     }
   });
 
-  // #36 (wi_260713u4k): foreign untracked dirt that predated the run
-  // (`started_untracked_baseline`) must NOT re-enter changed_files at work-done.
-  // The record-result union already excludes it, but the terminal handoff re-derives
-  // changed_files from `git status` and used to over-include it, overwriting the WI.
-  test('changed_files: excludes started_untracked_baseline foreign untracked dirt at work-done', async () => {
+  // wi_260719ayc (ac-2): the whole-working-tree scan is REMOVED as a changed_files
+  // SOURCE. Untracked working-tree dirt — foreign OR this session's own — NO LONGER
+  // auto-enters changed_files; it must be committed or declared via --changed. This
+  // supersedes the #36 started_untracked_baseline exclusion test, whose scan-based
+  // premise (untracked dirt IS collected, then baseline-filtered) no longer holds.
+  test('changed_files: untracked working-tree files never enter changed_files (scan removed)', async () => {
     Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
     Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
     Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
@@ -292,36 +295,31 @@ describe('writeWorkItemHandoff', () => {
       cwd: workDir,
       stdout: 'pipe',
     });
-    // Foreign dirt present at session start: a plain file AND a wholly-untracked dir
-    // (git status --porcelain collapses the latter to `foreign-dir/`).
+    // Foreign untracked dirt (another session) AND this session's own uncommitted
+    // untracked work — neither is a committed diff or a declaration.
     await Bun.write(join(workDir, 'foreign-dirt.txt'), 'x\n');
-    await Bun.write(join(workDir, 'foreign-dir', 'a.txt'), 'x\n');
-    // In-scope untracked work NOT in the baseline — must be preserved. `foo-sibling.txt`
-    // is a prefix sibling of the (hypothetical) `foo/` baseline dir and must survive.
-    await Bun.write(join(workDir, 'in-scope.txt'), 'y\n');
+    await Bun.write(join(workDir, 'own-untracked.txt'), 'y\n');
 
     const created = await store.create(makeInput());
     await store.update(created.id, (cur) => ({
       ...cur,
-      started_untracked_baseline: ['foreign-dirt.txt', 'foreign-dir/'],
       acceptance_criteria: cur.acceptance_criteria.map((c) =>
         c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
       ),
     }));
     const result = await writeWorkItemHandoff(workDir, store, created.id);
+    // NEGATIVE guard: if a whole-working-tree scan were reintroduced, BOTH of these
+    // untracked files would leak into changed_files — this assertion would then fail.
     expect(result.completion.changed_files).not.toContain('foreign-dirt.txt');
-    expect(result.completion.changed_files).not.toContain('foreign-dir/');
-    // in-scope untracked work survives; over-exclusion of a non-baseline path is a bug.
-    expect(result.completion.changed_files).toContain('in-scope.txt');
-    // the overwrite of the WI's changed_files must also be clean.
+    expect(result.completion.changed_files).not.toContain('own-untracked.txt');
     const updated = await store.get(created.id);
     expect(updated.changed_files).not.toContain('foreign-dirt.txt');
-    expect(updated.changed_files).not.toContain('foreign-dir/');
-    expect(updated.changed_files).toContain('in-scope.txt');
+    expect(updated.changed_files).not.toContain('own-untracked.txt');
   });
 
-  // fail-open: absent/empty baseline ⇒ no exclusion (legacy WI unchanged).
-  test('changed_files: empty/absent started_untracked_baseline applies no exclusion (fail-open)', async () => {
+  // wi_260719ayc: an explicit declaration (the CLI's sanitized `--changed`) is a
+  // changed_files SOURCE, threaded as `declaredChanged` into the handoff.
+  test('changed_files: declared paths (declaredChanged) reach changed_files', async () => {
     Bun.spawnSync(['git', 'init', '-q'], { cwd: workDir, stdout: 'pipe' });
     Bun.spawnSync(['git', 'config', 'user.email', 't@t'], { cwd: workDir, stdout: 'pipe' });
     Bun.spawnSync(['git', 'config', 'user.name', 't'], { cwd: workDir, stdout: 'pipe' });
@@ -329,7 +327,7 @@ describe('writeWorkItemHandoff', () => {
       cwd: workDir,
       stdout: 'pipe',
     });
-    await Bun.write(join(workDir, 'foreign-dirt.txt'), 'x\n');
+    await Bun.write(join(workDir, 'declared.txt'), 'x\n');
     const created = await store.create(makeInput());
     await store.update(created.id, (cur) => ({
       ...cur,
@@ -337,9 +335,10 @@ describe('writeWorkItemHandoff', () => {
         c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
       ),
     }));
-    const result = await writeWorkItemHandoff(workDir, store, created.id);
-    // No baseline ⇒ the path is still collected exactly as before the fix.
-    expect(result.completion.changed_files).toContain('foreign-dirt.txt');
+    const result = await writeWorkItemHandoff(workDir, store, created.id, {
+      declaredChanged: ['declared.txt'],
+    });
+    expect(result.completion.changed_files).toContain('declared.txt');
   });
 
   test('re-handoff preserves a prior completion.json verifications/remaining_risks/summary (same verdict)', async () => {
@@ -607,6 +606,161 @@ describe('writeWorkItemHandoff', () => {
     // work-item.json도 갱신되어 가짜 entry가 사라져야 한다.
     const after = await store.get(created.id);
     expect(after.changed_files).not.toContain('never-existed.txt');
+  });
+});
+
+// wi_260719ayc — root-cause fix for changed_files pollution. Direct coverage of the
+// deterministic collector + declaration sanitizer.
+describe('collectChangedFiles: committed diff ∪ declared, tree as guard-not-source', () => {
+  function initGit(dir: string) {
+    const g = (args: string[]) =>
+      Bun.spawnSync(['git', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+    g(['init', '-q']);
+    g(['config', 'user.email', 't@t']);
+    g(['config', 'user.name', 't']);
+    return g;
+  }
+  const rev = (dir: string, ref = 'HEAD') =>
+    Bun.spawnSync(['git', 'rev-parse', ref], { cwd: dir, stdout: 'pipe' }).stdout.toString().trim();
+
+  // Scenario 1 + 2 (ac-2): foreign untracked AND tracked dirt present at completion
+  // never enter changed_files (only committed diff ∪ declared). The two `.not.toContain`
+  // assertions are the NEGATIVE guard — a reintroduced whole-working-tree scan would
+  // fold both into `files` and break them.
+  test('foreign untracked + tracked dirt are never a source; committed diff is', async () => {
+    initGit(workDir);
+    await Bun.write(join(workDir, 'a.txt'), 'base\n');
+    Bun.spawnSync(['git', 'add', 'a.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'base'], { cwd: workDir, stdout: 'pipe' });
+    const base = rev(workDir);
+    // this work's own COMMITTED change
+    await Bun.write(join(workDir, 'own-committed.txt'), 'own\n');
+    Bun.spawnSync(['git', 'add', 'own-committed.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'own'], { cwd: workDir, stdout: 'pipe' });
+    // foreign TRACKED dirt (uncommitted edit of a committed file)
+    await Bun.write(join(workDir, 'a.txt'), 'foreign-edit\n');
+    // foreign UNTRACKED dirt
+    await Bun.write(join(workDir, 'foreign-untracked.txt'), 'z\n');
+
+    const r = collectChangedFiles(workDir, base, null);
+    expect(r.files).toContain('own-committed.txt');
+    expect(r.files).not.toContain('a.txt');
+    expect(r.files).not.toContain('foreign-untracked.txt');
+    // the tracked edit is surfaced as a GUARD signal (fail-closed), never a source;
+    // untracked dirt is not even a guard signal.
+    expect(r.extraTrackedDirt).toContain('a.txt');
+    expect(r.extraTrackedDirt).not.toContain('foreign-untracked.txt');
+    expect(r.diffErrored).toBe(false);
+  });
+
+  // Scenario 4 primitive (no-op scenario-2): uncommitted real (tracked) work with an
+  // empty committed diff → empty deterministic set + non-empty extraTrackedDirt. This is
+  // exactly the signal the CLI uses to fail-closed a dirty-tree no-op (which then requires
+  // --changed or an explicit --no-op-justification override); a clean tree yields empty
+  // extraTrackedDirt and closes as a genuine no-op with no justification needed.
+  test('uncommitted tracked work + empty committed diff → empty files, extraTrackedDirt set', async () => {
+    initGit(workDir);
+    await Bun.write(join(workDir, 'a.txt'), 'base\n');
+    Bun.spawnSync(['git', 'add', 'a.txt'], { cwd: workDir, stdout: 'pipe' });
+    Bun.spawnSync(['git', 'commit', '-q', '-m', 'base'], { cwd: workDir, stdout: 'pipe' });
+    const base = rev(workDir);
+    await Bun.write(join(workDir, 'a.txt'), 'real uncommitted work\n');
+
+    const r = collectChangedFiles(workDir, base, null);
+    expect(r.files).toHaveLength(0);
+    expect(r.extraTrackedDirt).toContain('a.txt');
+  });
+
+  // Scenario 6 (ac-c): an erroring `git diff` (no merge base / shallow) is fail-closed
+  // (diffErrored), NOT a silent empty pass.
+  test('git diff with no merge base (unrelated histories) → diffErrored, not silent-empty', async () => {
+    const g = initGit(workDir);
+    await Bun.write(join(workDir, 'a.txt'), 'main\n');
+    g(['add', 'a.txt']);
+    g(['commit', '-q', '-m', 'main']);
+    const mainSha = rev(workDir);
+    // orphan branch: an unrelated root commit → merge-base(mainSha, orphan) is empty.
+    g(['checkout', '-q', '--orphan', 'orphan']);
+    g(['rm', '-rf', '--cached', '.']);
+    await Bun.write(join(workDir, 'b.txt'), 'orphan\n');
+    g(['add', 'b.txt']);
+    g(['commit', '-q', '-m', 'orphan']);
+    const orphanSha = rev(workDir);
+
+    const r = collectChangedFiles(workDir, mainSha, orphanSha);
+    expect(r.diffErrored).toBe(true);
+    expect(r.files).toHaveLength(0);
+  });
+});
+
+// Scenario 5 (ac-C): --changed sanitization reuses containScopePath composed with the
+// leading-`-`, empty/whitespace, dedup, and existence rules.
+describe('sanitizeDeclaredPaths', () => {
+  test('rejects empty/whitespace, leading-"-", absolute, and ".." tokens; accepts & dedups valid existing paths', async () => {
+    await Bun.write(join(workDir, 'real.txt'), 'x');
+    await Bun.write(join(workDir, 'nested', 'b.txt'), 'y');
+    const r = sanitizeDeclaredPaths(
+      ['', '   ', '-rf', '/etc/passwd', '../escape.txt', 'real.txt', 'real.txt', 'nested/b.txt'],
+      workDir,
+    );
+    expect(r.accepted.sort()).toEqual(['nested/b.txt', 'real.txt']);
+    const rejected = r.rejected.map((x) => x.path);
+    expect(rejected).toContain('');
+    expect(rejected).toContain('   ');
+    expect(rejected).toContain('-rf');
+    expect(rejected).toContain('/etc/passwd');
+    expect(rejected).toContain('../escape.txt');
+  });
+
+  test('skips a non-existent declared path (dropped, not accepted, not hard-rejected)', () => {
+    const r = sanitizeDeclaredPaths(['does-not-exist.txt'], workDir);
+    expect(r.accepted).toHaveLength(0);
+    expect(r.rejected).toHaveLength(0);
+  });
+});
+
+// Scenario 3 (cross-feature regression): partial under-commit — committed A +
+// uncommitted-undeclared tracked B → the handoff stays fail-closed (not pass) and B
+// never enters changed_files.
+describe('writeWorkItemHandoff partial under-commit fail-closed (wi_260719ayc)', () => {
+  test('committed A + uncommitted-undeclared tracked B → final_verdict not pass, B excluded from changed_files', async () => {
+    const g = (args: string[]) =>
+      Bun.spawnSync(['git', ...args], { cwd: workDir, stdout: 'pipe', stderr: 'pipe' });
+    g(['init', '-q']);
+    g(['config', 'user.email', 't@t']);
+    g(['config', 'user.name', 't']);
+    await Bun.write(join(workDir, 'b.txt'), 'base\n');
+    g(['add', 'b.txt']);
+    g(['commit', '-q', '-m', 'init']);
+    const initSha = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: workDir, stdout: 'pipe' })
+      .stdout.toString()
+      .trim();
+    // committed A (this work's recorded change)
+    await Bun.write(join(workDir, 'A.txt'), 'A\n');
+    g(['add', 'A.txt']);
+    g(['commit', '-q', '-m', 'A']);
+    // uncommitted, UNDECLARED tracked edit of B (the under-committed part)
+    await Bun.write(join(workDir, 'b.txt'), 'uncommitted change\n');
+
+    const created = await store.create(makeInput());
+    await store.update(created.id, (cur) => ({
+      ...cur,
+      started_at_sha: initSha,
+      acceptance_criteria: cur.acceptance_criteria.map((c) =>
+        c.id === 'ac-1' ? { ...c, verdict: 'pass' as const } : c,
+      ),
+    }));
+    const result = await writeWorkItemHandoff(workDir, store, created.id);
+    // A is recorded; B (uncommitted, undeclared) is NOT folded in…
+    expect(result.completion.changed_files).toContain('A.txt');
+    expect(result.completion.changed_files).not.toContain('b.txt');
+    // …and the partial under-commit blocks a pass close (in-scope unverified extra).
+    expect(result.completion.final_verdict).not.toBe('pass');
+    expect(
+      result.completion.unverified.some(
+        (u) => !u.out_of_scope && u.item === 'uncommitted tracked changes outside the recorded set',
+      ),
+    ).toBe(true);
   });
 });
 

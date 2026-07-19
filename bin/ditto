@@ -31119,6 +31119,7 @@ ${input.reason ?? "Claim released \u2014 the issue is free for takeover."}`;
 }
 
 // src/core/work-item-handoff.ts
+import { existsSync as existsSync6 } from "fs";
 import { join as join40 } from "path";
 init_ditto_paths();
 init_fs();
@@ -31151,9 +31152,34 @@ function pickBaseRef(repoRoot, candidates) {
   }
   return null;
 }
-function collectChangedFiles(repoRoot, base, head, baseline = []) {
+function sanitizeDeclaredPaths(raw, repoRoot) {
+  const accepted = new Set;
+  const rejected = [];
+  for (const token of raw) {
+    const trimmed = token.trim();
+    if (trimmed.length === 0) {
+      rejected.push({ path: token, reason: "empty/whitespace-only token" });
+      continue;
+    }
+    if (trimmed.startsWith("-")) {
+      rejected.push({ path: token, reason: "leading `-` (option-injection) rejected" });
+      continue;
+    }
+    const contained = containScopePath(trimmed, repoRoot);
+    if (!contained.ok) {
+      rejected.push({ path: token, reason: contained.detail });
+      continue;
+    }
+    if (!existsSync6(contained.abs))
+      continue;
+    accepted.add(trimmed);
+  }
+  return { accepted: Array.from(accepted), rejected };
+}
+function collectChangedFiles(repoRoot, base, head, baseline = [], declared = []) {
   const excluded = new Set(baseline);
   const set = new Set;
+  let diffErrored = false;
   if (base !== null) {
     const headSpec = head ?? "HEAD";
     const diff = Bun.spawnSync(["git", "diff", "--name-only", "--diff-filter=ACMR", `${base}...${headSpec}`], { cwd: repoRoot, stdout: "pipe", stderr: "pipe" });
@@ -31165,8 +31191,14 @@ function collectChangedFiles(repoRoot, base, head, baseline = []) {
         if (t2.length > 0)
           set.add(t2);
       }
+    } else {
+      diffErrored = true;
     }
   }
+  for (const p of declared)
+    set.add(p);
+  const files = Array.from(set).filter((p) => !p.startsWith("/") && !p.includes("..") && !excluded.has(p));
+  const extraTrackedDirt = [];
   if (head === null) {
     const status = Bun.spawnSync(["git", "status", "--porcelain"], {
       cwd: repoRoot,
@@ -31174,19 +31206,29 @@ function collectChangedFiles(repoRoot, base, head, baseline = []) {
       stderr: "pipe"
     });
     if (status.exitCode === 0) {
+      const known = new Set(files);
       const text = status.stdout?.toString() ?? "";
       for (const line of text.split(`
 `)) {
+        if (line.length === 0)
+          continue;
+        const code = line.slice(0, 2);
+        if (code === "??" || code === "!!")
+          continue;
         const trimmed = line.replace(/^..\s*/, "").trim();
         if (trimmed.length === 0)
           continue;
         const arrow = trimmed.indexOf(" -> ");
         const path = arrow === -1 ? trimmed : trimmed.slice(arrow + 4);
-        set.add(path);
+        if (path.startsWith("/") || path.includes(".."))
+          continue;
+        if (known.has(path) || excluded.has(path))
+          continue;
+        extraTrackedDirt.push(path);
       }
     }
   }
-  return Array.from(set).filter((p) => !p.startsWith("/") && !p.includes("..") && !excluded.has(p));
+  return { files, diffErrored, extraTrackedDirt };
 }
 function buildCompletion2(item, declaredAt, changedFiles, declaredBy, unverifiedExtras = [], prior, graphAcceptance) {
   const acceptance = graphAcceptance ?? item.acceptance_criteria.map((ac) => ({
@@ -31243,12 +31285,27 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
     }
     headUsed = verifiedHead;
   }
-  const collected = collectChangedFiles(repoRoot, baseUsed, headUsed, item.started_untracked_baseline);
+  const collectResult = collectChangedFiles(repoRoot, baseUsed, headUsed, item.started_untracked_baseline, options.declaredChanged ?? []);
+  const collected = collectResult.files;
   const unverifiedExtras = [];
-  if (collected.length === 0 && (item.runs.length > 0 || item.acceptance_criteria.some((a2) => a2.evidence.length > 0))) {
+  if (collectResult.diffErrored) {
+    unverifiedExtras.push({
+      item: "changed_files not determinable",
+      reason: `git diff against ${baseUsed} exited non-zero (shallow clone or unresolvable merge-base) \u2014 the committed change cannot be determined; fetch full history / pass a reachable --base, or declare paths with --changed`,
+      out_of_scope: false
+    });
+  }
+  if (collectResult.extraTrackedDirt.length > 0) {
+    unverifiedExtras.push({
+      item: "uncommitted tracked changes outside the recorded set",
+      reason: `tracked working-tree edits are not in the committed diff or the declaration: ${collectResult.extraTrackedDirt.join(", ")} \u2014 commit them, or declare via --changed, so the completion records the real change`,
+      out_of_scope: false
+    });
+  }
+  if (collected.length === 0 && !collectResult.diffErrored && (item.runs.length > 0 || item.acceptance_criteria.some((a2) => a2.evidence.length > 0))) {
     unverifiedExtras.push({
       item: "changed_files not recorded",
-      reason: baseUsed === null ? "no base ref (--base, origin/main, origin/master, main, master) usable and work item has runs/evidence; fill manually or pass --base" : `git diff against ${baseUsed} returned no files but work item has runs/evidence`,
+      reason: baseUsed === null ? "no base ref (--base, origin/main, origin/master, main, master) usable and work item has runs/evidence; commit the change, declare paths with --changed, or pass --base" : `git diff against ${baseUsed} returned no files but work item has runs/evidence; commit the change or declare paths with --changed`,
       out_of_scope: false
     });
   }
@@ -32729,6 +32786,16 @@ var workDone = defineCommand({
       description: "Why a lightweight close is acceptable for a declared-risk WI (with --override-heavy)",
       required: false
     },
+    changed: {
+      type: "string",
+      description: "Comma/space-separated repo-relative paths changed by this work \u2014 declares changed_files for the lightweight close (symmetric with the autopilot owner-report). Needed when the change is not committed to base...HEAD.",
+      required: false
+    },
+    "noop-justification": {
+      type: "string",
+      description: "Override a fail-closed dirty-tree no-op: declare that the uncommitted tracked edits are foreign/concurrent work and this WI genuinely changed nothing. Only needed when the tree is dirty and the deterministic source is empty (a clean-tree no-op closes without it). Mirrors the autopilot no_op_justification exemption.",
+      required: false
+    },
     "comment-issue": {
       type: "boolean",
       description: "Post a result-summary comment to the linked GitHub issue + reflect the done status on the Project board (G4/G5). No-op when no issue is linked.",
@@ -32787,7 +32854,7 @@ var workDone = defineCommand({
       return;
     }
     try {
-      const item = await store.get(args.workId);
+      let item = await store.get(args.workId);
       const blocking = blockingFollowUp(item);
       if (blocking) {
         writeError(`work ${args.workId} cannot close: unresolved self-caused ${blocking.severity}-severity bug follow-up "${blocking.note}"${blocking.materialized_wi ? ` (tracked as ${blocking.materialized_wi})` : ""}. Fix it, or mark the follow-up resolved, before closing.`);
@@ -32825,6 +32892,78 @@ var workDone = defineCommand({
             ]
           }));
         }
+        const declaredRaw = args.changed ? args.changed.split(/[\s,]+/) : [];
+        const sanitized = sanitizeDeclaredPaths(declaredRaw, repoRoot);
+        if (sanitized.rejected.length > 0) {
+          writeError(`work ${args.workId} cannot close: --changed has invalid path(s) \u2014 ${sanitized.rejected.map((r3) => `"${r3.path}" (${r3.reason})`).join("; ")}. Pass repo-relative paths under the repo root (no absolute, no \`..\`, no leading \`-\`).`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const changeBase = pickBaseRef(repoRoot, [
+          ...item.started_at_sha ? [item.started_at_sha] : [],
+          "origin/main",
+          "origin/master",
+          "main",
+          "master"
+        ]);
+        const collectResult = collectChangedFiles(repoRoot, changeBase, null, item.started_untracked_baseline, [...item.changed_files, ...sanitized.accepted]);
+        if (collectResult.diffErrored) {
+          writeError(`work ${args.workId} cannot close: git diff against ${changeBase} exited non-zero (shallow clone or unresolvable merge-base) \u2014 the committed change cannot be determined. Fetch full history / pass a reachable base, or declare the paths with \`ditto work done ${args.workId} --changed "<paths>"\`.`);
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const treeDirty = collectResult.extraTrackedDirt.length > 0;
+        const justification = args["noop-justification"];
+        const justified = (justification?.trim().length ?? 0) > 0;
+        if (collectResult.files.length === 0) {
+          if (treeDirty && !justified) {
+            const exits = [
+              `commit the change, then \`ditto work done ${args.workId}\``,
+              `declare the paths: \`ditto work done ${args.workId} --changed "<repo-relative paths>"\``,
+              `override as a justified no-op (the dirt is foreign/concurrent work): \`ditto work done ${args.workId} --noop-justification "<why this WI changed nothing>"\``
+            ];
+            writeError(`work ${args.workId} cannot close: no changed files determined, but the working tree has uncommitted tracked edits outside the recorded change (${collectResult.extraTrackedDirt.join(", ")}). Do ONE of: ${exits.join(" | ")}.`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          if (justified) {
+            item = await store.update(args.workId, (cur) => ({
+              ...cur,
+              risks: [
+                ...cur.risks,
+                {
+                  description: `0-file no-op close justification (tree-dirt override): ${justification}`,
+                  severity: "low"
+                }
+              ]
+            }));
+          }
+        } else if (treeDirty) {
+          if (!justified) {
+            const exits = [
+              `commit the change, then \`ditto work done ${args.workId}\``,
+              `declare the paths: \`ditto work done ${args.workId} --changed "<repo-relative paths>"\``,
+              `override as a justified no-op (the dirt is foreign/concurrent work): \`ditto work done ${args.workId} --noop-justification "<why the extra dirt is not this WI's change>"\``
+            ];
+            writeError(`work ${args.workId} cannot close: uncommitted tracked edits outside the recorded change (${collectResult.extraTrackedDirt.join(", ")}). Do ONE of: ${exits.join(" | ")}.`);
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          item = await store.update(args.workId, (cur) => ({
+            ...cur,
+            risks: [
+              ...cur.risks,
+              {
+                description: `partial under-commit close justification (tree-dirt override): ${justification}`,
+                severity: "low"
+              }
+            ]
+          }));
+        }
+        item = await store.update(args.workId, (cur) => ({
+          ...cur,
+          changed_files: collectResult.files
+        }));
         const synthesized = assembleCompletionFromWorkItem(item, {
           declaredBy: "main",
           summary: `Closed via lightweight completion path (ditto verify evidence) for ${args.workId}.`
@@ -37829,7 +37968,7 @@ var cleanupCommand = defineCommand({
 import { join as join53 } from "path";
 
 // src/core/codeql/doctor.ts
-import { existsSync as existsSync6 } from "fs";
+import { existsSync as existsSync7 } from "fs";
 var LANG_BY_EXT = {
   ts: "javascript",
   tsx: "javascript",
@@ -37928,10 +38067,10 @@ var defaultDoctorDeps = {
   cliAvailable: async () => {
     const bin = process.env.CODEQL_BIN;
     if (bin)
-      return existsSync6(bin);
+      return existsSync7(bin);
     if (Bun.which("codeql"))
       return true;
-    return existsSync6(`${process.env.HOME}/.local/share/gh/extensions/gh-codeql`);
+    return existsSync7(`${process.env.HOME}/.local/share/gh/extensions/gh-codeql`);
   }
 };
 
@@ -41995,7 +42134,7 @@ async function collectCapabilityInventory(adapters, repoRoot, pluginRoot) {
 }
 
 // src/core/codeql/install.ts
-import { existsSync as existsSync7 } from "fs";
+import { existsSync as existsSync8 } from "fs";
 import { mkdir as mkdir8 } from "fs/promises";
 import { homedir as homedir7 } from "os";
 import { join as join60 } from "path";
@@ -42088,18 +42227,18 @@ var defaultInstallDeps = {
   platform: () => detectPlatform(),
   resolveExisting: async () => {
     const bin = process.env.CODEQL_BIN;
-    if (bin && existsSync7(bin))
+    if (bin && existsSync8(bin))
       return bin;
     const onPath = Bun.which("codeql");
     if (onPath)
       return onPath;
     const gh = join60(homedir7(), ".local", "share", "gh", "extensions", "gh-codeql");
-    if (existsSync7(gh))
+    if (existsSync8(gh))
       return gh;
     const platform2 = detectPlatform();
     if (platform2) {
       const managed = managedBinary(DEFAULT_INSTALL_DIR, platform2);
-      if (existsSync7(managed))
+      if (existsSync8(managed))
         return managed;
     }
     return null;
@@ -42121,12 +42260,12 @@ var defaultInstallDeps = {
   ensureDir: async (dir) => {
     await mkdir8(dir, { recursive: true });
   },
-  fileExists: (p) => existsSync7(p),
+  fileExists: (p) => existsSync8(p),
   pathIncludes: (dir) => (process.env.PATH ?? "").split(":").includes(dir)
 };
 
 // src/core/distribution-doctor.ts
-import { existsSync as existsSync8, readFileSync as readFileSync4 } from "fs";
+import { existsSync as existsSync9, readFileSync as readFileSync4 } from "fs";
 import { join as join62 } from "path";
 
 // src/core/build-stamp.ts
@@ -42196,7 +42335,7 @@ function evaluateDistribution(checks) {
   return { checks, axes, finding_count: axes.filter((a2) => !a2.satisfied).length };
 }
 function readJsonObject(path) {
-  if (!existsSync8(path))
+  if (!existsSync9(path))
     return {};
   const text = readFileSync4(path, "utf8").trim();
   if (!text)
@@ -42214,7 +42353,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
     targetRoot,
     whichDitto: () => Bun.which("ditto"),
     readProjectSettings: () => readJsonObject(join62(targetRoot, ".claude", "settings.json")),
-    exists: (p) => existsSync8(p),
+    exists: (p) => existsSync9(p),
     readText: (p) => {
       try {
         return readFileSync4(p, "utf8");
@@ -42644,7 +42783,7 @@ async function collectPermissionFindings(adapters, repoRoot) {
 }
 
 // src/core/plugin-root.ts
-import { existsSync as existsSync9, readFileSync as readFileSync5 } from "fs";
+import { existsSync as existsSync10, readFileSync as readFileSync5 } from "fs";
 import { homedir as homedir8 } from "os";
 import { dirname as dirname12, join as join64 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
@@ -42704,7 +42843,7 @@ function defaultPluginRootDeps() {
   return {
     getEnv: (key) => process.env[key],
     startDir: dirname12(fileURLToPath2(import.meta.url)),
-    exists: (p) => existsSync9(p),
+    exists: (p) => existsSync10(p),
     readInstalledPlugins: () => {
       try {
         const path = join64(homedir8(), ".claude", "plugins", "installed_plugins.json");
@@ -49677,7 +49816,7 @@ import { resolve as resolve20 } from "path";
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
 import { createHash as createHash13 } from "crypto";
-import { existsSync as existsSync10, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir11 } from "os";
 import { dirname as dirname16, join as join72, resolve as resolve19 } from "path";
 function classifySession(pluginRoot, repoRoot) {
@@ -49760,7 +49899,7 @@ function formatModeHuman(report, inDittoRepo) {
 var SURFACE_DIRS = ["agents", "skills", "hooks"];
 function listSurfaceFiles(root, rel, out) {
   const dir = join72(root, rel);
-  if (!existsSync10(dir))
+  if (!existsSync11(dir))
     return;
   for (const e2 of readdirSync2(dir, { withFileTypes: true })) {
     const childRel = `${rel}/${e2.name}`;
@@ -49786,11 +49925,11 @@ function computeSurfaceStamp(root) {
 }
 function isDittoSourceRepo(repoRoot) {
   const pkgPath = join72(repoRoot, "package.json");
-  if (!existsSync10(pkgPath))
+  if (!existsSync11(pkgPath))
     return false;
   try {
     const pkg = JSON.parse(readFileSync6(pkgPath, "utf8"));
-    return pkg.name === "ditto" && existsSync10(join72(repoRoot, "src", "cli", "index.ts"));
+    return pkg.name === "ditto" && existsSync11(join72(repoRoot, "src", "cli", "index.ts"));
   } catch {
     return false;
   }
@@ -49808,7 +49947,7 @@ function resolvePluginRoot2(env2, argv1) {
 function readInstalledIdentity(home) {
   const base = join72(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
   const absent = { present: false, version: null, srcStamp: null, surfaceStamp: null };
-  if (!existsSync10(base))
+  if (!existsSync11(base))
     return absent;
   const versions = readdirSync2(base, { withFileTypes: true }).filter((e2) => e2.isDirectory() || e2.isSymbolicLink()).map((e2) => e2.name).sort();
   const version = versions[versions.length - 1];
@@ -49821,7 +49960,7 @@ function readInstalledIdentity(home) {
   } catch {
     srcStamp = null;
   }
-  const surfaceStamp = existsSync10(dir) ? computeSurfaceStamp(dir) : null;
+  const surfaceStamp = existsSync11(dir) ? computeSurfaceStamp(dir) : null;
   return { present: true, version, srcStamp, surfaceStamp };
 }
 function gitState2(repoRoot) {
@@ -49913,7 +50052,7 @@ var sessionStartHandler = async (input) => {
 
 // src/hooks/stop.ts
 import { createHash as createHash14 } from "crypto";
-import { existsSync as existsSync11 } from "fs";
+import { existsSync as existsSync12 } from "fs";
 import { readFile as readFile17, readdir as readdir22 } from "fs/promises";
 import { join as join73 } from "path";
 init_ditto_paths();
@@ -50223,7 +50362,7 @@ function dialecticForcesContinuation(d2, repoRoot) {
     }
     if (admissible && repoRoot !== undefined) {
       const anchor = fileAnchorPath(obj.maps_to);
-      if (anchor !== undefined && !existsSync11(join73(repoRoot, anchor))) {
+      if (anchor !== undefined && !existsSync12(join73(repoRoot, anchor))) {
         reasons.push(`\uC2EC\uC758(dialectic) ${d2.review_id}: \uBC18\uB860\uC758 maps_to '${obj.maps_to}'\uAC00 \uC874\uC7AC\uD558\uB294 \uD30C\uC77C\uB85C \uD655\uC778\uB418\uC9C0 \uC54A\uC74C(does not resolve) \u2014 backward-finding \uC624\uB77C\uD074\uC774 \uAC80\uC99D \uBD88\uAC00/\uC624\uB798\uB428`);
       }
     }
@@ -56480,7 +56619,7 @@ function applySemanticVerdict(seed, v2) {
 }
 
 // src/acg/semantic/signature-codeql.ts
-import { existsSync as existsSync12 } from "fs";
+import { existsSync as existsSync13 } from "fs";
 import { rm as rm3 } from "fs/promises";
 import { join as join88 } from "path";
 init_ditto_paths();
@@ -56614,7 +56753,7 @@ async function scanSignatureChanges(input, deps) {
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
   const baseCache = join88(cacheBase, `${baseSha}-${input.language}`);
   const baseDb = join88(baseCache, "db");
-  const needWorktree = !existsSync12(baseDb);
+  const needWorktree = !existsSync13(baseDb);
   const worktree = join88(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
@@ -57021,7 +57160,7 @@ init_fs();
 init_shared();
 
 // src/core/provision/memory-separate.ts
-import { existsSync as existsSync13, readFileSync as readFileSync10, writeFileSync as writeFileSync2 } from "fs";
+import { existsSync as existsSync14, readFileSync as readFileSync10, writeFileSync as writeFileSync2 } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
 function join89(...parts) {
@@ -57102,14 +57241,14 @@ function defaultMemorySeparateDeps(repoRoot) {
       ]);
       return { exit_code, stderr: stderr2 };
     },
-    pathExists: (p2) => existsSync13(p2),
-    readGitignore: () => existsSync13(gitignorePath) ? readFileSync10(gitignorePath, "utf8") : "",
+    pathExists: (p2) => existsSync14(p2),
+    readGitignore: () => existsSync14(gitignorePath) ? readFileSync10(gitignorePath, "utf8") : "",
     writeGitignore: (content) => writeFileSync2(gitignorePath, content, "utf8")
   };
 }
 
 // src/core/provision/playwright.ts
-import { existsSync as existsSync14, readdirSync as readdirSync3 } from "fs";
+import { existsSync as existsSync15, readdirSync as readdirSync3 } from "fs";
 import { homedir as homedir13, platform as osPlatform } from "os";
 import { join as join90 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
@@ -57164,7 +57303,7 @@ var defaultPlaywrightDeps = {
   bunCache: bunCacheDir(),
   listDir: (dir) => {
     try {
-      return existsSync14(dir) ? readdirSync3(dir) : [];
+      return existsSync15(dir) ? readdirSync3(dir) : [];
     } catch {
       return [];
     }
@@ -57650,7 +57789,7 @@ async function setup(opts) {
 }
 
 // src/cli/resources.ts
-import { existsSync as existsSync15 } from "fs";
+import { existsSync as existsSync16 } from "fs";
 import { dirname as dirname20, join as join93, resolve as resolve25 } from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 function resolveResourcesDir(from) {
@@ -57661,7 +57800,7 @@ function resolveResourcesDir(from) {
   let dir = start;
   for (;; ) {
     const candidate = join93(dir, "resources", "managed");
-    if (existsSync15(candidate))
+    if (existsSync16(candidate))
       return candidate;
     const parent = dirname20(dir);
     if (parent === dir)
@@ -58432,7 +58571,7 @@ init_fs();
 // src/core/workspace/clone.ts
 init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
-import { existsSync as existsSync16, lstatSync, realpathSync as realpathSync2 } from "fs";
+import { existsSync as existsSync17, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
 import { basename as basename8, dirname as dirname22, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
@@ -58467,7 +58606,7 @@ function escapesRoot(rel) {
 function realpathNearestExisting(p2) {
   let cur = resolve28(p2);
   const tail = [];
-  while (!existsSync16(cur)) {
+  while (!existsSync17(cur)) {
     const parent = dirname22(cur);
     if (parent === cur)
       return join97(realpathSync2(cur), ...tail);
@@ -59085,4 +59224,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=8ce7b178553c3ada5a3825a6b85688c676c561bad1baa0ca6331f7d49c6d5f59
+//# ditto-src-stamp=4a92851eeccae1d7f52b74c44d8dfb5493ae8028ca9ea2007c642843ffb595df

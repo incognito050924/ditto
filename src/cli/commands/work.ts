@@ -47,6 +47,9 @@ import { IntentStore } from '~/core/intent-store';
 import {
   InvalidBaseRefError,
   InvalidHeadRefError,
+  collectChangedFiles,
+  pickBaseRef,
+  sanitizeDeclaredPaths,
   writeWorkItemHandoff,
 } from '~/core/work-item-handoff';
 import { projectBacklog } from '~/core/work-item-project';
@@ -2077,6 +2080,18 @@ const workDone = defineCommand({
         'Why a lightweight close is acceptable for a declared-risk WI (with --override-heavy)',
       required: false,
     },
+    changed: {
+      type: 'string',
+      description:
+        'Comma/space-separated repo-relative paths changed by this work — declares changed_files for the lightweight close (symmetric with the autopilot owner-report). Needed when the change is not committed to base...HEAD.',
+      required: false,
+    },
+    'noop-justification': {
+      type: 'string',
+      description:
+        'Override a fail-closed dirty-tree no-op: declare that the uncommitted tracked edits are foreign/concurrent work and this WI genuinely changed nothing. Only needed when the tree is dirty and the deterministic source is empty (a clean-tree no-op closes without it). Mirrors the autopilot no_op_justification exemption.',
+      required: false,
+    },
     'comment-issue': {
       type: 'boolean',
       description:
@@ -2146,7 +2161,7 @@ const workDone = defineCommand({
       return;
     }
     try {
-      const item = await store.get(args.workId); // throws with a clear error if unknown
+      let item = await store.get(args.workId); // throws with a clear error if unknown
       // ac-4 C: an additional precondition (does NOT weaken the evidence gate
       // below). A self-caused high/critical bug discovered during this WI must be
       // resolved or fixed before the WI can close — you do not close work that
@@ -2227,6 +2242,143 @@ const workDone = defineCommand({
             ],
           }));
         }
+        // N4 (wi_260719ayc): record a DETERMINISTIC changed_files (committed
+        // base...HEAD diff ∪ --changed declaration) — never a whole-working-tree
+        // scan (that pollutes with foreign dirt). The synthesis below copies
+        // work-item.changed_files, and landGate/landCommit consume that set, so the
+        // declared/committed paths must be populated here. Fail-closed when the source
+        // cannot be determined (diff env broken), when real uncommitted tracked work is
+        // neither committed nor declared, or when the source is empty and the close is
+        // not a justified genuine no-op on a clean tree.
+        const declaredRaw = args.changed ? args.changed.split(/[\s,]+/) : [];
+        const sanitized = sanitizeDeclaredPaths(declaredRaw, repoRoot);
+        if (sanitized.rejected.length > 0) {
+          writeError(
+            `work ${args.workId} cannot close: --changed has invalid path(s) — ${sanitized.rejected
+              .map((r) => `"${r.path}" (${r.reason})`)
+              .join(
+                '; ',
+              )}. Pass repo-relative paths under the repo root (no absolute, no \`..\`, no leading \`-\`).`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const changeBase = pickBaseRef(repoRoot, [
+          ...(item.started_at_sha ? [item.started_at_sha] : []),
+          'origin/main',
+          'origin/master',
+          'main',
+          'master',
+        ]);
+        // Declared set = the WI's ALREADY-recorded changed_files (populated by the
+        // autopilot owner-report path on a heavy WI) UNION the --changed args. Without
+        // the former, a heavy WI's own recorded-and-still-uncommitted files would be
+        // misdetected as extraTrackedDirt and trip the under-commit guard. collectChangedFiles
+        // dedups internally (Set), so the concat needs no pre-dedupe.
+        const collectResult = collectChangedFiles(
+          repoRoot,
+          changeBase,
+          null,
+          item.started_untracked_baseline,
+          [...item.changed_files, ...sanitized.accepted],
+        );
+        if (collectResult.diffErrored) {
+          writeError(
+            `work ${args.workId} cannot close: git diff against ${changeBase} exited non-zero (shallow clone or unresolvable merge-base) — the committed change cannot be determined. Fetch full history / pass a reachable base, or declare the paths with \`ditto work done ${args.workId} --changed "<paths>"\`.`,
+          );
+          process.exit(USAGE_ERROR_EXIT);
+          return;
+        }
+        const treeDirty = collectResult.extraTrackedDirt.length > 0;
+        // A dirty-tree no-op override (--noop-justification): the user self-declares the
+        // extra tracked dirt is foreign/concurrent work and this WI's own change is fully
+        // captured by committed∪declared. Applies to BOTH the empty-source and the
+        // partial-under-commit dirty branches below (the SHARED tree makes the dirt
+        // possibly another session's in either case).
+        const justification = args['noop-justification'];
+        const justified = (justification?.trim().length ?? 0) > 0;
+        if (collectResult.files.length === 0) {
+          // Empty deterministic source (no committed diff, no --changed). A CLEAN tree is
+          // a genuine 0-file no-op (e.g. a code-unchanged audit like #46) — it closes as
+          // before, NO justification required (pre-existing behavior, not broken here). A
+          // DIRTY tree (uncommitted tracked edits outside committed∪declared∪baseline — the
+          // under-commit signal) fail-closes, UNLESS the user overrides with
+          // --noop-justification (self-declaring the dirt is foreign/concurrent and this
+          // WI genuinely changed nothing — the guardMutatingEvidence no_op_justification
+          // homolog; the SHARED tree makes the dirt possibly another session's, so #46-style
+          // audits must stay closable when foreign dirt is present) or declares via
+          // --changed. Justification is the OVERRIDE for a dirty-tree no-op, never a
+          // requirement for a clean one. The error enumerates all three exits (ac-(f)).
+          if (treeDirty && !justified) {
+            const exits = [
+              `commit the change, then \`ditto work done ${args.workId}\``,
+              `declare the paths: \`ditto work done ${args.workId} --changed "<repo-relative paths>"\``,
+              `override as a justified no-op (the dirt is foreign/concurrent work): \`ditto work done ${args.workId} --noop-justification "<why this WI changed nothing>"\``,
+            ];
+            writeError(
+              `work ${args.workId} cannot close: no changed files determined, but the working tree has uncommitted tracked edits outside the recorded change (${collectResult.extraTrackedDirt.join(
+                ', ',
+              )}). Do ONE of: ${exits.join(' | ')}.`,
+            );
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          // Passing: a clean-tree no-op (no justification needed) OR a dirty-tree no-op with
+          // an explicit override. Record the justification as an auditable note ONLY when one
+          // was given (the override path); a clean no-op needs none. changed_files stays empty.
+          if (justified) {
+            item = await store.update(args.workId, (cur) => ({
+              ...cur,
+              risks: [
+                ...cur.risks,
+                {
+                  description: `0-file no-op close justification (tree-dirt override): ${justification}`,
+                  severity: 'low' as const,
+                },
+              ],
+            }));
+          }
+        } else if (treeDirty) {
+          // Source non-empty (committed/declared A) but extra uncommitted tracked dirt B
+          // exists outside the recorded set (partial under-commit). In a SHARED tree B may
+          // be another session's foreign work (exactly the case that blocked this WI's own
+          // close), so mirror the empty-source override: fail-closed UNLESS the user
+          // self-declares B is foreign/concurrent via --noop-justification. Either way B
+          // stays OUT of changed_files — the recorded set is committed∪declared (A), never B.
+          if (!justified) {
+            const exits = [
+              `commit the change, then \`ditto work done ${args.workId}\``,
+              `declare the paths: \`ditto work done ${args.workId} --changed "<repo-relative paths>"\``,
+              `override as a justified no-op (the dirt is foreign/concurrent work): \`ditto work done ${args.workId} --noop-justification "<why the extra dirt is not this WI's change>"\``,
+            ];
+            writeError(
+              `work ${args.workId} cannot close: uncommitted tracked edits outside the recorded change (${collectResult.extraTrackedDirt.join(
+                ', ',
+              )}). Do ONE of: ${exits.join(' | ')}.`,
+            );
+            process.exit(USAGE_ERROR_EXIT);
+            return;
+          }
+          // Justified override: record it as an auditable risk note (same as the
+          // empty-source override). extraTrackedDirt stays out of changed_files; the
+          // committed∪declared `collectResult.files` is recorded below unchanged.
+          item = await store.update(args.workId, (cur) => ({
+            ...cur,
+            risks: [
+              ...cur.risks,
+              {
+                description: `partial under-commit close justification (tree-dirt override): ${justification}`,
+                severity: 'low' as const,
+              },
+            ],
+          }));
+        }
+        // Populate work-item.changed_files with the deterministic source so the
+        // synthesis records it and landGate/landCommit consume it unchanged.
+        item = await store.update(args.workId, (cur) => ({
+          ...cur,
+          changed_files: collectResult.files,
+        }));
         const synthesized = assembleCompletionFromWorkItem(item, {
           declaredBy: 'main',
           summary: `Closed via lightweight completion path (ditto verify evidence) for ${args.workId}.`,

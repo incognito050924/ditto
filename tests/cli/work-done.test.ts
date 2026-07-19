@@ -283,6 +283,186 @@ describe('ditto work done — stale non-pass completion re-synthesis (wi_260719k
   });
 });
 
+// wi_260719ayc ac-4: the `--noop-justification` flag must actually PARSE. The
+// previous `--no-op-justification` key collided with citty/mri's `--no-<x>` boolean
+// negation, so the value was always dropped and the dirty-tree override was dead
+// code. These CLI-level tests exercise the citty flag parse end-to-end (the
+// pure-unit tests never spawn the CLI, so they could not catch the parse bug):
+//   (a) clean tree + empty deterministic source → done closes with NO justification
+//       (a genuine clean no-op is always closable).
+//   (b) dirty tree (a tracked-but-uncommitted edit) + empty source, NO
+//       justification → fail-closed (non-zero, status not done), and the message
+//       enumerates all three exits (commit / --changed / --noop-justification).
+//   (c) same dirty tree WITH --noop-justification "…" → the override is LIVE and
+//       done closes (proves the flag value now reaches `args['noop-justification']`).
+describe('ditto work done — dirty-tree no-op override flag parses (wi_260719ayc ac-4)', () => {
+  function git(gitArgs: string[]) {
+    return Bun.spawnSync(['git', ...gitArgs], {
+      cwd: dir,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'T',
+        GIT_AUTHOR_EMAIL: 't@example.com',
+        GIT_COMMITTER_NAME: 'T',
+        GIT_COMMITTER_EMAIL: 't@example.com',
+      },
+    });
+  }
+
+  async function passGradedWi(): Promise<string> {
+    const wi = await workItemWithRealAC();
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wi.id, 'work-item.json');
+    expect(ditto(['verify', wi.id, '--criterion', 'ac-1', '--', 'cat', wiPath]).exitCode).toBe(0);
+    return wi.id;
+  }
+
+  // Init a git repo with one committed tracked file, then leave a tracked-but-
+  // uncommitted edit so `git status --porcelain` reports ` M tracked.txt`
+  // (extraTrackedDirt), while the committed base...HEAD diff stays empty.
+  function makeDirtyTree() {
+    expect(git(['init']).exitCode).toBe(0);
+    Bun.write(join(dir, 'tracked.txt'), 'original\n');
+    expect(git(['add', 'tracked.txt']).exitCode).toBe(0);
+    expect(git(['commit', '-m', 'seed']).exitCode).toBe(0);
+    // dirty the tracked file (uncommitted, undeclared)
+    Bun.write(join(dir, 'tracked.txt'), 'edited\n');
+  }
+
+  test('(a) clean tree + empty source → done closes WITHOUT justification', async () => {
+    const wid = await passGradedWi();
+    const d = ditto(['work', 'done', wid, '--output', 'json']);
+    expect(d.exitCode).toBe(0);
+    expect((await new WorkItemStore(dir).get(wid)).status).toBe('done');
+  });
+
+  test('(b) dirty tree + empty source + NO justification → fail-closed, message names all three exits', async () => {
+    const wid = await passGradedWi();
+    makeDirtyTree();
+    const d = ditto(['work', 'done', wid, '--output', 'json']);
+    expect(d.exitCode).not.toBe(0);
+    expect((await new WorkItemStore(dir).get(wid)).status).not.toBe('done');
+    // The fail-closed message must enumerate all three exits.
+    expect(d.stderr).toMatch(/commit the change/);
+    expect(d.stderr).toMatch(/--changed/);
+    expect(d.stderr).toMatch(/--noop-justification/);
+  });
+
+  test('(c) dirty tree + --noop-justification "…" → override is live, done closes', async () => {
+    const wid = await passGradedWi();
+    makeDirtyTree();
+    const d = ditto([
+      'work',
+      'done',
+      wid,
+      '--noop-justification',
+      'the dirt is a concurrent session; this WI changed nothing',
+      '--output',
+      'json',
+    ]);
+    expect(d.exitCode).toBe(0);
+    expect((await new WorkItemStore(dir).get(wid)).status).toBe('done');
+  });
+});
+
+// wi_260719ayc: two lightweight-close under-commit fixes found during dogfood.
+//   ISSUE A (declared union gap): the WI's OWN already-recorded changed_files (the
+//     autopilot owner-report path populates them on a heavy WI) must count as
+//     declared, so a still-uncommitted recorded file is NOT misdetected as
+//     extraTrackedDirt. Test: a WI whose changed_files lists an uncommitted tracked
+//     file closes via `work done` (no --changed) without tripping the guard.
+//   ISSUE B (partial under-commit override): committed/declared A + a SEPARATE
+//     foreign tracked dirt B (another session's work in the shared tree) → fail-
+//     closed without justification (message names all 3 exits), PASSES with
+//     --noop-justification (mirrors the empty-source dirty override; B never
+//     enters changed_files).
+describe('ditto work done — under-commit declared-union + partial override (wi_260719ayc)', () => {
+  function git(gitArgs: string[]) {
+    return Bun.spawnSync(['git', ...gitArgs], {
+      cwd: dir,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'T',
+        GIT_AUTHOR_EMAIL: 't@example.com',
+        GIT_COMMITTER_NAME: 'T',
+        GIT_COMMITTER_EMAIL: 't@example.com',
+      },
+    });
+  }
+
+  async function passGradedWi(): Promise<string> {
+    const wi = await workItemWithRealAC();
+    const wiPath = join(dir, '.ditto', 'local', 'work-items', wi.id, 'work-item.json');
+    expect(ditto(['verify', wi.id, '--criterion', 'ac-1', '--', 'cat', wiPath]).exitCode).toBe(0);
+    return wi.id;
+  }
+
+  test('(A) WI.changed_files lists an uncommitted tracked file → done closes, guard not tripped', async () => {
+    const wid = await passGradedWi();
+    // Seed one committed file, then leave it edited-but-uncommitted (extraTrackedDirt).
+    expect(git(['init']).exitCode).toBe(0);
+    await Bun.write(join(dir, 'recorded.txt'), 'original\n');
+    expect(git(['add', 'recorded.txt']).exitCode).toBe(0);
+    expect(git(['commit', '-m', 'seed']).exitCode).toBe(0);
+    await Bun.write(join(dir, 'recorded.txt'), 'edited\n'); // uncommitted tracked edit
+    // Record the file as the WI's own changed_files (the autopilot owner-report shape).
+    await new WorkItemStore(dir).update(wid, (cur) => ({ ...cur, changed_files: ['recorded.txt'] }));
+
+    // No --changed: the recorded changed_files must count as declared and keep the
+    // guard from misfiring on recorded.txt.
+    const d = ditto(['work', 'done', wid, '--output', 'json']);
+    expect(d.exitCode).toBe(0);
+    expect((await new WorkItemStore(dir).get(wid)).status).toBe('done');
+  });
+
+  // Partial under-commit: a declared file A committed-or-declared, plus a SEPARATE
+  // foreign tracked dirt file B outside the recorded set.
+  function makePartialUnderCommit() {
+    expect(git(['init']).exitCode).toBe(0);
+    Bun.write(join(dir, 'fileA.txt'), 'A\n');
+    Bun.write(join(dir, 'foreign.txt'), 'B\n');
+    expect(git(['add', 'fileA.txt', 'foreign.txt']).exitCode).toBe(0);
+    expect(git(['commit', '-m', 'seed']).exitCode).toBe(0);
+    // dirty BOTH: A is declared via --changed, foreign.txt (B) is undeclared dirt.
+    Bun.write(join(dir, 'fileA.txt'), 'A edited\n');
+    Bun.write(join(dir, 'foreign.txt'), 'B edited\n');
+  }
+
+  test('(B1) partial under-commit + NO justification → fail-closed, message names all 3 exits', async () => {
+    const wid = await passGradedWi();
+    makePartialUnderCommit();
+    const d = ditto(['work', 'done', wid, '--changed', 'fileA.txt', '--output', 'json']);
+    expect(d.exitCode).not.toBe(0);
+    expect((await new WorkItemStore(dir).get(wid)).status).not.toBe('done');
+    // extraTrackedDirt (foreign.txt) named, and all three exits enumerated.
+    expect(d.stderr).toMatch(/foreign\.txt/);
+    expect(d.stderr).toMatch(/commit the change/);
+    expect(d.stderr).toMatch(/--changed/);
+    expect(d.stderr).toMatch(/--noop-justification/);
+  });
+
+  test('(B2) partial under-commit + --noop-justification "…" → override live, done closes', async () => {
+    const wid = await passGradedWi();
+    makePartialUnderCommit();
+    const d = ditto([
+      'work',
+      'done',
+      wid,
+      '--changed',
+      'fileA.txt',
+      '--noop-justification',
+      'foreign.txt is a concurrent session; this WI only changed fileA.txt',
+      '--output',
+      'json',
+    ]);
+    expect(d.exitCode).toBe(0);
+    const item = await new WorkItemStore(dir).get(wid);
+    expect(item.status).toBe('done');
+    // The declared file A is recorded; foreign dirt B never pollutes changed_files.
+    expect(item.changed_files).toContain('fileA.txt');
+    expect(item.changed_files).not.toContain('foreign.txt');
+  });
+});
+
 // wi_260627273: the autopilot path writes completion.json with derived pass
 // verdicts but leaves work-item.json acceptance_criteria at `unverified`. `work
 // done` reading that pre-existing completion must mirror the verdicts (+ evidence)

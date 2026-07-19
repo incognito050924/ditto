@@ -92,6 +92,13 @@ export function buildCompletion(input: CompletionInput): CompletionContract {
  * `completionEvidenceGate` on the result before accepting a `pass` close: this
  * function only assembles, it does not bless. A pass-without-evidence criterion
  * stays `pass` in the contract here and is caught by `completionEvidenceGate`.
+ *
+ * changed_files provenance (wi_260719ayc): this copies `workItem.changed_files`
+ * verbatim, so the CONTRACT is that the caller has already populated it with the
+ * DETERMINISTIC set — the committed `base...HEAD` diff ∪ the `--changed`
+ * declaration — never a whole-working-tree scan (which would re-admit foreign
+ * uncommitted dirt). `ditto work done` fail-closes and sets that set before calling
+ * here; landGate/landCommit then consume the same set unchanged.
  */
 export function assembleCompletionFromWorkItem(
   workItem: WorkItem,

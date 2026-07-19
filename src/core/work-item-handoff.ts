@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import type { declarerRole } from '~/schemas/common';
@@ -7,6 +8,7 @@ import type { WorkItem } from '~/schemas/work-item';
 type DeclarerRole = z.infer<typeof declarerRole>;
 import { deriveAcVerdicts } from './autopilot-complete';
 import { AutopilotStore } from './autopilot-store';
+import { containScopePath } from './coverage-oracle';
 import { localDir } from './ditto-paths';
 import { writeJson } from './fs';
 import { HandoffStore, buildHandoff } from './handoff-store';
@@ -29,6 +31,14 @@ export interface HandoffOptions {
    * agent, so the default is 'main'; a verifier-owned closure can override.
    */
   declaredBy?: DeclarerRole;
+  /**
+   * Explicit, PRE-SANITIZED (see `sanitizeDeclaredPaths`) repo-relative paths the
+   * caller declares as changed by this work — an additional `changed_files` SOURCE,
+   * symmetric with the autopilot owner-report. The whole-working-tree scan was
+   * removed as a source (wi_260719ayc), so uncommitted work that is not in the
+   * committed `base...HEAD` diff must be declared here to be recorded.
+   */
+  declaredChanged?: readonly string[];
 }
 
 export class InvalidBaseRefError extends Error {
@@ -61,27 +71,93 @@ export function pickBaseRef(repoRoot: string, candidates: string[]): string | nu
   return null;
 }
 
+export interface CollectedChanges {
+  /**
+   * The DETERMINISTIC changed_files set: the committed `base...HEAD` diff ∪ the
+   * caller's explicit declaration. The whole-working-tree scan is NOT a source
+   * (wi_260719ayc) — foreign/uncommitted dirt can never pollute this set.
+   */
+  files: string[];
+  /**
+   * The committed `git diff` exited non-zero — env breakage (shallow clone /
+   * unresolvable merge-base), NOT a clean empty diff. The caller must fail-closed
+   * on this rather than treat it as "no files changed" (wi_260719ayc ac-(c)).
+   */
+  diffErrored: boolean;
+  /**
+   * GUARD, not a source: *tracked* working-tree edits that fall OUTSIDE
+   * (committed diff ∪ declared ∪ started_untracked_baseline). Their presence means
+   * real uncommitted, undeclared work — the caller fail-closes on it so a partial
+   * under-commit (committed A + uncommitted-undeclared tracked B) cannot close
+   * pass. These paths are NEVER folded into `files` — that would re-pollute
+   * changed_files, the exact bug this module fixes. Only meaningful for a live
+   * HEAD (`head === null`); untracked (`??`) dirt is excluded (it is not a tracked
+   * edit and is exactly what must not gate).
+   */
+  extraTrackedDirt: string[];
+}
+
 /**
- * Collect changed files relative to `base` using `git diff --name-only base...<head>`.
- * If `head` is null, defaults to HEAD and also includes `git status --porcelain`
- * (uncommitted changes). If `head` is an explicit ref (e.g., past commit), the
- * working tree status is *not* mixed in — the caller is asking about a frozen
- * commit range. Returns repo-relative paths with duplicates removed.
+ * Sanitize an untrusted list of declared repo-relative paths (the `--changed`
+ * input) by REUSING `containScopePath` (rejects absolute / `..`-escaping /
+ * repoRoot-escape / git pathspec-magic like `:(exclude)`), COMPOSED with: reject a
+ * leading `-` (option-injection defense-in-depth — these paths reach `git add` as
+ * positional args), reject empty/whitespace-only tokens, dedup, and SKIP paths that
+ * do not exist under the repo (dropped, not hard-rejected — a bad token is a hard
+ * reject the caller surfaces, a merely-missing path is silently ignored). One
+ * sanitizer, not a 4th ad-hoc filter (wi_260719ayc ac-(C)).
  */
-function collectChangedFiles(
+export function sanitizeDeclaredPaths(
+  raw: readonly string[],
+  repoRoot: string,
+): { accepted: string[]; rejected: { path: string; reason: string }[] } {
+  const accepted = new Set<string>();
+  const rejected: { path: string; reason: string }[] = [];
+  for (const token of raw) {
+    const trimmed = token.trim();
+    if (trimmed.length === 0) {
+      rejected.push({ path: token, reason: 'empty/whitespace-only token' });
+      continue;
+    }
+    if (trimmed.startsWith('-')) {
+      rejected.push({ path: token, reason: 'leading `-` (option-injection) rejected' });
+      continue;
+    }
+    const contained = containScopePath(trimmed, repoRoot);
+    if (!contained.ok) {
+      rejected.push({ path: token, reason: contained.detail });
+      continue;
+    }
+    // Skip a declared path that does not exist under the repo (dropped silently —
+    // e.g. a typo; a genuine deletion simply is not carried in changed_files).
+    if (!existsSync(contained.abs)) continue;
+    accepted.add(trimmed);
+  }
+  return { accepted: Array.from(accepted), rejected };
+}
+
+/**
+ * Collect the DETERMINISTIC changed_files set from the committed `base...HEAD` diff
+ * ∪ the caller's `declared` paths (already sanitized). The whole-working-tree
+ * `git status` scan is NO LONGER a source (wi_260719ayc) — in a shared tree it made
+ * foreign uncommitted dirt indistinguishable from this work's edits. The tree is
+ * consulted only as a GUARD (`extraTrackedDirt`) to fail-closed on uncommitted,
+ * undeclared tracked work. If `head` is an explicit ref, the working tree is not
+ * consulted at all — the caller is asking about a frozen commit range.
+ */
+export function collectChangedFiles(
   repoRoot: string,
   base: string | null,
   head: string | null,
   // #36 (wi_260713u4k): the run's `started_untracked_baseline` — untracked (`??`) dirt
-  // that predated this run (captured at the draft → in_progress edge, wi_260710s4j).
-  // Excluded from the terminal collect by EXACT-SET membership (same idiom as the loop's
-  // record-result union / collectChangeSurface), so foreign pre-existing dirt does not
-  // re-enter changed_files at work-done and overwrite the clean union. A prefix sibling
-  // (`foobar/x` vs the `foo/` baseline dir) is NOT over-excluded. Absent ⇒ no exclusion.
+  // that predated this run. Still excluded (defensively) from the deterministic set and
+  // from the guard, though with the scan removed nothing untracked reaches `files` anyway.
   baseline: readonly string[] = [],
-): string[] {
+  declared: readonly string[] = [],
+): CollectedChanges {
   const excluded = new Set(baseline);
   const set = new Set<string>();
+  let diffErrored = false;
   if (base !== null) {
     const headSpec = head ?? 'HEAD';
     const diff = Bun.spawnSync(
@@ -94,9 +170,23 @@ function collectChangedFiles(
         const t = line.trim();
         if (t.length > 0) set.add(t);
       }
+    } else {
+      // (c) A non-zero `git diff` is env breakage (shallow clone / unresolvable
+      // merge-base), NOT a clean empty diff — surface it so the caller fails closed
+      // instead of silently reporting "no files changed".
+      diffErrored = true;
     }
   }
-  // head이 명시되면 working tree status는 의미 없음 (과거 commit 범위 정정 시나리오).
+  // Declared paths are an explicit SOURCE (symmetric with the autopilot owner-report).
+  for (const p of declared) set.add(p);
+
+  const files = Array.from(set).filter(
+    (p) => !p.startsWith('/') && !p.includes('..') && !excluded.has(p),
+  );
+
+  // (b) Working tree as a GUARD, not a source. head이 명시되면 working tree status는
+  // 의미 없음 (과거 commit 범위 정정 시나리오).
+  const extraTrackedDirt: string[] = [];
   if (head === null) {
     const status = Bun.spawnSync(['git', 'status', '--porcelain'], {
       cwd: repoRoot,
@@ -104,20 +194,25 @@ function collectChangedFiles(
       stderr: 'pipe',
     });
     if (status.exitCode === 0) {
+      const known = new Set(files);
       const text = status.stdout?.toString() ?? '';
       for (const line of text.split('\n')) {
+        if (line.length === 0) continue;
+        // `??` untracked / `!!` ignored: NOT a tracked edit → not mutation evidence.
+        const code = line.slice(0, 2);
+        if (code === '??' || code === '!!') continue;
         // porcelain line format: XY <path>  or  XY <orig> -> <new>
         const trimmed = line.replace(/^..\s*/, '').trim();
         if (trimmed.length === 0) continue;
         const arrow = trimmed.indexOf(' -> ');
         const path = arrow === -1 ? trimmed : trimmed.slice(arrow + 4);
-        set.add(path);
+        if (path.startsWith('/') || path.includes('..')) continue;
+        if (known.has(path) || excluded.has(path)) continue;
+        extraTrackedDirt.push(path);
       }
     }
   }
-  // Filter out paths that escape the repo or are absolute, and drop foreign
-  // pre-existing untracked dirt (started_untracked_baseline, exact-set).
-  return Array.from(set).filter((p) => !p.startsWith('/') && !p.includes('..') && !excluded.has(p));
+  return { files, diffErrored, extraTrackedDirt };
 }
 
 function buildCompletion(
@@ -215,25 +310,50 @@ export async function writeWorkItemHandoff(
     }
     headUsed = verifiedHead;
   }
-  const collected = collectChangedFiles(
+  const collectResult = collectChangedFiles(
     repoRoot,
     baseUsed,
     headUsed,
     item.started_untracked_baseline,
+    options.declaredChanged ?? [],
   );
+  const collected = collectResult.files;
   // "changed_files not recorded" 판정은 git이 실제로 본 변경(collected) 기준.
   // self-artifact union은 그 판정과 별개로 항상 일어남.
   const unverifiedExtras: { item: string; reason: string; out_of_scope: boolean }[] = [];
+  // (c) A non-zero `git diff` is env breakage, not a clean empty diff — fail-closed
+  // regardless of runs/evidence, with a reason that does NOT claim "returned no files".
+  if (collectResult.diffErrored) {
+    unverifiedExtras.push({
+      item: 'changed_files not determinable',
+      reason: `git diff against ${baseUsed} exited non-zero (shallow clone or unresolvable merge-base) — the committed change cannot be determined; fetch full history / pass a reachable --base, or declare paths with --changed`,
+      out_of_scope: false,
+    });
+  }
+  // (b) A tracked working-tree edit OUTSIDE (committed diff ∪ declared ∪ baseline) is
+  // real uncommitted, undeclared work — fail-closed so a partial under-commit
+  // (committed A + uncommitted-undeclared tracked B) cannot close pass. These paths are
+  // NOT folded into changed_files (that would re-pollute).
+  if (collectResult.extraTrackedDirt.length > 0) {
+    unverifiedExtras.push({
+      item: 'uncommitted tracked changes outside the recorded set',
+      reason: `tracked working-tree edits are not in the committed diff or the declaration: ${collectResult.extraTrackedDirt.join(
+        ', ',
+      )} — commit them, or declare via --changed, so the completion records the real change`,
+      out_of_scope: false,
+    });
+  }
   if (
     collected.length === 0 &&
+    !collectResult.diffErrored &&
     (item.runs.length > 0 || item.acceptance_criteria.some((a) => a.evidence.length > 0))
   ) {
     unverifiedExtras.push({
       item: 'changed_files not recorded',
       reason:
         baseUsed === null
-          ? 'no base ref (--base, origin/main, origin/master, main, master) usable and work item has runs/evidence; fill manually or pass --base'
-          : `git diff against ${baseUsed} returned no files but work item has runs/evidence`,
+          ? 'no base ref (--base, origin/main, origin/master, main, master) usable and work item has runs/evidence; commit the change, declare paths with --changed, or pass --base'
+          : `git diff against ${baseUsed} returned no files but work item has runs/evidence; commit the change or declare paths with --changed`,
       out_of_scope: false,
     });
   }
