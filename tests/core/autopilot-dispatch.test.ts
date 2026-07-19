@@ -479,6 +479,43 @@ describe('guardMutatingEvidence (G7 확장: mutating pass needs changed_files)',
   test('a fail outcome is untouched (the guard only constrains a pass claim)', () => {
     expect(guardMutatingEvidence('implementer', 'fail', []).contentful).toBe(true);
   });
+
+  // wi_2607194d0: a `refactorer` no-op is exempt by ROLE (all no-tidy is valid), but an
+  // `implementer` no-op is only sometimes valid — a conditional-removal node that finds
+  // nothing to remove (0 dead candidates) legitimately changes 0 files. Without an exit
+  // for THAT case, a verify node that depends_on it deadlocks (same gap #34 fixed for
+  // refactorer). The signal that separates a justified no-op from an empty/fabricated one
+  // is an explicit `no_op_justification` the implementer declares.
+  test('ac-1: an implementer no-op WITH a justification signal is contentful (justified no-op)', () => {
+    expect(
+      guardMutatingEvidence(
+        'implementer',
+        'pass',
+        [],
+        'scanned 42 files for dead candidates; 0 found, nothing to remove',
+      ).contentful,
+    ).toBe(true);
+  });
+
+  test('ac-2: an implementer no-op WITHOUT a justification signal stays fixable', () => {
+    expect(guardMutatingEvidence('implementer', 'pass', [])).toMatchObject({
+      contentful: false,
+      failure_class: 'fixable',
+    });
+    // an empty / whitespace-only justification is not a signal — still fixable.
+    expect(guardMutatingEvidence('implementer', 'pass', [], '   ')).toMatchObject({
+      contentful: false,
+      failure_class: 'fixable',
+    });
+  });
+
+  test('ac-2: a justification signal does NOT excuse a non-mutating-owner or contentful pass path', () => {
+    // a justification on a pass that already carries changed_files is a normal contentful
+    // pass (the no-op branch never triggers).
+    expect(
+      guardMutatingEvidence('implementer', 'pass', ['src/x.ts'], 'irrelevant').contentful,
+    ).toBe(true);
+  });
 });
 
 // #21 follow-up (wi_2607132m8): the pre-approval `test-author` node is seeded with

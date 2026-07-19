@@ -1704,6 +1704,19 @@ export const recordResultPayload = z
           'pin. The expected reporter is a mutating node (implementer/refactorer).',
       ),
     reason: z.string().optional().describe('2–3 line rationale recorded in the decision log'),
+    // wi_2607194d0: an `implementer` node's explicit declaration that it INTENTIONALLY
+    // changed 0 files (a conditional-removal node with nothing to remove). Present + non-empty
+    // exempts an implementer no-op from the zero-change floor in guardMutatingEvidence (the
+    // homolog of the #34 refactorer exemption) so a verify node that depends_on it does not
+    // deadlock. Absent / whitespace-only ⇒ a bare no-op stays fixable (claim ≠ proof). Ignored
+    // when the node changed files or is not an implementer.
+    no_op_justification: z
+      .string()
+      .optional()
+      .describe(
+        'Implementer-declared justification for an intentional 0-file change (e.g. "0 dead ' +
+          'candidates to remove"); exempts an implementer no-op from the zero-change floor',
+      ),
     generated_nodes: z
       .array(nodeProposal)
       .optional()
@@ -2811,6 +2824,7 @@ async function recordResultCore(
       node.owner,
       input.payload.outcome,
       input.payload.changed_files ?? [],
+      input.payload.no_op_justification,
     );
     if (!mut.contentful) {
       contentful = false;

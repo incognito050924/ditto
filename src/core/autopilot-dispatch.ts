@@ -437,13 +437,31 @@ export function guardMutatingEvidence(
   owner: AutopilotNode['owner'],
   outcome: 'pass' | 'fail',
   changedFiles: string[],
+  noOpJustification?: string,
 ): ChildResultGuard {
   // #34 (wi_260713j6x): a `refactorer` (Tidy-First) node legitimately has NOTHING to
   // tidy — no-tidy is a valid outcome, never a phantom mutation. Exempt it from the
   // zero-change floor so a no-op tidy closes cleanly (else its treplay verify, which
   // depends_on it, deadlocks). This does NOT weaken the floor for `implementer` (or any
-  // other mutating owner): a no-op there is still a claim-without-proof and stays fixable.
+  // other mutating owner): a bare no-op there is still a claim-without-proof and stays fixable.
   if (owner === 'refactorer') return { contentful: true };
+  // wi_2607194d0: the homolog of the #34 gap for `implementer` — a conditional-removal
+  // node (e.g. "delete dead candidates IF any") legitimately changes 0 files when there is
+  // nothing to remove, and a verify node that depends_on it would deadlock. Unlike refactorer,
+  // an implementer no-op is NOT valid by role, so it is NOT blanket-exempt: it passes ONLY
+  // when the implementer DECLARES an explicit `no_op_justification`. This does not weaken the
+  // floor against empty/fabricated results — a bare no-op with no (or whitespace-only)
+  // justification stays fixable. This guard is a floor against degenerate empty results, not
+  // a spawn-verification boundary (which code cannot observe), so a self-declared reason —
+  // the same trust model as the self-reported changed_files it sits beside — is sufficient.
+  if (
+    outcome === 'pass' &&
+    owner === 'implementer' &&
+    changedFiles.length === 0 &&
+    (noOpJustification?.trim().length ?? 0) > 0
+  ) {
+    return { contentful: true };
+  }
   if (outcome === 'pass' && isMutatingOwner(owner) && changedFiles.length === 0) {
     return {
       contentful: false,
