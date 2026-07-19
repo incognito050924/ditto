@@ -69,6 +69,7 @@ import { deriveTidyScope, planTidyOnImplementPass } from './autopilot-tidy';
 import { PLACEHOLDER_AC_STATEMENT } from './charter';
 import { countUnitOnlyClosures, isClosed } from './completion-coverage-doctor';
 import { CompletionStore } from './completion-store';
+import { ConvergenceStore, buildConvergence } from './convergence-store';
 import { CoverageFeedbackLedger } from './coverage-feedback';
 import { assertOracleFrozen, producePlanGate, validateAcOracle } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
@@ -1162,6 +1163,9 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
         reason,
         now: new Date(),
       });
+      // Wire the convergence sidecar to the SAME disposition so the stop hook reads a
+      // fresh (non-stale) record at this observable termination transition.
+      await writeConvergenceSidecar(repoRoot, workItemId, graph, disposition ?? 'blocked');
       return { action: 'done', all_passed, disposition, reason };
     }
     // Not terminal and nothing ready: a running node is transient (still working);
@@ -1189,6 +1193,9 @@ export async function nextNode(repoRoot: string, workItemId: string): Promise<Ne
           reason,
           now: new Date(),
         });
+        // Same observable termination transition — refresh the convergence sidecar so
+        // the stop hook does not read a stale record on a blocked-escalation close.
+        await writeConvergenceSidecar(repoRoot, workItemId, graph, 'blocked');
         return {
           action: 'blocked',
           blocked_node_ids: blocked.map((n) => n.id),
@@ -2462,6 +2469,47 @@ async function recordLoopTermination(
     disposition: spec.disposition,
     reason: `loop terminated (${spec.disposition}): ${spec.reason}`,
   });
+}
+
+// Verdict the whole-graph disposition maps onto the convergence completion_gate.
+// `capped` is deliberately NOT `pass` (ADR-0024: capped ≠ converged) so `converged`
+// stays false and `exit.reason` derives to `cap_reached` (the ledger_only floor).
+const CONVERGENCE_VERDICT_OF: Record<
+  'converged' | 'capped' | 'blocked',
+  'pass' | 'partial' | 'fail'
+> = { converged: 'pass', capped: 'partial', blocked: 'fail' };
+
+/**
+ * Wire the per-work-item convergence sidecar onto the loop path (M3.3). The stop
+ * hook reads exactly ONE `convergence.json` per work item and gates on its
+ * `exit.reason`, so it must be (re)written on EVERY termination transition the hook
+ * can observe — else the hook reads a stale record. `buildConvergence` rebuilds the
+ * whole record deterministically (no `appendLedgerEntry`, so the get()-throws-without-
+ * prior-write pitfall never applies) and validates against the convergence schema
+ * before the atomic write.
+ *
+ * The whole-graph decision log stays the whole-graph SoT (the objection detail lives
+ * there); this sidecar carries only the closure disposition. `rounds_run` is the real
+ * forward-round count, so a budget-exhausted close derives `cap_reached` (ledger_only,
+ * gate lets it close) while a block WITH budget left derives `blocked` (gate keeps
+ * going) — the reason follows the fact, no override needed.
+ */
+async function writeConvergenceSidecar(
+  repoRoot: string,
+  workItemId: string,
+  graph: Autopilot,
+  disposition: 'converged' | 'capped' | 'blocked',
+): Promise<void> {
+  const record = buildConvergence({
+    workItemId,
+    targetRef: workItemId,
+    roundCap: graph.caps.loop_rounds,
+    roundsRun: totalForwardRounds(graph.nodes.map((n) => n.id)),
+    versions: [{ version: 1, score: disposition === 'converged' ? 1 : 0, evidence_refs: [] }],
+    ledger: [],
+    completionGateVerdict: CONVERGENCE_VERDICT_OF[disposition],
+  });
+  await new ConvergenceStore(repoRoot).write(record);
 }
 
 // ── T1 (wi_2606266az) auto-resolve forward triggers (ac-2/3/4/5) ─────────────

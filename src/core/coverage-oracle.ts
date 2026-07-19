@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
 import {
-  type LabelerLabel,
   type OracleClaim,
   type OracleEnforcementTier,
   type OracleVerdict,
@@ -219,130 +218,6 @@ export function enforcementTierForCategory(categoryId?: string): OracleEnforceme
  */
 export function isHardRejected(verdict: OracleVerdict): boolean {
   return verdict.tier === 'hard_reject' && verdict.outcome === 'refuted';
-}
-
-// ── fabrication correlation — the deterministic CORRELATE slot (ac-5, n9) ──
-// oracle = ENFORCE, labeler = JUDGE, this function = CORRELATE: the fabrication
-// measurement joins the two INDEPENDENT sets ({oracle verdicts} × {verdict-blind
-// labeler labels}) on claim_id — computed by deterministic ditto code, never by
-// either agent (the third circularity blocker of the design contract).
-
-/** Deterministic correlation of the ENFORCE set × the JUDGE set (ac-5). */
-export interface FabricationCorrelation {
-  /** Oracle outcome counts (ENFORCE set, deduped by claim_id — last wins). */
-  oracle: { claims: number; confirmed: number; refuted: number; advisory_unverified: number };
-  /** Labeler label counts (JUDGE set, deduped by claim_id — last wins). */
-  labeler: { claims: number; real: number; fabricated: number };
-  /** Contingency matrix over claim_ids present in BOTH sets. */
-  joint: {
-    pairs: number;
-    confirmed_real: number;
-    confirmed_fabricated: number;
-    refuted_real: number;
-    refuted_fabricated: number;
-    advisory_real: number;
-    advisory_fabricated: number;
-  };
-  /**
-   * Claims visible to only one set — kept visible, never silently dropped.
-   * `labeler_only` also guards the routing blind spot: a claim self-declaring a
-   * user-intent category bypasses the oracle and never lands in the sidecar, so
-   * the labeler's observable population is the code-verify-routed claims; a
-   * label with no matching verdict is an anomaly the measurement must surface.
-   */
-  unmatched: { oracle_only: number; labeler_only: number };
-  /**
-   * Rates are `null` when the denominator is 0 — an unmeasured rate is
-   * UNMEASURABLE, never 0% (no fabricated numbers, ac-5).
-   */
-  rates: {
-    /** refuted / (confirmed + refuted) — decidable oracle outcomes only. */
-    oracle_fabrication_rate: number | null;
-    /** fabricated / (real + fabricated). */
-    labeler_fabrication_rate: number | null;
-    /** (confirmed×real + refuted×fabricated) / decidable joint pairs. */
-    decidable_agreement_rate: number | null;
-  };
-}
-
-/** null-not-zero: a 0-denominator rate is unmeasurable, never 0%. */
-function ratio(numerator: number, denominator: number): number | null {
-  return denominator === 0 ? null : numerator / denominator;
-}
-
-/**
- * Correlate the two independent measurement sets into the fabrication tally
- * (ac-5). Pure and deterministic — no I/O, no agent judgment.
- */
-export function correlateFabrication(
-  oracleVerdicts: readonly OracleVerdict[],
-  labelerLabels: readonly LabelerLabel[],
-): FabricationCorrelation {
-  // Dedupe by claim_id, last wins — the same merge semantics the
-  // oracle-provenance sidecar applies (coverage-loop appendOracleVerdicts).
-  const verdictById = new Map(oracleVerdicts.map((v) => [v.claim_id, v]));
-  const labelById = new Map(labelerLabels.map((l) => [l.claim_id, l]));
-  const verdicts = [...verdictById.values()];
-  const labels = [...labelById.values()];
-  const countOutcome = (outcome: OracleVerdict['outcome']): number =>
-    verdicts.filter((v) => v.outcome === outcome).length;
-  const countLabel = (label: LabelerLabel['label']): number =>
-    labels.filter((l) => l.label === label).length;
-  const oracle = {
-    claims: verdicts.length,
-    confirmed: countOutcome('confirmed'),
-    refuted: countOutcome('refuted'),
-    advisory_unverified: countOutcome('advisory_unverified'),
-  };
-  const labeler = {
-    claims: labels.length,
-    real: countLabel('real'),
-    fabricated: countLabel('fabricated'),
-  };
-  const joint = {
-    pairs: 0,
-    confirmed_real: 0,
-    confirmed_fabricated: 0,
-    refuted_real: 0,
-    refuted_fabricated: 0,
-    advisory_real: 0,
-    advisory_fabricated: 0,
-  };
-  const cell = (
-    outcome: OracleVerdict['outcome'],
-    label: LabelerLabel['label'],
-  ): keyof typeof joint => {
-    const row = outcome === 'advisory_unverified' ? 'advisory' : outcome;
-    return `${row}_${label}` as keyof typeof joint;
-  };
-  let oracleOnly = 0;
-  for (const v of verdicts) {
-    const label = labelById.get(v.claim_id);
-    if (label === undefined) {
-      oracleOnly += 1;
-      continue;
-    }
-    joint.pairs += 1;
-    joint[cell(v.outcome, label.label)] += 1;
-  }
-  const labelerOnly = labels.filter((l) => !verdictById.has(l.claim_id)).length;
-  return {
-    oracle,
-    labeler,
-    joint,
-    unmatched: { oracle_only: oracleOnly, labeler_only: labelerOnly },
-    rates: {
-      oracle_fabrication_rate: ratio(oracle.refuted, oracle.confirmed + oracle.refuted),
-      labeler_fabrication_rate: ratio(labeler.fabricated, labeler.real + labeler.fabricated),
-      decidable_agreement_rate: ratio(
-        joint.confirmed_real + joint.refuted_fabricated,
-        joint.confirmed_real +
-          joint.confirmed_fabricated +
-          joint.refuted_real +
-          joint.refuted_fabricated,
-      ),
-    },
-  };
 }
 
 /** One raw claim handed to the oracle (untrusted; ids are the correlation keys). */

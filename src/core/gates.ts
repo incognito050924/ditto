@@ -824,7 +824,14 @@ export function convergenceGate(c: Convergence): GateResult {
       `수렴 판정 기록값 ${c.gate.converged} != 기대값 ${expectedConverged}(완료 통과 ∧ 미해결 반론 0)`,
     );
   }
-  if (!expectedConverged) {
+  // A non-converged record normally blocks (force another convergence round). But
+  // `exit.reason === 'cap_reached'` is the budget-exhausted floor: `deriveClosureMode`
+  // (this file) maps cap_reached + blocked-gate to a VALID `ledger_only` closure, so
+  // re-forcing continuation on it is a livelock (the cap can never be un-reached — the
+  // residual objection is delegated to the completion gate / handoff, not spun forever).
+  // Suppress the not-converged block for cap_reached; the converged-flag consistency
+  // checks above still fire (a mislabelled record is still caught).
+  if (!expectedConverged && c.exit.reason !== 'cap_reached') {
     reasons.push('수렴 안 됨: 완료 게이트가 통과가 아니거나, 미해결 반론이 남아 있음');
   }
   return gate(reasons);

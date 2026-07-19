@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appendFlakyHistory } from '~/core/e2e/failure-verdict';
@@ -8,7 +8,6 @@ import {
   detectStale,
   isDittoGenerated,
   parseGeneratedHeader,
-  partitionSpecFiles,
   renderGeneratedHeader,
   sha256Hex,
 } from '~/core/e2e/journey-digest';
@@ -205,16 +204,5 @@ describe('derived vs human identification (ac-8)', () => {
 
   test('prose mentioning the marker mid-line is not identified as generated', () => {
     expect(isDittoGenerated("const s = 'docs say @ditto-generated means derived';\n")).toBe(false);
-  });
-
-  test('partitionSpecFiles splits a directory into generated vs manual', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'ditto-dsl-'));
-    await mkdir(join(dir, 'support'), { recursive: true });
-    await writeFile(join(dir, 'checkout.spec.ts'), generatedSpec(journeySource));
-    await writeFile(join(dir, 'human.spec.ts'), "test('human', () => {});\n");
-    await writeFile(join(dir, 'support', 'login.block.ts'), generatedSpec(journeySource));
-    const out = await partitionSpecFiles(dir);
-    expect(out.generated.sort()).toEqual(['checkout.spec.ts', 'support/login.block.ts']);
-    expect(out.manual).toEqual(['human.spec.ts']);
   });
 });

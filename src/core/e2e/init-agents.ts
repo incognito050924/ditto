@@ -244,39 +244,6 @@ export async function writeMergedMcpJson(
   return { mcpPath, backupPath, servers: Object.keys(merged.mcpServers) };
 }
 
-// ── agent-file overwrite guard ──────────────────────────────────────────────
-
-/** True when the content already carries the ditto agent marker (ours to refresh). */
-export function hasDittoAgentMarker(content: string): boolean {
-  return content.includes(DITTO_AGENT_MARKER);
-}
-
-/**
- * Install an agent file, mirroring the push-gate hook posture: a fresh path is
- * `installed`; a ditto-marked file is `refreshed` in place; a pre-existing
- * NON-ditto file is backed up ONCE (writeBackupOnce) then overwritten.
- */
-export async function installAgentFile(
-  destPath: string,
-  content: string,
-  seam: FsSeam = nodeFsSeam,
-): Promise<{ action: 'installed' | 'refreshed' | 'backed-up'; backupPath: string | null }> {
-  const exists = await seam.exists(destPath);
-  if (!exists) {
-    await seam.ensureDir(dirname(destPath));
-    await seam.writeText(destPath, content);
-    return { action: 'installed', backupPath: null };
-  }
-  const current = await seam.readText(destPath);
-  if (hasDittoAgentMarker(current)) {
-    await seam.writeText(destPath, content);
-    return { action: 'refreshed', backupPath: null };
-  }
-  const backupPath = await seam.backupOnce(destPath);
-  await seam.writeText(destPath, content);
-  return { action: 'backed-up', backupPath };
-}
-
 // ── scaffold create-if-absent ───────────────────────────────────────────────
 
 /** Write `content` only when `path` is absent; never overwrite a user file. */

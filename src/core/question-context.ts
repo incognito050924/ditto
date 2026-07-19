@@ -365,50 +365,6 @@ export function needsBriefing(
   return Buffer.byteLength(rendered, 'utf8') > limit;
 }
 
-// --- ac-4 (D2): reviewer routing + regeneration cap (judgment logic only) -----
-//
-// Per-question regeneration cap (fixed, small). Distinct from deep-interview's
-// question_cap (total question count) — do not reuse that. The reviewer is the
-// session-blind context-reviewer (D5); spawning is the SKILL node's job. These pure
-// functions are only the judgment: who gets reviewed, and what terminal/next state the
-// cap implies. Honesty over silence: a failed/absent review degrades visibly
-// ('unverified-degraded'), never a silent ask or a stall (ADR-0018 D1/D2).
-export const REVIEW_REGENERATE_CAP = 2;
-
-export type ReviewRouting = { action: 'review' } | { action: 'skip-review' };
-
-/** critical questions need the session-blind reviewer; others skip it. */
-export function routeForReview(input: { critical: boolean }): ReviewRouting {
-  return input.critical ? { action: 'review' } : { action: 'skip-review' };
-}
-
-export type ReviewDecision =
-  | { status: 'reviewed' }
-  | { status: 'regenerate'; attempt: number }
-  | { status: 'unverified-degraded'; reason: 'cap-exhausted' | 'reviewer-unavailable' };
-
-/**
- * Decide the review outcome for one critical question:
- *  - reviewer passed                       → 'reviewed'
- *  - reviewer unavailable (spawn failed)   → 'unverified-degraded' (reviewer-unavailable)
- *  - cap (2) already exhausted             → 'unverified-degraded' (cap-exhausted)
- *  - otherwise                             → 'regenerate' (attempt = regenerations + 1)
- */
-export function resolveReviewDecision(input: {
-  passed: boolean;
-  regenerations: number;
-  reviewerAvailable: boolean;
-}): ReviewDecision {
-  if (input.passed) return { status: 'reviewed' };
-  if (!input.reviewerAvailable) {
-    return { status: 'unverified-degraded', reason: 'reviewer-unavailable' };
-  }
-  if (input.regenerations >= REVIEW_REGENERATE_CAP) {
-    return { status: 'unverified-degraded', reason: 'cap-exhausted' };
-  }
-  return { status: 'regenerate', attempt: input.regenerations + 1 };
-}
-
 // --- ac-4 (wi_260713cx4, #27): branch-walking seam-detection --------------------
 //
 // A SEAM is where the current branch opens no further value-bearing dependent decision —

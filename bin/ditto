@@ -14993,6 +14993,52 @@ var init_fs = __esm(() => {
   };
 });
 
+// src/schemas/evidence-record.ts
+var freshness, portability, evidenceRecord, evidenceIndex;
+var init_evidence_record = __esm(() => {
+  init_zod();
+  init_common();
+  freshness = exports_external.enum(["fresh", "stale"]).describe("Whether the captured evidence still reflects the current state");
+  portability = exports_external.enum(["committed", "local-artifact"]).describe("Whether the raw artifact travels with the repo (committed) or only exists in the capturing clone/session (local-artifact)");
+  evidenceRecord = exports_external.object({
+    ref: evidenceRef,
+    captured_at: isoDateTime,
+    freshness,
+    stale_reason: exports_external.string().min(1).nullable().default(null).describe("Why the evidence is stale; required when freshness=stale, null when fresh"),
+    portability,
+    artifact_available: exports_external.boolean().describe("True when the raw artifact can be opened in this clone/session"),
+    exit_code: exports_external.number().int().nullable().default(null).describe("Process exit code for command evidence; null for non-command kinds"),
+    key_lines: exports_external.array(exports_external.string()).default([]).describe("Excerpt lines that make the evidence judgeable without the raw artifact")
+  }).superRefine((value, ctx) => {
+    if (value.freshness === "stale" && !value.stale_reason) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "freshness=stale requires a stale_reason",
+        path: ["stale_reason"]
+      });
+    }
+    if (value.freshness === "fresh" && value.stale_reason !== null) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "freshness=fresh must not carry a stale_reason (set it null)",
+        path: ["stale_reason"]
+      });
+    }
+    if (value.portability === "committed" && value.artifact_available !== true) {
+      ctx.addIssue({
+        code: exports_external.ZodIssueCode.custom,
+        message: "portability=committed implies artifact_available=true",
+        path: ["artifact_available"]
+      });
+    }
+  }).describe("Evidence freshness/portability sidecar wrapping an evidenceRef");
+  evidenceIndex = exports_external.object({
+    schema_version: schemaVersion,
+    work_item_id: workItemId,
+    records: exports_external.array(evidenceRecord).default([])
+  }).describe("Committable evidence ledger (.ditto/local/work-items/<id>/evidence-index.json)");
+});
+
 // src/schemas/memory-source.ts
 var memorySourceId, memorySourceType, memorySensitivity, gitCommit, memorySource;
 var init_memory_source = __esm(() => {
@@ -15227,10 +15273,115 @@ var init_memory_projection_manifest = __esm(() => {
   }).describe("Lineage contract: what inputs a projection was built from, so freshness is cheap to judge (report \xA73.4)");
 });
 
-// src/core/memory-store.ts
+// src/schemas/evidence-log.ts
+var commandLogEntry, editLogEntry;
+var init_evidence_log = __esm(() => {
+  init_zod();
+  init_common();
+  commandLogEntry = exports_external.object({
+    ts: isoDateTime,
+    kind: exports_external.literal("command").describe("Discriminator; only command entries are currently defined"),
+    command: exports_external.string().min(1).describe("Exact command line as executed"),
+    exit_code: exports_external.number().int(),
+    duration_ms: exports_external.number().int().nonnegative().optional(),
+    sha256: sha256.optional().describe("Hash of captured output when stored as artifact"),
+    output_path: relativePath.optional().describe("Repo-relative path to the captured stdout/stderr file if stored separately"),
+    work_item_id: exports_external.string().regex(/^wi_[a-z0-9]{8,}$/).optional().describe("Work item that owns this log entry; redundant with file location but kept for self-contained replay"),
+    criterion_id: exports_external.string().optional().describe("Acceptance criterion this command was meant to verify, if any")
+  }).describe("One line of .ditto/local/work-items/<id>/evidence/commands.jsonl");
+  editLogEntry = exports_external.object({
+    ts: isoDateTime,
+    kind: exports_external.literal("edit").describe("Discriminator for file-mutation tool entries"),
+    tool: exports_external.enum(["Edit", "Write", "MultiEdit"]).describe("The file-mutation tool that produced this change"),
+    file_path: exports_external.string().min(1).describe("Path of the edited/written file as the tool received it"),
+    work_item_id: exports_external.string().regex(/^wi_[a-z0-9]{8,}$/).optional().describe("Work item that owns this log entry; redundant with file location")
+  }).describe("One line of .ditto/local/work-items/<id>/evidence/edits.jsonl. Records Edit/Write/MultiEdit " + "tool use so evidence collection is not command-only (V6); audit of what files a node touched.");
+});
+
+// src/core/evidence-store.ts
 import { createHash as createHash4 } from "crypto";
+import { join as join25 } from "path";
+
+class EvidenceStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  workItemDir(workItemId2) {
+    return localDir(this.repoRoot, "work-items", workItemId2);
+  }
+  evidenceDir(workItemId2) {
+    return join25(this.workItemDir(workItemId2), "evidence");
+  }
+  commandsPath(workItemId2) {
+    return join25(this.evidenceDir(workItemId2), "commands.jsonl");
+  }
+  evidenceIndexPath(workItemId2) {
+    return join25(this.workItemDir(workItemId2), "evidence-index.json");
+  }
+  async appendCommand(workItemId2, entry) {
+    const parsed = commandLogEntry.parse(entry);
+    await ensureDir(this.evidenceDir(workItemId2));
+    const path = this.commandsPath(workItemId2);
+    const file = Bun.file(path);
+    const existing = await file.exists() ? await file.text() : "";
+    const trimmed = existing.length === 0 || existing.endsWith(`
+`) ? existing : `${existing}
+`;
+    const line = JSON.stringify(parsed);
+    await atomicWriteText(path, `${trimmed}${line}
+`);
+    return parsed;
+  }
+  async readAll(workItemId2) {
+    const path = this.commandsPath(workItemId2);
+    const file = Bun.file(path);
+    if (!await file.exists())
+      return [];
+    const text = await file.text();
+    const lines = text.split(`
+`).filter((l2) => l2.length > 0);
+    return lines.map((line, idx) => {
+      try {
+        return commandLogEntry.parse(JSON.parse(line));
+      } catch (err) {
+        throw new Error(`commands.jsonl ${path}:${idx + 1} invalid: ${String(err)}`);
+      }
+    });
+  }
+  async readIndex(workItemId2) {
+    const path = this.evidenceIndexPath(workItemId2);
+    if (!await Bun.file(path).exists()) {
+      return { schema_version: "0.1.0", work_item_id: workItemId2, records: [] };
+    }
+    return readJson(path, evidenceIndex);
+  }
+  async appendRecord(workItemId2, record) {
+    const current = await this.readIndex(workItemId2);
+    const next = {
+      schema_version: "0.1.0",
+      work_item_id: workItemId2,
+      records: [...current.records, evidenceRecord.parse(record)]
+    };
+    await ensureDir(this.workItemDir(workItemId2));
+    return writeJson(this.evidenceIndexPath(workItemId2), evidenceIndex, next);
+  }
+}
+function sha256Hex(content) {
+  const hash = createHash4("sha256");
+  hash.update(content);
+  return hash.digest("hex");
+}
+var init_evidence_store = __esm(() => {
+  init_evidence_log();
+  init_evidence_record();
+  init_ditto_paths();
+  init_fs();
+});
+
+// src/core/memory-store.ts
 import { open as open2, readdir as readdir10 } from "fs/promises";
-import { dirname as dirname5, join as join25 } from "path";
+import { dirname as dirname5, join as join26 } from "path";
 
 class MemorySourceStore {
   repoRoot;
@@ -15238,10 +15389,10 @@ class MemorySourceStore {
     this.repoRoot = repoRoot;
   }
   dir() {
-    return join25(dittoDir(this.repoRoot), "memory", "sources");
+    return join26(dittoDir(this.repoRoot), "memory", "sources");
   }
   path(id) {
-    return join25(this.dir(), `${id}.json`);
+    return join26(this.dir(), `${id}.json`);
   }
   async exists(id) {
     return Bun.file(this.path(id)).exists();
@@ -15264,7 +15415,7 @@ class MemorySourceStore {
       if (!name.endsWith(".json"))
         continue;
       try {
-        out.push(await readJson(join25(this.dir(), name), memorySource));
+        out.push(await readJson(join26(this.dir(), name), memorySource));
       } catch {}
     }
     return out;
@@ -15277,10 +15428,10 @@ class MemoryEventStore {
     this.repoRoot = repoRoot;
   }
   dir() {
-    return join25(dittoDir(this.repoRoot), "memory", "events");
+    return join26(dittoDir(this.repoRoot), "memory", "events");
   }
   path(id) {
-    return join25(this.dir(), `${id}.json`);
+    return join26(this.dir(), `${id}.json`);
   }
   async append(event) {
     const validated = memoryEvent.parse(event);
@@ -15318,7 +15469,7 @@ class MemoryEventStore {
       if (!name.endsWith(".json"))
         continue;
       try {
-        out.push(await readJson(join25(this.dir(), name), memoryEvent));
+        out.push(await readJson(join26(this.dir(), name), memoryEvent));
       } catch {}
     }
     out.sort((a2, b2) => {
@@ -15357,13 +15508,13 @@ class MemoryProjectionStore {
     return localDir(this.repoRoot, "memory", "projections");
   }
   manifestPath() {
-    return join25(this.dir(), "manifest.json");
+    return join26(this.dir(), "manifest.json");
   }
   servingPath() {
-    return join25(this.dir(), "graph.json");
+    return join26(this.dir(), "graph.json");
   }
   wikiDir() {
-    return join25(this.dir(), "wiki");
+    return join26(this.dir(), "wiki");
   }
   async readManifest() {
     if (!await Bun.file(this.manifestPath()).exists())
@@ -15384,11 +15535,8 @@ class MemoryProjectionStore {
     return JSON.parse(await Bun.file(this.servingPath()).text());
   }
   async writeWiki(name, markdown) {
-    await atomicWriteText(join25(this.wikiDir(), name), markdown);
+    await atomicWriteText(join26(this.wikiDir(), name), markdown);
   }
-}
-function sha256Hex(content) {
-  return createHash4("sha256").update(content).digest("hex");
 }
 var MemoryEventExistsError;
 var init_memory_store = __esm(() => {
@@ -15398,6 +15546,7 @@ var init_memory_store = __esm(() => {
   init_memory_source();
   init_ditto_paths();
   init_fs();
+  init_evidence_store();
   MemoryEventExistsError = class MemoryEventExistsError extends Error {
     eventId;
     constructor(eventId) {
@@ -15410,7 +15559,7 @@ var init_memory_store = __esm(() => {
 
 // src/core/memory-scan.ts
 import { readdir as readdir11 } from "fs/promises";
-import { isAbsolute as isAbsolute2, join as join26, relative as relative7, resolve as resolve3, sep as sep3 } from "path";
+import { isAbsolute as isAbsolute2, join as join27, relative as relative7, resolve as resolve3, sep as sep3 } from "path";
 function classifyType(name) {
   const dot = name.lastIndexOf(".");
   if (dot < 0)
@@ -15435,7 +15584,7 @@ async function findOwningRepo(absPath, rootingRoot) {
   let current = resolve3(absPath);
   const root = resolve3(rootingRoot);
   while (true) {
-    if (await fileExists(join26(current, ".git")))
+    if (await fileExists(join27(current, ".git")))
       return current;
     if (current === root)
       return null;
@@ -15459,7 +15608,7 @@ async function walkFiles(root, maxDepth = 12) {
       return;
     }
     for (const e2 of entries) {
-      const full = join26(dir, e2.name);
+      const full = join27(dir, e2.name);
       if (e2.isDirectory()) {
         if (!SKIP_DIRS2.has(e2.name))
           await walk(full, depth + 1);
@@ -15474,7 +15623,7 @@ async function walkFiles(root, maxDepth = 12) {
 }
 async function scanSources(repoRoot, options = {}) {
   const root = resolve3(repoRoot);
-  const sourceRoot = resolve3(options.sourceRoot && isAbsolute2(options.sourceRoot) ? options.sourceRoot : join26(root, options.sourceRoot ?? "."));
+  const sourceRoot = resolve3(options.sourceRoot && isAbsolute2(options.sourceRoot) ? options.sourceRoot : join27(root, options.sourceRoot ?? "."));
   const now = (options.now ?? new Date).toISOString();
   const store = new MemorySourceStore(root);
   const existing = new Map;
@@ -15623,7 +15772,7 @@ var init_cleanup_index = __esm(() => {
 
 // src/core/cleanup-store.ts
 import { mkdir as mkdir6, rename as rename4, stat as stat6 } from "fs/promises";
-import { isAbsolute as isAbsolute6, join as join37, relative as relative11, resolve as resolve9 } from "path";
+import { isAbsolute as isAbsolute6, join as join38, relative as relative11, resolve as resolve9 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
     return true;
@@ -15659,7 +15808,7 @@ class CleanupStore {
     return localDir(this.repoRoot, "cleanup", runId2);
   }
   indexPath(runId2) {
-    return join37(this.runDir(runId2), "index.json");
+    return join38(this.runDir(runId2), "index.json");
   }
   async createRun(params, now = new Date) {
     const stamp2 = runStamp(now);
@@ -15678,7 +15827,7 @@ class CleanupStore {
       }
     }
     for (const action of CLEANUP_ACTIONS) {
-      await ensureDir(join37(this.runDir(runId2), action));
+      await ensureDir(join38(this.runDir(runId2), action));
     }
     const index = {
       schema_version: "0.1.0",
@@ -15707,8 +15856,8 @@ class CleanupStore {
     const name = input.name ?? repoRel.split("/").pop() ?? repoRel;
     const owning = await findOwningRepo(abs, this.repoRoot);
     const owningRepo = owning === null ? null : toRepoRel(this.repoRoot, owning) || ".";
-    const destAbs = join37(this.runDir(runId2), input.action, name);
-    await ensureDir(join37(this.runDir(runId2), input.action));
+    const destAbs = join38(this.runDir(runId2), input.action, name);
+    await ensureDir(join38(this.runDir(runId2), input.action));
     await rename4(abs, destAbs);
     const entry = {
       name,
@@ -15735,9 +15884,9 @@ class CleanupStore {
     if (entry === undefined) {
       throw new Error(`no staged entry for original_path: ${originalPath}`);
     }
-    const stagedAbs = join37(this.repoRoot, entry.staged_path);
-    const originalAbs = join37(this.repoRoot, entry.original_path);
-    await ensureDir(join37(originalAbs, ".."));
+    const stagedAbs = join38(this.repoRoot, entry.staged_path);
+    const originalAbs = join38(this.repoRoot, entry.original_path);
+    await ensureDir(join38(originalAbs, ".."));
     await rename4(stagedAbs, originalAbs);
     return entry;
   }
@@ -15775,7 +15924,7 @@ var init_cleanup_store = __esm(() => {
 // src/core/cleanup-archive.ts
 import { execFileSync as execFileSync4 } from "child_process";
 import { mkdir as mkdir7, rm as rm2, stat as stat7 } from "fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute7, join as join38, resolve as resolve10 } from "path";
+import { dirname as dirname10, isAbsolute as isAbsolute7, join as join39, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -15826,7 +15975,7 @@ async function deleteRun(repoRoot, runId2, confirm) {
 function subRepoAbs(repoRoot, owningRepo) {
   if (owningRepo === null || owningRepo === ".")
     return resolve10(repoRoot);
-  return isAbsolute7(owningRepo) ? owningRepo : join38(repoRoot, owningRepo);
+  return isAbsolute7(owningRepo) ? owningRepo : join39(repoRoot, owningRepo);
 }
 function unrelatedDirt(cwd, allowed) {
   let status = "";
@@ -15889,7 +16038,7 @@ function commitCleanup(repoRoot, index, message) {
   return { commits: commitPerSubRepo(repoRoot, byRepo, message) };
 }
 function relForRepo(repoRoot, repoAbs, workspaceRelPath) {
-  const abs = join38(repoRoot, workspaceRelPath);
+  const abs = join39(repoRoot, workspaceRelPath);
   const rel = abs.startsWith(`${repoAbs}/`) ? abs.slice(repoAbs.length + 1) : workspaceRelPath;
   return rel.replace(/\\/g, "/");
 }
@@ -19325,8 +19474,8 @@ var architectureCommand = defineCommand({
 });
 
 // src/cli/commands/autopilot.ts
-import { readFile as readFile10, readdir as readdir16 } from "fs/promises";
-import { join as join41 } from "path";
+import { readFile as readFile10, readdir as readdir15 } from "fs/promises";
+import { join as join42 } from "path";
 
 // src/core/autopilot-approval.ts
 function requirePending(gate, action) {
@@ -21140,7 +21289,7 @@ function convergenceGate(c3) {
   if (c3.gate.converged !== expectedConverged) {
     reasons.push(`\uC218\uB834 \uD310\uC815 \uAE30\uB85D\uAC12 ${c3.gate.converged} != \uAE30\uB300\uAC12 ${expectedConverged}(\uC644\uB8CC \uD1B5\uACFC \u2227 \uBBF8\uD574\uACB0 \uBC18\uB860 0)`);
   }
-  if (!expectedConverged) {
+  if (!expectedConverged && c3.exit.reason !== "cap_reached") {
     reasons.push("\uC218\uB834 \uC548 \uB428: \uC644\uB8CC \uAC8C\uC774\uD2B8\uAC00 \uD1B5\uACFC\uAC00 \uC544\uB2C8\uAC70\uB098, \uBBF8\uD574\uACB0 \uBC18\uB860\uC774 \uB0A8\uC544 \uC788\uC74C");
   }
   return gate(reasons);
@@ -21596,51 +21745,7 @@ function allNodesTerminal(graph) {
 // src/schemas/completion-contract.ts
 init_zod();
 init_common();
-
-// src/schemas/evidence-record.ts
-init_zod();
-init_common();
-var freshness = exports_external.enum(["fresh", "stale"]).describe("Whether the captured evidence still reflects the current state");
-var portability = exports_external.enum(["committed", "local-artifact"]).describe("Whether the raw artifact travels with the repo (committed) or only exists in the capturing clone/session (local-artifact)");
-var evidenceRecord = exports_external.object({
-  ref: evidenceRef,
-  captured_at: isoDateTime,
-  freshness,
-  stale_reason: exports_external.string().min(1).nullable().default(null).describe("Why the evidence is stale; required when freshness=stale, null when fresh"),
-  portability,
-  artifact_available: exports_external.boolean().describe("True when the raw artifact can be opened in this clone/session"),
-  exit_code: exports_external.number().int().nullable().default(null).describe("Process exit code for command evidence; null for non-command kinds"),
-  key_lines: exports_external.array(exports_external.string()).default([]).describe("Excerpt lines that make the evidence judgeable without the raw artifact")
-}).superRefine((value, ctx) => {
-  if (value.freshness === "stale" && !value.stale_reason) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "freshness=stale requires a stale_reason",
-      path: ["stale_reason"]
-    });
-  }
-  if (value.freshness === "fresh" && value.stale_reason !== null) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "freshness=fresh must not carry a stale_reason (set it null)",
-      path: ["stale_reason"]
-    });
-  }
-  if (value.portability === "committed" && value.artifact_available !== true) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "portability=committed implies artifact_available=true",
-      path: ["artifact_available"]
-    });
-  }
-}).describe("Evidence freshness/portability sidecar wrapping an evidenceRef");
-var evidenceIndex = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  records: exports_external.array(evidenceRecord).default([])
-}).describe("Committable evidence ledger (.ditto/local/work-items/<id>/evidence-index.json)");
-
-// src/schemas/completion-contract.ts
+init_evidence_record();
 var resolvability = exports_external.enum([
   "agent_resolvable",
   "blocked_external",
@@ -22193,7 +22298,7 @@ function reconcileDecisionDisclosure(decisions) {
 init_zod();
 import { createHash as createHash7 } from "crypto";
 import { readFile as readFile3, rm } from "fs/promises";
-import { join as join29 } from "path";
+import { join as join30 } from "path";
 
 // src/acg/tidy/classifier.ts
 init_ditto_paths();
@@ -23593,6 +23698,139 @@ async function collectCompletionCoverageReport(deps) {
     rows.push(buildRow(summary, completion));
   }
   return { rows, totals: totalsOf(rows) };
+}
+
+// src/schemas/convergence.ts
+init_zod();
+init_common();
+var honestyKind = exports_external.enum(["finding", "hypothesis", "taste"]).describe("What the item is; backing-less claims are hypothesis, not finding");
+var confidenceLevel = exports_external.enum(["high", "medium", "low"]).describe("Confidence in a claim; backing-less claims must be low");
+var ledgerStatus = exports_external.enum(["acted", "deferred", "dismissed"]).describe("What was done with the item; deferred/dismissed require a reason");
+var closureMode = exports_external.enum(["mutual_agreement", "ledger_only", "safe_default"]).describe("How the closure was reached, not why (that is exit.reason)");
+var convergenceVersion = exports_external.object({
+  version: exports_external.number().int().positive(),
+  score: exports_external.number(),
+  evidence_refs: exports_external.array(evidenceRef).default([])
+}).describe("One scored version of the refined artifact");
+var decisionLedgerEntry = exports_external.object({
+  id: exports_external.string().min(1),
+  round: exports_external.number().int().nonnegative(),
+  objection: exports_external.string().min(1),
+  kind: honestyKind,
+  criterion_id: exports_external.string().min(1).nullable().default(null),
+  severity,
+  admissible: exports_external.boolean(),
+  status: ledgerStatus,
+  confidence: confidenceLevel,
+  backed_by: exports_external.array(evidenceRef).default([]),
+  reason: exports_external.string().min(1).describe("Why acted/dismissed; required for symmetry (\xA73.2)"),
+  supersedes: exports_external.string().min(1).nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (value.kind === "finding" && value.backed_by.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "kind=finding requires non-empty backed_by",
+      path: ["backed_by"]
+    });
+  }
+  if (value.admissible === true && value.severity !== "high" && value.severity !== "critical") {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)",
+      path: ["admissible"]
+    });
+  }
+}).describe("Append-only decision ledger entry with honesty labels (\xA74.1, \xA76.1)");
+var convergence = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  target_ref: exports_external.string().min(1).describe("Node id, review id, or AC-set this refinement targets"),
+  round_cap: exports_external.number().int().positive(),
+  rounds_run: exports_external.number().int().nonnegative(),
+  versions: exports_external.array(convergenceVersion).min(1),
+  selected_version: exports_external.number().int().positive(),
+  decision_ledger: exports_external.array(decisionLedgerEntry).default([]),
+  open_admissible_count: exports_external.number().int().nonnegative(),
+  gate: exports_external.object({
+    completion_gate: verdict,
+    convergence_gate: exports_external.enum(["no_open_admissible", "open_admissible"]),
+    converged: exports_external.boolean()
+  }),
+  exit: exports_external.object({
+    reason: exports_external.enum(["converged", "cap_reached", "blocked"]),
+    closure_mode: closureMode,
+    verdict_delegated_to_completion: exports_external.boolean().default(true),
+    next_handoff_path: relativePath.nullable().default(null)
+  })
+}).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
+
+// src/core/convergence-store.ts
+init_ditto_paths();
+init_fs();
+function recompute(versions, ledger, completionGateVerdict, roundCap, roundsRun, nextHandoffPath, workItemId2) {
+  const maxScore = Math.max(...versions.map((v2) => v2.score));
+  const selected = versions.find((v2) => v2.score === maxScore)?.version ?? versions[0]?.version ?? 1;
+  const openAdmissible = ledger.filter((e2) => e2.admissible && e2.status === "deferred").length;
+  const converged = completionGateVerdict === "pass" && openAdmissible === 0;
+  const reason = converged ? "converged" : roundsRun >= roundCap ? "cap_reached" : "blocked";
+  return {
+    round_cap: roundCap,
+    rounds_run: roundsRun,
+    versions,
+    selected_version: selected,
+    decision_ledger: ledger,
+    open_admissible_count: openAdmissible,
+    gate: {
+      completion_gate: completionGateVerdict,
+      convergence_gate: openAdmissible === 0 ? "no_open_admissible" : "open_admissible",
+      converged
+    },
+    exit: {
+      reason,
+      closure_mode: deriveClosureMode(reason, converged),
+      verdict_delegated_to_completion: true,
+      next_handoff_path: converged ? null : nextHandoffPath ?? `.ditto/local/work-items/${workItemId2}/handoff.md`
+    }
+  };
+}
+function buildConvergence(input) {
+  const derived = recompute(input.versions, input.ledger, input.completionGateVerdict, input.roundCap, input.roundsRun, input.nextHandoffPath, input.workItemId);
+  return convergence.parse({
+    schema_version: "0.1.0",
+    work_item_id: input.workItemId,
+    target_ref: input.targetRef,
+    ...derived
+  });
+}
+
+class ConvergenceStore {
+  repoRoot;
+  constructor(repoRoot) {
+    this.repoRoot = repoRoot;
+  }
+  path(workItemId2) {
+    return localDir(this.repoRoot, "work-items", workItemId2, "convergence.json");
+  }
+  async exists(workItemId2) {
+    return Bun.file(this.path(workItemId2)).exists();
+  }
+  async get(workItemId2) {
+    return readJson(this.path(workItemId2), convergence);
+  }
+  async write(c3) {
+    return writeJson(this.path(c3.work_item_id), convergence, c3);
+  }
+  async appendLedgerEntry(workItemId2, entry) {
+    const current = await this.get(workItemId2);
+    const ledger = [...current.decision_ledger, entry];
+    const derived = recompute(current.versions, ledger, current.gate.completion_gate, current.round_cap, current.rounds_run, current.exit.next_handoff_path ?? undefined, workItemId2);
+    return this.write(convergence.parse({
+      schema_version: "0.1.0",
+      work_item_id: workItemId2,
+      target_ref: current.target_ref,
+      ...derived
+    }));
+  }
 }
 
 // src/core/coverage-feedback.ts
@@ -25524,7 +25762,7 @@ async function memoryStatus(repoRoot) {
 
 // src/core/memory-query.ts
 import { appendFile as appendFile2, readFile as readFile2 } from "fs/promises";
-import { basename as basename2, dirname as dirname6, isAbsolute as isAbsolute3, join as join27 } from "path";
+import { basename as basename2, dirname as dirname6, isAbsolute as isAbsolute3, join as join28 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -25785,7 +26023,7 @@ async function loadGoverningDecisions(repoRoot) {
     let body = e2.text;
     if (rel) {
       try {
-        body = await readFile2(isAbsolute3(rel) ? rel : join27(repoRoot, rel), "utf8");
+        body = await readFile2(isAbsolute3(rel) ? rel : join28(repoRoot, rel), "utf8");
       } catch {}
     }
     byNodeId.set(`decision:${e2.event_id}`, {
@@ -25899,7 +26137,7 @@ class MemoryAuditLogStore {
     this.repoRoot = repoRoot;
   }
   path() {
-    return join27(dittoDir(this.repoRoot), "memory", "audit-log.jsonl");
+    return join28(dittoDir(this.repoRoot), "memory", "audit-log.jsonl");
   }
   async append(entry) {
     const p = this.path();
@@ -26068,7 +26306,7 @@ async function warmStartMemoryContext(repoRoot, node2, workItem2, options = {}) 
 
 // src/core/recipe/load.ts
 init_ditto_paths();
-import { join as join28 } from "path";
+import { join as join29 } from "path";
 
 // src/core/recipe/parse.ts
 init_dist2();
@@ -26199,7 +26437,7 @@ async function loadRecipeFile(path, source, onMalformed) {
   return result2.recipe;
 }
 async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
-  const project = await loadRecipeFile(join28(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m2) => onMalformed?.("project", m2));
+  const project = await loadRecipeFile(join29(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m2) => onMalformed?.("project", m2));
   const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m2) => onMalformed?.("personal", m2));
   const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
   return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
@@ -26724,7 +26962,7 @@ async function specDigestStale(repoRoot, workItemId2) {
   const { doc_path, sha256: sha2562 } = intent.source_digest;
   let doc;
   try {
-    doc = await readFile3(join29(repoRoot, doc_path), "utf8");
+    doc = await readFile3(join30(repoRoot, doc_path), "utf8");
   } catch {
     doc = null;
   }
@@ -26881,7 +27119,7 @@ function progressReportPath(repoRoot, workItemId2, band) {
   return localDir(repoRoot, "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function progressReportRelPath(workItemId2, band) {
-  return join29(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
+  return join30(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function fenceProgressReport(report, band) {
   const body = [
@@ -26976,7 +27214,7 @@ function planBarrierRuns(recipe2, changedFiles, workspaceRoot, worktrees = []) {
   const runs = affectedBarrierDirs(changedFiles, recipe2).map((dir) => {
     const repoKey = dir === "" ? "." : dir;
     const wt = worktrees.find((w2) => norm(w2.owning_repo) === repoKey);
-    const cwd = wt ? join29(workspaceRoot, wt.worktree_path) : dir === "" ? workspaceRoot : join29(workspaceRoot, dir);
+    const cwd = wt ? join30(workspaceRoot, wt.worktree_path) : dir === "" ? workspaceRoot : join30(workspaceRoot, dir);
     return { dir, command: resolveBarrierCommand(recipe2, dir), cwd };
   });
   if (runs.length > 1)
@@ -27093,7 +27331,7 @@ async function nextNode(repoRoot, workItemId2) {
     const rolledBack = graph.nodes.filter((n2) => n2.status === "running").map((n2) => n2.id);
     const authoredPaths = authoredTestPaths(graph.approval_gate);
     for (const p of authoredPaths) {
-      await rm(join29(repoRoot, p), { force: true }).catch(() => {});
+      await rm(join30(repoRoot, p), { force: true }).catch(() => {});
     }
     const nodes = rb.nodes.map((n2) => n2.kind === "test-author" && n2.status === "passed" ? { ...n2, status: nodeTransition("passed", "reopen") } : n2);
     let approval_gate = graph.approval_gate;
@@ -27140,6 +27378,7 @@ async function nextNode(repoRoot, workItemId2) {
         reason,
         now: new Date
       });
+      await writeConvergenceSidecar(repoRoot, workItemId2, graph, disposition ?? "blocked");
       return { action: "done", all_passed, disposition, reason };
     }
     const running = graph.nodes.some((n2) => n2.status === "running");
@@ -27158,6 +27397,7 @@ async function nextNode(repoRoot, workItemId2) {
           reason,
           now: new Date
         });
+        await writeConvergenceSidecar(repoRoot, workItemId2, graph, "blocked");
         return {
           action: "blocked",
           blocked_node_ids: blocked.map((n2) => n2.id),
@@ -27284,7 +27524,7 @@ async function nextNode(repoRoot, workItemId2) {
       const markdown = renderApprovalArtifact(graph.approval_gate, acById);
       const approvalDir = localDir(repoRoot, "work-items", workItemId2, "approval");
       await ensureDir(approvalDir);
-      await atomicWriteText(join29(approvalDir, "plan-approval.md"), markdown);
+      await atomicWriteText(join30(approvalDir, "plan-approval.md"), markdown);
       const artifactRel = `.ditto/local/work-items/${workItemId2}/approval/plan-approval.md`;
       return { action: "present_plan", reason: gate2.reason, artifact_path: artifactRel };
     }
@@ -27533,7 +27773,7 @@ async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
   const surfaced = [];
   for (let i2 = 0;i2 < checked.length; i2 += GATE_CONCURRENCY) {
     const batch = await Promise.all(checked.slice(i2, i2 + GATE_CONCURRENCY).map(async ({ file, language }) => {
-      const diags = await getDiagnostics(join29(repoRoot, file), {
+      const diags = await getDiagnostics(join30(repoRoot, file), {
         language,
         timeoutMs: GATE_TIMEOUT_MS
       });
@@ -27657,6 +27897,19 @@ async function recordLoopTermination(aps, workItemId2, decisions, spec) {
     reason: `loop terminated (${spec.disposition}): ${spec.reason}`
   });
 }
+var CONVERGENCE_VERDICT_OF = { converged: "pass", capped: "partial", blocked: "fail" };
+async function writeConvergenceSidecar(repoRoot, workItemId2, graph, disposition) {
+  const record = buildConvergence({
+    workItemId: workItemId2,
+    targetRef: workItemId2,
+    roundCap: graph.caps.loop_rounds,
+    roundsRun: totalForwardRounds(graph.nodes.map((n2) => n2.id)),
+    versions: [{ version: 1, score: disposition === "converged" ? 1 : 0, evidence_refs: [] }],
+    ledger: [],
+    completionGateVerdict: CONVERGENCE_VERDICT_OF[disposition]
+  });
+  await new ConvergenceStore(repoRoot).write(record);
+}
 function isGatherableOracle(oracle) {
   return oracle !== undefined && (oracle.verification_method === "dynamic_test" || oracle.verification_method === "static_scan");
 }
@@ -27748,7 +28001,7 @@ async function directPostDecisions(repoRoot, workItemId2) {
 }
 async function hashAuthoredTest(repoRoot, testPath) {
   try {
-    const bytes = await readFile3(join29(repoRoot, testPath));
+    const bytes = await readFile3(join30(repoRoot, testPath));
     return createHash7("sha256").update(bytes).digest("hex");
   } catch {
     return;
@@ -27826,7 +28079,7 @@ async function recordResultCore(repoRoot, input) {
         failureClass = "fixable";
         guardReason = ownerGuard.reason;
       } else {
-        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join29(repoRoot, p), "utf8"));
+        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join30(repoRoot, p), "utf8"));
         if (!artifactGuard.contentful) {
           contentful = false;
           outcome = "fail";
@@ -28661,7 +28914,7 @@ async function recordResultCore(repoRoot, input) {
 // src/core/cite-gate.ts
 init_ditto_paths();
 import { readFile as readFile4, readdir as readdir12 } from "fs/promises";
-import { join as join30 } from "path";
+import { join as join31 } from "path";
 var CITE_RE = /\bdecision:|\bADR-\d/i;
 var ABSTAIN_RE = /\babstain|none\s+(?:of\s+the\s+)?(?:governing\s+)?decisions?\s+apply|none\s+apply/i;
 function evidenceText(node2) {
@@ -28733,14 +28986,14 @@ function citeNeedsReproposalMeasurement(verdict2) {
   return verdict2 === "pass";
 }
 async function loadAdrBodies(repoRoot) {
-  const adrDir = join30(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join31(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
     names = (await readdir12(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     return [];
   }
-  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join30(adrDir, n2), "utf8") })));
+  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join31(adrDir, n2), "utf8") })));
 }
 async function detectActiveConflicts(repoRoot, input) {
   const report = await readUsageReport(repoRoot, input.workItemId);
@@ -29330,7 +29583,7 @@ async function seedGithubConfigIfAbsent(repoRoot, github, onMalformed) {
 init_ditto_paths();
 
 // src/core/e2e/completion-gate.ts
-import { join as join36 } from "path";
+import { join as join37 } from "path";
 
 // src/schemas/e2e-regression-gate.ts
 init_zod();
@@ -29431,7 +29684,7 @@ var regressionGateRecord = exports_external.object({
 
 // src/core/e2e/regression-gate.ts
 import { readFile as readFile9 } from "fs/promises";
-import { join as join34, resolve as resolve8 } from "path";
+import { join as join35, resolve as resolve8 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -29562,13 +29815,13 @@ function renderFailureLines(failure, journeyName) {
 init_ditto_paths();
 init_fs();
 import { mkdir as mkdir5, readFile as readFile7 } from "fs/promises";
-import { join as join32 } from "path";
+import { join as join33 } from "path";
 
 // src/core/e2e/browser.ts
 import { createHash as createHash8 } from "crypto";
 import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname9, join as join31, relative as relative9, sep as sep5 } from "path";
+import { dirname as dirname9, join as join32, relative as relative9, sep as sep5 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -29651,11 +29904,11 @@ var e2eJourney = exports_external.object({
 init_ditto_paths();
 init_shared();
 function runnerScriptPath() {
-  return join31(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join32(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
-  const bunInstall = process.env.BUN_INSTALL ?? join31(homedir6(), ".bun");
-  const cacheDir = join31(bunInstall, "install", "cache");
+  const bunInstall = process.env.BUN_INSTALL ?? join32(homedir6(), ".bun");
+  const cacheDir = join32(bunInstall, "install", "cache");
   let entries;
   try {
     entries = await readdir13(cacheDir);
@@ -29664,7 +29917,7 @@ async function resolvePlaywrightCore() {
   }
   const versions = entries.filter((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2)).sort((a2, b2) => compareSemver(b2.split("@")[1], a2.split("@")[1]));
   for (const v2 of versions) {
-    const mjs = join31(cacheDir, v2, "index.mjs");
+    const mjs = join32(cacheDir, v2, "index.mjs");
     if (await fileExists(mjs))
       return mjs;
   }
@@ -29680,7 +29933,7 @@ function compareSemver(a2, b2) {
   return 0;
 }
 async function findCachedChromium() {
-  const cacheRoot = join31(homedir6(), "Library", "Caches", "ms-playwright");
+  const cacheRoot = join32(homedir6(), "Library", "Caches", "ms-playwright");
   let entries;
   try {
     entries = await readdir13(cacheRoot);
@@ -29694,7 +29947,7 @@ async function findCachedChromium() {
   ];
   for (const dir of chromiumDirs) {
     for (const rel of candidates) {
-      const abs = join31(cacheRoot, dir, rel);
+      const abs = join32(cacheRoot, dir, rel);
       if (await fileExists(abs))
         return abs;
     }
@@ -29775,7 +30028,7 @@ async function runJourney(repoRoot, runId2, spec) {
   }
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir4(runDir, { recursive: true });
-  const configAbs = join31(runDir, "runner-config.json");
+  const configAbs = join32(runDir, "runner-config.json");
   await writeFile3(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
     executablePath: probe.executablePath,
@@ -29808,10 +30061,10 @@ async function runJourney(repoRoot, runId2, spec) {
       probe
     };
   }
-  const screenshotAbs = join31(runDir, "journey.png");
-  const traceAbs = join31(runDir, "trace.zip");
-  const consoleAbs = join31(runDir, "console.log");
-  const networkAbs = join31(runDir, "network.log");
+  const screenshotAbs = join32(runDir, "journey.png");
+  const traceAbs = join32(runDir, "trace.zip");
+  const consoleAbs = join32(runDir, "console.log");
+  const networkAbs = join32(runDir, "network.log");
   const screenshots = [];
   if (await fileExists(screenshotAbs)) {
     screenshots.push({
@@ -29822,7 +30075,7 @@ async function runJourney(repoRoot, runId2, spec) {
   const trace = await fileExists(traceAbs) ? { path: repoRelative(repoRoot, traceAbs) } : null;
   const consoleArtifact = await fileExists(consoleAbs) ? { path: repoRelative(repoRoot, consoleAbs) } : null;
   const network = await fileExists(networkAbs) ? { path: repoRelative(repoRoot, networkAbs) } : null;
-  const outcomeAbs = join31(runDir, "outcome.json");
+  const outcomeAbs = join32(runDir, "outcome.json");
   if (!await fileExists(outcomeAbs)) {
     return {
       journey: blockedJourney(spec, "Playwright present but no capture outcome was produced; treating as blocked rather than asserting an unobserved pass"),
@@ -29867,10 +30120,10 @@ async function withBrowserGuard(repoRoot, action, options = {}) {
 }
 
 // src/core/e2e/journey-digest.ts
-import { createHash as createHash9 } from "crypto";
-import { readFile as readFile6, readdir as readdir14 } from "fs/promises";
 init_dist2();
 init_shared();
+import { createHash as createHash9 } from "crypto";
+import { readFile as readFile6 } from "fs/promises";
 
 // src/core/e2e/journey-dsl.ts
 init_shared();
@@ -30187,7 +30440,7 @@ function passedCount(output) {
 async function anyFallbackUnverified(repoRoot, files) {
   for (const file of files) {
     try {
-      if (isFallbackUnverified(await readFile7(join32(repoRoot, file), "utf8")))
+      if (isFallbackUnverified(await readFile7(join33(repoRoot, file), "utf8")))
         return true;
     } catch {}
   }
@@ -30197,7 +30450,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
   const runner = options.runner ?? runPlaywrightTests;
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir5(runDir, { recursive: true });
-  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join32(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
+  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join33(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
   const verified_at = new Date().toISOString();
   let record;
   if (outcome.result === "blocked") {
@@ -30238,15 +30491,15 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
       verified_at
     };
   }
-  await atomicWriteText(join32(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
+  await atomicWriteText(join33(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
 `);
   return record;
 }
 
 // src/core/e2e/regression-select.ts
 init_shared();
-import { readFile as readFile8, readdir as readdir15, stat as stat5 } from "fs/promises";
-import { join as join33, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
+import { readFile as readFile8, readdir as readdir14, stat as stat5 } from "fs/promises";
+import { join as join34, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
 var COMPONENT_PREFIX = "component:";
 function matchesComponentPattern(pattern, path) {
   if (!pattern.includes("*")) {
@@ -30301,14 +30554,14 @@ async function loadJourneyEntries(journeysDir) {
   const generatedDir = resolve7(journeysAbs, "..", "generated");
   let names;
   try {
-    names = (await readdir15(journeysAbs)).filter((n2) => n2.endsWith(".journey.md")).sort();
+    names = (await readdir14(journeysAbs)).filter((n2) => n2.endsWith(".journey.md")).sort();
   } catch {
     return { entries: [], invalid: [] };
   }
   const entries = [];
   const invalid = [];
   for (const name of names) {
-    const fileAbs = join33(journeysAbs, name);
+    const fileAbs = join34(journeysAbs, name);
     const fileRel = toPosix(relative10(repoRoot, fileAbs));
     const text = await readFile8(fileAbs, "utf8");
     const parsed = parseJourneyDoc(text);
@@ -30317,7 +30570,7 @@ async function loadJourneyEntries(journeysDir) {
       continue;
     }
     const slug = name.slice(0, -".journey.md".length);
-    const specAbs = join33(generatedDir, `${slug}.spec.ts`);
+    const specAbs = join34(generatedDir, `${slug}.spec.ts`);
     entries.push({
       id: parsed.frontMatter.id,
       name: parsed.frontMatter.name,
@@ -30362,10 +30615,10 @@ async function selectImpactedJourneys(journeysDir, changedPaths) {
 
 // src/core/e2e/regression-gate.ts
 function regressionGatePath(repoRoot, workItemId2) {
-  return join34(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
+  return join35(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
 }
 async function mapRunFailures(repoRoot, runId2, selected) {
-  const reportFile = Bun.file(join34(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
+  const reportFile = Bun.file(join35(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
   if (!await reportFile.exists())
     return [];
   let reporter;
@@ -30392,7 +30645,7 @@ async function mapRunFailures(repoRoot, runId2, selected) {
   }));
 }
 async function runRegressionGate(repoRoot, input, options = {}) {
-  const journeysDir = join34(repoRoot, "e2e", "journeys");
+  const journeysDir = join35(repoRoot, "e2e", "journeys");
   const selection = await selectImpactedJourneys(journeysDir, input.changedPaths);
   let selected;
   if (input.journeyIds !== undefined) {
@@ -30480,7 +30733,7 @@ async function runRegressionGate(repoRoot, input, options = {}) {
 
 // src/core/e2e/applicability.ts
 import { existsSync as existsSync5, readFileSync as readFileSync2 } from "fs";
-import { join as join35 } from "path";
+import { join as join36 } from "path";
 var WEB_FRAMEWORKS = [
   "react",
   "react-dom",
@@ -30535,7 +30788,7 @@ function dependencyNames(pkg) {
 var UI_EXTENSIONS = [".tsx", ".jsx", ".vue", ".svelte", ".html"];
 function defaultReadPackageJson(repoRoot) {
   return () => {
-    const path = join35(repoRoot, "package.json");
+    const path = join36(repoRoot, "package.json");
     if (!existsSync5(path))
       return null;
     try {
@@ -30548,7 +30801,7 @@ function defaultReadPackageJson(repoRoot) {
 }
 function defaultCountUiFiles(repoRoot) {
   return () => {
-    const srcDir = join35(repoRoot, "src");
+    const srcDir = join36(repoRoot, "src");
     if (!existsSync5(srcDir))
       return 0;
     const glob = new Bun.Glob(`**/*{${UI_EXTENSIONS.join(",")}}`);
@@ -30640,7 +30893,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
       });
     }
   }
-  const selection = await selectImpactedJourneys(join36(repoRoot, "e2e", "journeys"), input.changedFiles);
+  const selection = await selectImpactedJourneys(join37(repoRoot, "e2e", "journeys"), input.changedFiles);
   const impacted = selection.journeys.length > 0 || selection.invalid_journeys.length > 0;
   if (!impacted)
     return violations;
@@ -30868,7 +31121,7 @@ function reflectAutopilotTermination(deps, input) {
 init_cleanup_archive();
 init_memory_scan();
 import { execFileSync as execFileSync5 } from "child_process";
-import { join as join39, relative as relative12, resolve as resolve11 } from "path";
+import { join as join40, relative as relative12, resolve as resolve11 } from "path";
 var RUN_ARTIFACT_PREFIX = ".ditto/local/runs/";
 var BYPRODUCT_PREFIXES = [".ditto/memory/"];
 function isGitIgnoredInRepo(repoAbs, rel) {
@@ -30920,7 +31173,7 @@ async function landCommit(repoRoot, changedFiles, message) {
   }
   const byRepo = new Map;
   for (const p of landable) {
-    const abs = join39(root, p);
+    const abs = join40(root, p);
     const owningAbs = await findOwningRepo(abs, root);
     const key = owningAbs === null ? "." : relative12(root, owningAbs).replace(/\\/g, "/") || ".";
     const repoAbs = subRepoAbs(root, key);
@@ -31115,7 +31368,7 @@ ${input.reason ?? "Claim released \u2014 the issue is free for takeover."}`;
 
 // src/core/work-item-handoff.ts
 import { existsSync as existsSync6 } from "fs";
-import { join as join40 } from "path";
+import { join as join41 } from "path";
 init_ditto_paths();
 init_fs();
 class InvalidBaseRefError extends Error {
@@ -31357,7 +31610,7 @@ async function writeWorkItemHandoff(repoRoot, store, workId, options = {}, now =
   });
   const hstore = new HandoffStore(repoRoot);
   const handoffRel = completion.final_verdict === "pass" ? await hstore.writeArchived(handoffArtifact, now) : await hstore.write(handoffArtifact);
-  const handoffPath = join40(repoRoot, handoffRel);
+  const handoffPath = join41(repoRoot, handoffRel);
   try {
     await hstore.sweepStaleActive(now);
   } catch {}
@@ -34192,14 +34445,14 @@ var autopilotRecordResult = defineCommand({
   }
 });
 async function measureReproposalForCompletion(repoRoot) {
-  const adrDir = join41(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join42(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
-    names = (await readdir16(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
+    names = (await readdir15(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     names = [];
   }
-  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join41(adrDir, n2), "utf8") })));
+  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join42(adrDir, n2), "utf8") })));
   return measureHallucination(adrs, []);
 }
 var autopilotComplete = defineCommand({
@@ -35377,7 +35630,7 @@ var autopilotCommand = defineCommand({
 });
 
 // src/cli/commands/boundary.ts
-import { join as join42 } from "path";
+import { join as join43 } from "path";
 init_fs();
 function violationsToReviewGraph(violations) {
   return acgReviewGraph.parse({
@@ -35452,7 +35705,7 @@ var boundaryCommand = defineCommand({
           }
           const changedFiles = String(args.file).split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
-          const sourceRoot = args["source-root"] ?? join42(repoRoot, "src");
+          const sourceRoot = args["source-root"] ?? join43(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
             language,
             entries: spec.internal_packages,
@@ -35506,11 +35759,11 @@ var boundaryCommand = defineCommand({
 
 // src/core/bridge-sync.ts
 init_fs();
-import { join as join44 } from "path";
+import { join as join45 } from "path";
 
 // src/core/instruction-bridge.ts
 import { createHash as createHash10 } from "crypto";
-import { join as join43 } from "path";
+import { join as join44 } from "path";
 var MANAGED_END = "<!-- ditto:managed:end -->";
 var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
 var DELEGATION_CLAUSE_ANCHOR = "\uC704\uC784\uC73C\uB85C \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uC9C0\uD0A8\uB2E4";
@@ -35527,7 +35780,7 @@ function normalizedSha256(text) {
 }
 function sourceFromSurface(surface) {
   if (surface.role !== "source") {
-    return { kind: "missing", path: join43(surface.path, "..", "AGENTS.md") };
+    return { kind: "missing", path: join44(surface.path, "..", "AGENTS.md") };
   }
   if (!surface.exists || surface.content === undefined)
     return { kind: "missing", path: surface.path };
@@ -35737,7 +35990,7 @@ async function checkInstructionsForAdapters(adapters, repoRoot) {
     sourceSurface = registered.find((surface) => surface.role === "source");
   }
   if (!sourceSurface) {
-    const sourcePath = join43(repoRoot, "AGENTS.md");
+    const sourcePath = join44(repoRoot, "AGENTS.md");
     sourceSurface = { role: "source", host: "codex", path: sourcePath, exists: false };
   }
   const source = sourceFromSurface(sourceSurface);
@@ -35879,7 +36132,7 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
   const source = await loadSource(repoRoot);
   if ("kind" in source)
     throw new Error("AGENTS.md is missing; cannot sync Claude projection");
-  const path = join44(repoRoot, "CLAUDE.md");
+  const path = join45(repoRoot, "CLAUDE.md");
   const projection = await loadProjection(repoRoot);
   const block = buildManagedBlock(source.content);
   const check = options.check === true;
@@ -35939,8 +36192,8 @@ init_fs();
 
 // src/core/knowledge-bridge.ts
 init_zod();
-import { readdir as readdir17 } from "fs/promises";
-import { join as join45 } from "path";
+import { readdir as readdir16 } from "fs/promises";
+import { join as join46 } from "path";
 init_fs();
 var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
 var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
@@ -35950,7 +36203,7 @@ var glossarySummarySchema = exports_external.object({
 var glossaryVocabSchema = exports_external.object({
   entries: exports_external.array(exports_external.object({ forbidden_abbreviations: exports_external.array(exports_external.string()).default([]) })).default([])
 });
-var KNOWLEDGE_DIR = join45(".ditto", "knowledge");
+var KNOWLEDGE_DIR = join46(".ditto", "knowledge");
 function adrHeadline(filename, body) {
   const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
   const titleLine = body.split(`
@@ -35965,12 +36218,12 @@ function adrHeadline(filename, body) {
   return parts.join(" \xB7 ");
 }
 async function loadKnowledgeSources(repoRoot) {
-  const dir = join45(repoRoot, KNOWLEDGE_DIR);
-  const contextPath = join45(KNOWLEDGE_DIR, "CONTEXT.md");
-  const glossaryPath = join45(KNOWLEDGE_DIR, "glossary.json");
-  const adrDir = join45(KNOWLEDGE_DIR, "adr");
+  const dir = join46(repoRoot, KNOWLEDGE_DIR);
+  const contextPath = join46(KNOWLEDGE_DIR, "CONTEXT.md");
+  const glossaryPath = join46(KNOWLEDGE_DIR, "glossary.json");
+  const adrDir = join46(KNOWLEDGE_DIR, "adr");
   let termHeadlines = [];
-  const glossaryFile = Bun.file(join45(dir, "glossary.json"));
+  const glossaryFile = Bun.file(join46(dir, "glossary.json"));
   if (await glossaryFile.exists()) {
     const parsed = glossarySummarySchema.safeParse(JSON.parse(await glossaryFile.text()));
     if (parsed.success) {
@@ -35978,22 +36231,22 @@ async function loadKnowledgeSources(repoRoot) {
     }
   }
   const adrHeadlines = [];
-  const adrPath = join45(dir, "adr");
+  const adrPath = join46(dir, "adr");
   let adrEntries = [];
   try {
-    adrEntries = (await readdir17(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
+    adrEntries = (await readdir16(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
   } catch {
     adrEntries = [];
   }
   for (const rel of adrEntries) {
-    const body = await Bun.file(join45(adrPath, rel)).text();
+    const body = await Bun.file(join46(adrPath, rel)).text();
     adrHeadlines.push(adrHeadline(rel, body));
   }
   adrHeadlines.sort();
   return { contextPath, glossaryPath, adrDir, adrHeadlines, termHeadlines };
 }
 async function loadGlossaryVocab(repoRoot, onMalformed) {
-  const file = Bun.file(join45(repoRoot, KNOWLEDGE_DIR, "glossary.json"));
+  const file = Bun.file(join46(repoRoot, KNOWLEDGE_DIR, "glossary.json"));
   if (!await file.exists())
     return [];
   try {
@@ -36009,7 +36262,7 @@ async function loadGlossaryVocab(repoRoot, onMalformed) {
   }
 }
 function warnMalformedGlossary(repoRoot) {
-  console.warn(`ditto: malformed ${join45(repoRoot, KNOWLEDGE_DIR, "glossary.json")} \u2014 ignoring glossary-sourced opaque vocabulary and applying only the built-in floor (fix the file to re-enable it)`);
+  console.warn(`ditto: malformed ${join46(repoRoot, KNOWLEDGE_DIR, "glossary.json")} \u2014 ignoring glossary-sourced opaque vocabulary and applying only the built-in floor (fix the file to re-enable it)`);
 }
 function renderKnowledgeSummary(sources) {
   const lines = [];
@@ -36070,7 +36323,7 @@ async function syncKnowledgeProjection(repoRoot, options = {}) {
   const summary = renderKnowledgeSummary(sources);
   const sha2562 = knowledgeSummarySha256(summary);
   const block = knowledgeBlock(summary, sha2562);
-  const path = join45(repoRoot, "CLAUDE.md");
+  const path = join46(repoRoot, "CLAUDE.md");
   const check = options.check === true;
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : null;
@@ -36220,7 +36473,7 @@ var bridgeCommand = defineCommand({
 
 // src/cli/commands/change-contract.ts
 import { readFile as readFile11 } from "fs/promises";
-import { join as join49 } from "path";
+import { join as join50 } from "path";
 
 // src/schemas/acg-change-contract.ts
 init_zod();
@@ -36871,7 +37124,7 @@ function zodErrors(error) {
   }));
 }
 // src/acg/scope/symbol-expand.ts
-import { join as join46, relative as relative13 } from "path";
+import { join as join47, relative as relative13 } from "path";
 async function expandForbiddenSymbols(contract, ctx) {
   if (!contract.forbidden_scope.some((r3) => r3.kind === "symbol")) {
     return { contract, resolved: 0, unresolved: [] };
@@ -36889,11 +37142,11 @@ async function expandForbiddenSymbols(contract, ctx) {
       repoRoot: ctx.repoRoot,
       sourceRoot: ctx.sourceRoot,
       language: ctx.language,
-      dbPath: join46(ctx.cacheDir, "db"),
-      workDir: join46(ctx.cacheDir, `q-symdecl-${ref.ref}`),
+      dbPath: join47(ctx.cacheDir, "db"),
+      workDir: join47(ctx.cacheDir, `q-symdecl-${ref.ref}`),
       ...ctx.binary ? { binary: ctx.binary } : {}
     }, ctx.deps);
-    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join46(ctx.sourceRoot, f3)));
+    const files = declFiles.map((f3) => relative13(ctx.repoRoot, join47(ctx.sourceRoot, f3)));
     if (files.length === 0) {
       out.push(ref);
       unresolved.push(ref.ref);
@@ -36910,7 +37163,7 @@ async function expandForbiddenSymbols(contract, ctx) {
 // src/core/change-contract-store.ts
 init_ditto_paths();
 init_fs();
-import { join as join47 } from "path";
+import { join as join48 } from "path";
 class ChangeContractStore {
   repoRoot;
   constructor(repoRoot) {
@@ -36920,7 +37173,7 @@ class ChangeContractStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join47(this.dir(workItemId2), "change-contract.json");
+    return join48(this.dir(workItemId2), "change-contract.json");
   }
   async read(workItemId2) {
     try {
@@ -36939,7 +37192,7 @@ class ChangeContractStore {
 init_zod();
 init_ditto_paths();
 init_fs();
-import { join as join48 } from "path";
+import { join as join49 } from "path";
 var fitnessFunctionArray = exports_external.array(acgFitnessFunction);
 
 class FitnessFunctionStore {
@@ -36951,7 +37204,7 @@ class FitnessFunctionStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   path(workItemId2) {
-    return join48(this.dir(workItemId2), "fitness-functions.json");
+    return join49(this.dir(workItemId2), "fitness-functions.json");
   }
   async read(workItemId2) {
     try {
@@ -37021,7 +37274,7 @@ var changeContractCommand = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     const expanded = await expandForbiddenSymbols(result2.changeContract, {
       repoRoot,
-      sourceRoot: join49(repoRoot, "src"),
+      sourceRoot: join50(repoRoot, "src"),
       language: "javascript",
       cacheDir: codeqlCacheDir(repoRoot, "javascript"),
       deps: makeRelationDeps()
@@ -37262,13 +37515,13 @@ var changeMapCommand = defineCommand({
 });
 
 // src/cli/commands/classify.ts
-import { isAbsolute as isAbsolute9, join as join51 } from "path";
+import { isAbsolute as isAbsolute9, join as join52 } from "path";
 
 // src/core/cleanup-scan.ts
 init_cleanup_store();
 init_memory_scan();
-import { readdir as readdir18, stat as stat8 } from "fs/promises";
-import { isAbsolute as isAbsolute8, join as join50, relative as relative14, resolve as resolve12 } from "path";
+import { readdir as readdir17, stat as stat8 } from "fs/promises";
+import { isAbsolute as isAbsolute8, join as join51, relative as relative14, resolve as resolve12 } from "path";
 var SKIP_DIRS3 = new Set([
   "node_modules",
   ".git",
@@ -37294,12 +37547,12 @@ async function walkDocs(root, maxDepth = 12) {
       return;
     let entries;
     try {
-      entries = await readdir18(dir, { withFileTypes: true });
+      entries = await readdir17(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e2 of entries) {
-      const full = join50(dir, e2.name);
+      const full = join51(dir, e2.name);
       if (e2.isDirectory()) {
         if (!SKIP_DIRS3.has(e2.name))
           await walk(full, depth + 1);
@@ -37701,7 +37954,7 @@ var classifyStage = defineCommand({
       }
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const absPath = isAbsolute9(args.path) ? args.path : join51(repoRoot, args.path);
+    const absPath = isAbsolute9(args.path) ? args.path : join52(repoRoot, args.path);
     try {
       const store = new CleanupStore(repoRoot);
       const entry = await store.stageDoc(args["run-id"], {
@@ -38223,109 +38476,7 @@ async function runCodeqlReviewToLedger(input, deps) {
 
 // src/cli/commands/codeql.ts
 init_ditto_paths();
-
-// src/core/evidence-store.ts
-import { createHash as createHash11 } from "crypto";
-import { join as join52 } from "path";
-
-// src/schemas/evidence-log.ts
-init_zod();
-init_common();
-var commandLogEntry = exports_external.object({
-  ts: isoDateTime,
-  kind: exports_external.literal("command").describe("Discriminator; only command entries are currently defined"),
-  command: exports_external.string().min(1).describe("Exact command line as executed"),
-  exit_code: exports_external.number().int(),
-  duration_ms: exports_external.number().int().nonnegative().optional(),
-  sha256: sha256.optional().describe("Hash of captured output when stored as artifact"),
-  output_path: relativePath.optional().describe("Repo-relative path to the captured stdout/stderr file if stored separately"),
-  work_item_id: exports_external.string().regex(/^wi_[a-z0-9]{8,}$/).optional().describe("Work item that owns this log entry; redundant with file location but kept for self-contained replay"),
-  criterion_id: exports_external.string().optional().describe("Acceptance criterion this command was meant to verify, if any")
-}).describe("One line of .ditto/local/work-items/<id>/evidence/commands.jsonl");
-var editLogEntry = exports_external.object({
-  ts: isoDateTime,
-  kind: exports_external.literal("edit").describe("Discriminator for file-mutation tool entries"),
-  tool: exports_external.enum(["Edit", "Write", "MultiEdit"]).describe("The file-mutation tool that produced this change"),
-  file_path: exports_external.string().min(1).describe("Path of the edited/written file as the tool received it"),
-  work_item_id: exports_external.string().regex(/^wi_[a-z0-9]{8,}$/).optional().describe("Work item that owns this log entry; redundant with file location")
-}).describe("One line of .ditto/local/work-items/<id>/evidence/edits.jsonl. Records Edit/Write/MultiEdit " + "tool use so evidence collection is not command-only (V6); audit of what files a node touched.");
-
-// src/core/evidence-store.ts
-init_ditto_paths();
-init_fs();
-
-class EvidenceStore {
-  repoRoot;
-  constructor(repoRoot) {
-    this.repoRoot = repoRoot;
-  }
-  workItemDir(workItemId2) {
-    return localDir(this.repoRoot, "work-items", workItemId2);
-  }
-  evidenceDir(workItemId2) {
-    return join52(this.workItemDir(workItemId2), "evidence");
-  }
-  commandsPath(workItemId2) {
-    return join52(this.evidenceDir(workItemId2), "commands.jsonl");
-  }
-  evidenceIndexPath(workItemId2) {
-    return join52(this.workItemDir(workItemId2), "evidence-index.json");
-  }
-  async appendCommand(workItemId2, entry) {
-    const parsed = commandLogEntry.parse(entry);
-    await ensureDir(this.evidenceDir(workItemId2));
-    const path = this.commandsPath(workItemId2);
-    const file = Bun.file(path);
-    const existing = await file.exists() ? await file.text() : "";
-    const trimmed = existing.length === 0 || existing.endsWith(`
-`) ? existing : `${existing}
-`;
-    const line = JSON.stringify(parsed);
-    await atomicWriteText(path, `${trimmed}${line}
-`);
-    return parsed;
-  }
-  async readAll(workItemId2) {
-    const path = this.commandsPath(workItemId2);
-    const file = Bun.file(path);
-    if (!await file.exists())
-      return [];
-    const text = await file.text();
-    const lines = text.split(`
-`).filter((l2) => l2.length > 0);
-    return lines.map((line, idx) => {
-      try {
-        return commandLogEntry.parse(JSON.parse(line));
-      } catch (err) {
-        throw new Error(`commands.jsonl ${path}:${idx + 1} invalid: ${String(err)}`);
-      }
-    });
-  }
-  async readIndex(workItemId2) {
-    const path = this.evidenceIndexPath(workItemId2);
-    if (!await Bun.file(path).exists()) {
-      return { schema_version: "0.1.0", work_item_id: workItemId2, records: [] };
-    }
-    return readJson(path, evidenceIndex);
-  }
-  async appendRecord(workItemId2, record) {
-    const current = await this.readIndex(workItemId2);
-    const next = {
-      schema_version: "0.1.0",
-      work_item_id: workItemId2,
-      records: [...current.records, evidenceRecord.parse(record)]
-    };
-    await ensureDir(this.workItemDir(workItemId2));
-    return writeJson(this.evidenceIndexPath(workItemId2), evidenceIndex, next);
-  }
-}
-function sha256Hex3(content) {
-  const hash = createHash11("sha256");
-  hash.update(content);
-  return hash.digest("hex");
-}
-
-// src/cli/commands/codeql.ts
+init_evidence_store();
 init_fs();
 init_id();
 async function drainStream2(stream) {
@@ -38365,7 +38516,7 @@ function defaultLedgerDeps(repoRoot) {
     fileExists: (path) => Bun.file(path).exists(),
     drain: drainStream2,
     appendRecord: (workItemId2, record) => evidence.appendRecord(workItemId2, record),
-    sha256: sha256Hex3,
+    sha256: sha256Hex,
     now: () => new Date().toISOString(),
     collectExtensions: defaultDoctorDeps.collectExtensions,
     cliAvailable: defaultDoctorDeps.cliAvailable,
@@ -39511,72 +39662,6 @@ init_zod();
 // src/schemas/interview-state.ts
 init_zod();
 init_common();
-
-// src/schemas/convergence.ts
-init_zod();
-init_common();
-var honestyKind = exports_external.enum(["finding", "hypothesis", "taste"]).describe("What the item is; backing-less claims are hypothesis, not finding");
-var confidenceLevel = exports_external.enum(["high", "medium", "low"]).describe("Confidence in a claim; backing-less claims must be low");
-var ledgerStatus = exports_external.enum(["acted", "deferred", "dismissed"]).describe("What was done with the item; deferred/dismissed require a reason");
-var closureMode = exports_external.enum(["mutual_agreement", "ledger_only", "safe_default"]).describe("How the closure was reached, not why (that is exit.reason)");
-var convergenceVersion = exports_external.object({
-  version: exports_external.number().int().positive(),
-  score: exports_external.number(),
-  evidence_refs: exports_external.array(evidenceRef).default([])
-}).describe("One scored version of the refined artifact");
-var decisionLedgerEntry = exports_external.object({
-  id: exports_external.string().min(1),
-  round: exports_external.number().int().nonnegative(),
-  objection: exports_external.string().min(1),
-  kind: honestyKind,
-  criterion_id: exports_external.string().min(1).nullable().default(null),
-  severity,
-  admissible: exports_external.boolean(),
-  status: ledgerStatus,
-  confidence: confidenceLevel,
-  backed_by: exports_external.array(evidenceRef).default([]),
-  reason: exports_external.string().min(1).describe("Why acted/dismissed; required for symmetry (\xA73.2)"),
-  supersedes: exports_external.string().min(1).nullable().default(null)
-}).superRefine((value, ctx) => {
-  if (value.kind === "finding" && value.backed_by.length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "kind=finding requires non-empty backed_by",
-      path: ["backed_by"]
-    });
-  }
-  if (value.admissible === true && value.severity !== "high" && value.severity !== "critical") {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)",
-      path: ["admissible"]
-    });
-  }
-}).describe("Append-only decision ledger entry with honesty labels (\xA74.1, \xA76.1)");
-var convergence = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  target_ref: exports_external.string().min(1).describe("Node id, review id, or AC-set this refinement targets"),
-  round_cap: exports_external.number().int().positive(),
-  rounds_run: exports_external.number().int().nonnegative(),
-  versions: exports_external.array(convergenceVersion).min(1),
-  selected_version: exports_external.number().int().positive(),
-  decision_ledger: exports_external.array(decisionLedgerEntry).default([]),
-  open_admissible_count: exports_external.number().int().nonnegative(),
-  gate: exports_external.object({
-    completion_gate: verdict,
-    convergence_gate: exports_external.enum(["no_open_admissible", "open_admissible"]),
-    converged: exports_external.boolean()
-  }),
-  exit: exports_external.object({
-    reason: exports_external.enum(["converged", "cap_reached", "blocked"]),
-    closure_mode: closureMode,
-    verdict_delegated_to_completion: exports_external.boolean().default(true),
-    next_handoff_path: relativePath.nullable().default(null)
-  })
-}).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
-
-// src/schemas/interview-state.ts
 var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
 var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
 var infoGain = exports_external.enum(["high", "medium", "low"]).describe("Estimated information gain of a question");
@@ -42264,7 +42349,7 @@ import { existsSync as existsSync9, readFileSync as readFileSync4 } from "fs";
 import { join as join62 } from "path";
 
 // src/core/build-stamp.ts
-import { createHash as createHash12 } from "crypto";
+import { createHash as createHash11 } from "crypto";
 import { readFileSync as readFileSync3, readdirSync } from "fs";
 import { join as join61 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
@@ -42281,7 +42366,7 @@ function listSourceFiles(repoRoot, rel = "src") {
   return out.sort();
 }
 function computeSourceStamp(repoRoot) {
-  const h2 = createHash12("sha256");
+  const h2 = createHash11("sha256");
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
@@ -45195,7 +45280,7 @@ var doctorCommand = defineCommand({
 });
 
 // src/cli/commands/e2e.ts
-import { mkdir as mkdir9, readFile as readFile16, readdir as readdir20 } from "fs/promises";
+import { mkdir as mkdir9, readFile as readFile16, readdir as readdir19 } from "fs/promises";
 import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join69, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
 init_zod();
 init_ditto_paths();
@@ -46020,7 +46105,7 @@ async function runGenerator(input, seams) {
 }
 
 // src/core/e2e/lifecycle.ts
-import { readFile as readFile15, readdir as readdir19, unlink as unlink3 } from "fs/promises";
+import { readFile as readFile15, readdir as readdir18, unlink as unlink3 } from "fs/promises";
 import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join68, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
@@ -46155,7 +46240,7 @@ async function runLifecycleAction(repoRoot, req) {
   }
   const journeysDir = dirname13(journeyAbs);
   const referencedElsewhere = new Set;
-  for (const name of (await readdir19(journeysDir)).filter((n3) => n3.endsWith(".journey.md"))) {
+  for (const name of (await readdir18(journeysDir)).filter((n3) => n3.endsWith(".journey.md"))) {
     const otherAbs = join68(journeysDir, name);
     if (otherAbs === journeyAbs)
       continue;
@@ -46624,7 +46709,7 @@ var e2eConformance = defineCommand({
       const generatedText = await readFile16(generatedAbs, "utf8");
       const blockTexts = {};
       try {
-        for (const name of await readdir20(blocksDir)) {
+        for (const name of await readdir19(blocksDir)) {
           if (!name.endsWith(".block.md"))
             continue;
           blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join69(blocksDir, name), "utf8");
@@ -46632,7 +46717,7 @@ var e2eConformance = defineCommand({
       } catch {}
       const supportTexts = [];
       try {
-        for (const name of await readdir20(supportDir)) {
+        for (const name of await readdir19(supportDir)) {
           if (!name.endsWith(".ts"))
             continue;
           supportTexts.push(await readFile16(join69(supportDir, name), "utf8"));
@@ -46727,7 +46812,7 @@ async function loadJourneyNames(repoRoot) {
   const names = {};
   const journeysDir = join69(repoRoot, "e2e", "journeys");
   try {
-    for (const name of await readdir20(journeysDir)) {
+    for (const name of await readdir19(journeysDir)) {
       if (!name.endsWith(".journey.md"))
         continue;
       const parsed = parseJourneyDoc(await readFile16(join69(journeysDir, name), "utf8"));
@@ -48993,7 +49078,7 @@ init_zod();
 init_common();
 init_ditto_paths();
 init_fs();
-import { readdir as readdir21, stat as stat10, unlink as unlink4 } from "fs/promises";
+import { readdir as readdir20, stat as stat10, unlink as unlink4 } from "fs/promises";
 import { join as join70 } from "path";
 var sessionPointer = exports_external.object({
   schema_version: exports_external.literal("0.1.0"),
@@ -49043,7 +49128,7 @@ class SessionPointerStore {
   async sweepStale(now = new Date) {
     let names;
     try {
-      names = await readdir21(this.dir());
+      names = await readdir20(this.dir());
     } catch {
       return [];
     }
@@ -49071,6 +49156,7 @@ class SessionPointerStore {
 
 // src/hooks/post-tool-use.ts
 init_work_item_store();
+init_evidence_log();
 
 // src/hooks/envelope.ts
 var APPLY_PATCH_HEADER = /^\s*\*\*\* (?:Add File|Update File|Delete File|Move to):\s*(.+?)\s*$/;
@@ -49810,7 +49896,7 @@ import { resolve as resolve20 } from "path";
 
 // src/core/mode-doctor.ts
 import { spawnSync } from "child_process";
-import { createHash as createHash13 } from "crypto";
+import { createHash as createHash12 } from "crypto";
 import { existsSync as existsSync11, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir11 } from "os";
 import { dirname as dirname15, join as join72, resolve as resolve19 } from "path";
@@ -49909,7 +49995,7 @@ function computeSurfaceStamp(root) {
   for (const d2 of SURFACE_DIRS)
     listSurfaceFiles(root, d2, files);
   files.sort();
-  const h3 = createHash13("sha256");
+  const h3 = createHash12("sha256");
   for (const rel of files) {
     h3.update(rel);
     h3.update("\x00");
@@ -50046,9 +50132,9 @@ var sessionStartHandler = async (input) => {
 };
 
 // src/hooks/stop.ts
-import { createHash as createHash14 } from "crypto";
+import { createHash as createHash13 } from "crypto";
 import { existsSync as existsSync12 } from "fs";
-import { readFile as readFile17, readdir as readdir22 } from "fs/promises";
+import { readFile as readFile17, readdir as readdir21 } from "fs/promises";
 import { join as join73 } from "path";
 init_ditto_paths();
 init_fs();
@@ -50223,6 +50309,7 @@ var knowledgeGateCarrier = exports_external.object({
 import { readFileSync as readFileSync7 } from "fs";
 
 // src/acg/semantic/scan-observation.ts
+init_evidence_store();
 function workItemBaseCandidates(workItem2) {
   const candidates = [];
   if (workItem2.started_at_sha)
@@ -50231,7 +50318,7 @@ function workItemBaseCandidates(workItem2) {
   return candidates;
 }
 function computeScanFingerprint(baseSha, diffText) {
-  return sha256Hex3(`${baseSha}
+  return sha256Hex(`${baseSha}
 ${diffText}`);
 }
 function buildScanObservation(input) {
@@ -50391,7 +50478,7 @@ async function readDialecticLedgers(dir) {
   const reviewsDir = join73(dir, "reviews");
   let names;
   try {
-    names = await readdir22(reviewsDir);
+    names = await readdir21(reviewsDir);
   } catch {
     return { status: "ok", items: [] };
   }
@@ -50517,7 +50604,7 @@ function fitnessInputFingerprint(repoRoot) {
     const diff = captureGitDiff(repoRoot);
     const files = listChangedFiles(repoRoot).filter((p2) => !p2.startsWith(".ditto/")).join(`
 `);
-    return createHash14("sha256").update(`${head}
+    return createHash13("sha256").update(`${head}
 ${files}
 ${diff}`).digest("hex");
   } catch {
@@ -50702,7 +50789,7 @@ var stopHandler = async (input) => {
         reasons.push(...np.reasons);
     }
   }
-  if (conv.status === "ok") {
+  if (conv.status === "ok" && NON_TERMINAL_STATUSES.includes(workItem2.status)) {
     const g4 = convergenceGate(conv.data);
     if (!g4.pass)
       reasons.push(...g4.reasons);
@@ -51470,7 +51557,7 @@ ${body}
 `;
 }
 // src/core/journey-authoring/store.ts
-import { readdir as readdir23 } from "fs/promises";
+import { readdir as readdir22 } from "fs/promises";
 import { join as join78 } from "path";
 
 // src/schemas/acg-journey-spec.ts
@@ -51585,25 +51672,14 @@ class JourneyAuthoringStore {
   async loadAllJourneys() {
     return this.loadAll(this.journeysDir(), acgJourneySpec);
   }
-  async activeJourneys() {
-    return (await this.loadAllJourneys()).filter((j) => j.status !== "superseded" && j.status !== "spec_first");
-  }
-  async getStory(id) {
-    if (!await Bun.file(this.storyPath(id)).exists())
-      return null;
-    return readJson(this.storyPath(id), acgStorySpec);
-  }
   async writeStory(spec) {
     await ensureDir(this.storiesDir());
     return writeJson(this.storyPath(spec.id), acgStorySpec, spec);
   }
-  async loadAllStories() {
-    return this.loadAll(this.storiesDir(), acgStorySpec);
-  }
   async loadAll(dir, schema) {
     let names;
     try {
-      names = (await readdir23(dir)).filter((n3) => n3.endsWith(".json")).sort();
+      names = (await readdir22(dir)).filter((n3) => n3.endsWith(".json")).sort();
     } catch {
       return [];
     }
@@ -52070,7 +52146,7 @@ var journeyAuthorCommand = defineCommand({
 });
 
 // src/cli/commands/knowledge.ts
-import { readdir as readdir24, writeFile as writeFile4 } from "fs/promises";
+import { readdir as readdir23, writeFile as writeFile4 } from "fs/promises";
 import { join as join80 } from "path";
 init_zod();
 init_fs();
@@ -52190,7 +52266,7 @@ async function checkAdrConsistency(repoRoot) {
   const violations = [];
   let files = [];
   try {
-    files = (await readdir24(adrDir)).filter((f4) => f4.endsWith(".md")).sort();
+    files = (await readdir23(adrDir)).filter((f4) => f4.endsWith(".md")).sort();
   } catch {
     files = [];
   }
@@ -52297,9 +52373,10 @@ var knowledgeCommand = defineCommand({
 
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes4 } from "crypto";
-import { readFile as readFile19, readdir as readdir26 } from "fs/promises";
+import { readFile as readFile19, readdir as readdir25 } from "fs/promises";
 import { isAbsolute as isAbsolute15, join as join82 } from "path";
 init_ditto_paths();
+init_evidence_store();
 init_fs();
 init_git();
 init_id();
@@ -52308,7 +52385,7 @@ init_id();
 init_ditto_paths();
 init_memory_scan();
 init_memory_store();
-import { readFile as readFile18, readdir as readdir25 } from "fs/promises";
+import { readFile as readFile18, readdir as readdir24 } from "fs/promises";
 import { join as join81, relative as relative20 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
@@ -52416,7 +52493,7 @@ async function appendEventGraceful(store, event, result2) {
 async function listMarkdown(dir) {
   let entries;
   try {
-    entries = await readdir25(dir);
+    entries = await readdir24(dir);
   } catch {
     return [];
   }
@@ -53926,7 +54003,7 @@ var memoryMeasure = defineCommand({
     const adrDir = join82(dittoDir(repoRoot), "knowledge", "adr");
     let names;
     try {
-      names = (await readdir26(adrDir)).filter((n3) => n3.endsWith(".md")).sort();
+      names = (await readdir25(adrDir)).filter((n3) => n3.endsWith(".md")).sort();
     } catch {
       writeError(`no ADR directory at ${adrDir}`);
       process.exit(USAGE_ERROR_EXIT);
@@ -58332,22 +58409,13 @@ async function teardownFile(destPath) {
   }
   return "left-untouched";
 }
-async function loadCharterShas2(resourcesDir) {
-  const raw = await readJsonIfExists(join95(resourcesDir, CHARTER_MANIFEST_FILENAME));
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
-    return [];
-  const shas = raw.shas;
-  if (!Array.isArray(shas))
-    return [];
-  return shas.filter((s2) => typeof s2 === "string");
-}
 async function teardownCharterSource(destPath, resourcesDir) {
   if (!await Bun.file(destPath).exists())
     return "left-untouched";
   const current = await readFile21(destPath, "utf8");
   const bundlePath = join95(resourcesDir, CANONICAL_CHARTER_FILENAME);
   const bundledCharter = await fileExists(bundlePath) ? await readFile21(bundlePath, "utf8") : "";
-  const knownShas = [...await loadCharterShas2(resourcesDir), normalizedSha256(bundledCharter)];
+  const knownShas = [...await loadCharterShas(resourcesDir), normalizedSha256(bundledCharter)];
   const outcome = refreshCharterRegion({ current, bundledCharter: "", knownShas });
   if (outcome.kind === "replaced") {
     await atomicWriteText(destPath, outcome.content);
@@ -58424,6 +58492,7 @@ var teardownCommand = defineCommand({
 });
 
 // src/cli/commands/verify.ts
+init_evidence_store();
 init_fs();
 init_work_item_store();
 var NOOP_COMMANDS = new Set(["true", ":", "echo"]);
@@ -58567,7 +58636,7 @@ init_fs();
 init_shared();
 import { execFileSync as execFileSync7 } from "child_process";
 import { existsSync as existsSync17, lstatSync, realpathSync as realpathSync2 } from "fs";
-import { readFile as readFile22, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
+import { readFile as readFile22, readdir as readdir26, rm as rm7, writeFile as writeFile7 } from "fs/promises";
 import { basename as basename8, dirname as dirname21, isAbsolute as isAbsolute17, join as join97, relative as relative23, resolve as resolve28 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
@@ -58648,7 +58717,7 @@ async function classifyDir(target, url) {
     return "empty";
   let entries;
   try {
-    entries = await readdir27(target);
+    entries = await readdir26(target);
   } catch {
     return "foreign";
   }
@@ -59219,4 +59288,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b964208cd6a6aa759063c732a08c025ace52243727c77222c8cbcb507134b2c8
+//# ditto-src-stamp=db608a8ee78771804f31269d71470527f2065ff70db88e3c5e865f2d942c9a79

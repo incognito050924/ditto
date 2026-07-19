@@ -917,7 +917,12 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
       if (!np.pass) reasons.push(...np.reasons);
     }
   }
-  if (conv.status === 'ok') {
+  // A TERMINAL work item (done/abandoned) is already closed by an explicit decision —
+  // a stale non-converged convergence.json on it must NOT re-force continuation forever
+  // (same regression class fixed for the completion ledger, wi_2607083ch, and autopilot,
+  // wi_260713w0g). Only run the convergence gate for a NON-terminal item, mirroring the
+  // sibling completion (~:905) and autopilot-continuation (~:930) guards.
+  if (conv.status === 'ok' && NON_TERMINAL_STATUSES.includes(workItem.status)) {
     const g = convergenceGate(conv.data);
     if (!g.pass) reasons.push(...g.reasons);
   }

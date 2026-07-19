@@ -5,7 +5,7 @@
 # UNVERIFIED/UNSUPPORTED: Codex custom agents have no per-tool allowlist; the
 # Claude 'tools' (Read, Grep, Glob, Bash) map only to sandbox_mode below.
 name = "playwright-test-healer"
-description = "Repair a failing DITTO-generated Playwright spec by fixing ONLY broken selectors and waits — never assertions, expected values, skips, URLs, or seed data. Constrained replacement for the stock Playwright healer (ADR-0014 D4). Emits a propose-only patch; nothing is auto-applied — a hard mechanical filter (filterHealPatch) decides what may land."
+description = "Repair a failing DITTO-generated Playwright spec by fixing ONLY broken selectors and waits — never assertions, expected values, skips, URLs, or seed data. Constrained replacement for the stock Playwright healer (ADR-0014 D4). Emits a propose-only patch; nothing is auto-applied — the DSL author reviews the proposed selector/wait change before it lands."
 sandbox_mode = "workspace-write"
 developer_instructions = """
 # Playwright Test Healer (constrained)
@@ -32,7 +32,7 @@ If passing the test seems to *require* one of these, STOP and report it — that
 ## How you return (propose-only — nothing auto-applies)
 1. Write your proposed change as a unified diff to `.ditto/local/runs/<runId>/heal-proposals/<slug>.patch` plus a short rationale (what shifted in the app, which selector/wait you repaired).
 2. STOP. Do not apply the patch, do not commit.
-3. A hard mechanical filter (`filterHealPatch`, `src/core/e2e/healer-policy.ts`) is the real guarantee: it re-checks every hunk and drops any that touches a forbidden token even if you proposed it. Only the filtered `allowed` hunks may ever be applied. After a selector heal is applied, the touched steps are force-reflagged for re-review — a heal can never silently re-green a reviewed assertion.
+3. The DSL author reviews your proposed patch before anything lands: the selector/wait change is confirmed, and any assertion a heal touched is re-reviewed — a heal can never silently re-green a reviewed assertion. This bound is a prompt-level constraint you follow, not a mechanical post-filter.
 
-This MUST-NOT list is the soft layer. Treat it as absolute anyway; the filter exists because obedience alone is not a guarantee.
+This MUST-NOT list is the constraint. There is no mechanical post-filter behind it — treat it as absolute; a heal that crosses it defeats the review that already happened.
 """

@@ -60,12 +60,23 @@ describe('buildConvergence (deterministic ratchet)', () => {
     expect(convergenceGate(c).pass).toBe(true);
   });
 
-  test('an open admissible objection => not converged, gate fails (treadmill)', () => {
+  test('an open admissible objection at the cap => not converged, but gate closes (ledger_only floor)', () => {
     const c = buildConvergence(input({ ledger: [findingActed, findingDeferred], roundsRun: 3 }));
     expect(c.open_admissible_count).toBe(1);
     expect(c.gate.converged).toBe(false);
     expect(c.exit.reason).toBe('cap_reached');
     expect(c.exit.next_handoff_path).not.toBeNull();
+    // Liveness fix (wi_260719agy): cap_reached is a valid ledger_only closure — the
+    // convergence gate must NOT re-force a round on it (that would livelock). The open
+    // objection is carried by the handoff / completion gate, not spun forever here.
+    expect(convergenceGate(c).pass).toBe(true);
+  });
+
+  test('an open admissible objection with budget remaining (blocked) => gate still fails', () => {
+    // roundsRun (1) < roundCap (3): budget remains, so this is a genuine block, NOT the
+    // ledger_only floor — the gate must still force another round.
+    const c = buildConvergence(input({ ledger: [findingActed, findingDeferred], roundsRun: 1 }));
+    expect(c.exit.reason).toBe('blocked');
     expect(convergenceGate(c).pass).toBe(false);
   });
 
@@ -82,8 +93,11 @@ describe('buildConvergence (deterministic ratchet)', () => {
   });
 
   test('completion not pass => not converged even with no open admissible', () => {
-    const c = buildConvergence(input({ completionGateVerdict: 'partial', roundsRun: 3 }));
+    // roundsRun (2) < roundCap (3) ⇒ exit.reason='blocked' (budget remains), so the
+    // gate still fails — non-convergence with budget left is a genuine block.
+    const c = buildConvergence(input({ completionGateVerdict: 'partial', roundsRun: 2 }));
     expect(c.gate.converged).toBe(false);
+    expect(c.exit.reason).toBe('blocked');
     expect(convergenceGate(c).pass).toBe(false);
   });
 });

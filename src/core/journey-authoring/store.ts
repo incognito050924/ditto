@@ -53,28 +53,9 @@ export class JourneyAuthoringStore {
     return this.loadAll(this.journeysDir(), acgJourneySpec);
   }
 
-  /**
-   * Active mapping for selectors: superseded AND spec_first journeys are excluded
-   * (a superseded journey is replaced, a spec_first one has no code to bind — ac-6/7).
-   */
-  async activeJourneys(): Promise<AcgJourneySpec[]> {
-    return (await this.loadAllJourneys()).filter(
-      (j) => j.status !== 'superseded' && j.status !== 'spec_first',
-    );
-  }
-
-  async getStory(id: string): Promise<AcgStorySpec | null> {
-    if (!(await Bun.file(this.storyPath(id)).exists())) return null;
-    return readJson(this.storyPath(id), acgStorySpec);
-  }
-
   async writeStory(spec: AcgStorySpec): Promise<AcgStorySpec> {
     await ensureDir(this.storiesDir());
     return writeJson(this.storyPath(spec.id), acgStorySpec, spec);
-  }
-
-  async loadAllStories(): Promise<AcgStorySpec[]> {
-    return this.loadAll(this.storiesDir(), acgStorySpec);
   }
 
   private async loadAll<T>(

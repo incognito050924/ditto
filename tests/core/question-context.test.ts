@@ -7,15 +7,12 @@ import { InterviewStore } from '~/core/interview-store';
 import { loadGlossaryVocab } from '~/core/knowledge-bridge';
 import {
   OPTION_DESCRIPTION_BUDGET,
-  REVIEW_REGENERATE_CAP,
   findLoanwords,
   findUnexplainedIdentifiers,
   isBranchSeam,
   needsBriefing,
   normalizePresentedText,
   orderByContinuity,
-  resolveReviewDecision,
-  routeForReview,
   selectSingleFire,
   validateQuestionContext,
 } from '~/core/question-context';
@@ -272,40 +269,6 @@ describe('needsBriefing (ac-5, D4)', () => {
     expect(s.length).toBeLessThan(OPTION_DESCRIPTION_BUDGET);
     expect(Buffer.byteLength(s, 'utf8')).toBeLessThanOrEqual(OPTION_DESCRIPTION_BUDGET);
     expect(needsBriefing(s)).toBe(false);
-  });
-});
-
-// ac-4 (D2): critical questions route to the session-blind reviewer; the per-question
-// regeneration cap (2) and reviewer availability decide reviewed vs unverified-degraded.
-describe('review routing + regeneration cap (ac-4, D2)', () => {
-  test('critical questions route to review; non-critical skip it', () => {
-    expect(routeForReview({ critical: true }).action).toBe('review');
-    expect(routeForReview({ critical: false }).action).toBe('skip-review');
-  });
-
-  test('reviewer pass → reviewed', () => {
-    const d = resolveReviewDecision({ passed: true, regenerations: 0, reviewerAvailable: true });
-    expect(d.status).toBe('reviewed');
-  });
-
-  test('reviewer unavailable → unverified-degraded (honest, not silently asked)', () => {
-    const d = resolveReviewDecision({ passed: false, regenerations: 0, reviewerAvailable: false });
-    expect(d).toEqual({ status: 'unverified-degraded', reason: 'reviewer-unavailable' });
-  });
-
-  test('below cap and not passed → regenerate with incremented attempt', () => {
-    const d = resolveReviewDecision({ passed: false, regenerations: 0, reviewerAvailable: true });
-    expect(d).toEqual({ status: 'regenerate', attempt: 1 });
-  });
-
-  test('cap (2) exhausted → unverified-degraded, no stall', () => {
-    const d = resolveReviewDecision({
-      passed: false,
-      regenerations: REVIEW_REGENERATE_CAP,
-      reviewerAvailable: true,
-    });
-    expect(d).toEqual({ status: 'unverified-degraded', reason: 'cap-exhausted' });
-    expect(REVIEW_REGENERATE_CAP).toBe(2);
   });
 });
 

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { stringify as stringifyYaml } from 'yaml';
 import { parseYaml } from '../hosts/shared';
 import { splitFrontMatter } from './journey-dsl';
@@ -167,26 +166,4 @@ export async function detectStale(
     };
   }
   return { stale: false, reason: 'header digest matches current source' };
-}
-
-export interface SpecPartition {
-  /** dir-relative POSIX paths of DITTO-generated files. */
-  generated: string[];
-  /** dir-relative POSIX paths of human-authored files. */
-  manual: string[];
-}
-
-/** ac-8: scan a directory (recursive) and split .ts files into derived vs manual. */
-export async function partitionSpecFiles(dirAbs: string): Promise<SpecPartition> {
-  const entries = await readdir(dirAbs, { recursive: true, withFileTypes: true });
-  const generated: string[] = [];
-  const manual: string[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
-    const abs = join(entry.parentPath, entry.name);
-    const rel = relative(dirAbs, abs).split(sep).join('/');
-    const content = await readFile(abs, 'utf8');
-    (isDittoGenerated(content) ? generated : manual).push(rel);
-  }
-  return { generated, manual };
 }

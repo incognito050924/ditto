@@ -215,9 +215,14 @@ describe('M0.4 — 결정론 게이트 + fixture 판정 (verifier가 판정)', (
     expect(completionGate(item, dup).reasons.join(' ')).toMatch(/duplicate/);
   });
 
-  test('convergenceGate: converged → PASS, treadmill/early-converge → FAIL', () => {
+  // Liveness fix (wi_260719agy): treadmill.json is cap_reached/ledger_only — a valid
+  // budget-exhausted terminal closure, NOT a re-forced round. deriveClosureMode maps it
+  // to a ledger_only floor, so convergenceGate PASSES it (mirrors tests/core/gates.test.ts).
+  // early-converge.json is exit.reason=converged and correctly still FAILS the consistency
+  // check; the cap_reached carve-out does not touch it.
+  test('convergenceGate: converged → PASS, treadmill (cap_reached/ledger_only) → PASS, early-converge → FAIL', () => {
     expect(convergenceGate(convergence.parse(load('convergence/converged.json'))).pass).toBe(true);
-    expect(convergenceGate(convergence.parse(load('convergence/treadmill.json'))).pass).toBe(false);
+    expect(convergenceGate(convergence.parse(load('convergence/treadmill.json'))).pass).toBe(true);
     expect(convergenceGate(convergence.parse(load('convergence/early-converge.json'))).pass).toBe(
       false,
     );

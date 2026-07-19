@@ -126,6 +126,81 @@ const PASSING_ACCEPTANCE = [
 ];
 const coveringNode = node({ status: 'passed', acceptance_refs: ['ac-1', 'ac-2', 'ac-3'] });
 
+// A non-converged convergence.json (open admissible objection). `reason`/`rounds_run`
+// are overridable so a capped floor (cap_reached) vs a genuine block (budget left) can
+// be distinguished — the exact axis the convergence-gate liveness fix turns on.
+const convergenceArtifact = (overrides: Record<string, unknown> = {}) => {
+  const { reason = 'cap_reached', rounds_run = 3, ...rest } = overrides;
+  return {
+    schema_version: '0.1.0',
+    work_item_id: wiId,
+    target_ref: wiId,
+    round_cap: 3,
+    rounds_run,
+    versions: [{ version: 1, score: 0, evidence_refs: [] }],
+    selected_version: 1,
+    decision_ledger: [
+      {
+        id: 'OBJ-1',
+        round: 1,
+        objection: 'AC-1 still fails on unicode input',
+        kind: 'finding',
+        criterion_id: 'ac-1',
+        severity: 'critical',
+        admissible: true,
+        status: 'deferred',
+        confidence: 'high',
+        backed_by: [{ kind: 'command', command: 'bun test', summary: '1 failed' }],
+        reason: 'open admissible objection',
+        supersedes: null,
+      },
+    ],
+    open_admissible_count: 1,
+    gate: { completion_gate: 'partial', convergence_gate: 'open_admissible', converged: false },
+    exit: {
+      reason,
+      closure_mode: reason === 'cap_reached' ? 'ledger_only' : 'safe_default',
+      verdict_delegated_to_completion: true,
+      next_handoff_path: `.ditto/work-items/${wiId}/handoff.md`,
+    },
+    ...rest,
+  };
+};
+
+describe('convergence gate (stop hook) liveness + terminal guard', () => {
+  // (a) A capped-but-unconverged item can STOP: cap_reached is the ledger_only floor,
+  // re-forcing convergence would livelock.
+  test('non-terminal + cap_reached (unconverged) convergence.json => exit 0', async () => {
+    await writeArtifact('convergence.json', convergenceArtifact({ reason: 'cap_reached' }));
+    expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+  });
+
+  // (c) Over-suppression guard: a non-terminal item whose convergence is unconverged
+  // WITH budget remaining (reason='blocked') STILL forces continuation.
+  test('non-terminal + blocked (budget remaining) convergence.json => exit 2', async () => {
+    await writeArtifact(
+      'convergence.json',
+      convergenceArtifact({ reason: 'blocked', rounds_run: 1 }),
+    );
+    const out = await run({ stop_hook_active: false });
+    expect(out.exitCode).toBe(2);
+    expect(out.stderr).toContain('수렴 안 됨');
+  });
+
+  // (b) A TERMINAL item (done/abandoned) carrying a non-converged convergence.json must
+  // NOT be re-forced into continuation — it is already closed by an explicit decision.
+  for (const status of ['done', 'abandoned'] as const) {
+    test(`terminal (${status}) + blocked convergence.json => exit 0 (no re-force)`, async () => {
+      await store.update(wiId, (c) => ({ ...c, status }));
+      await writeArtifact(
+        'convergence.json',
+        convergenceArtifact({ reason: 'blocked', rounds_run: 1 }),
+      );
+      expect((await run({ stop_hook_active: false })).exitCode).toBe(0);
+    });
+  }
+});
+
 describe('stopHandler', () => {
   test('stop_hook_active=true short-circuits to exit 0 (8-iter guard)', async () => {
     await writeArtifact(

@@ -204,11 +204,45 @@ describe('convergenceGate reads recorded fields only', () => {
     expect(convergenceGate(c).pass).toBe(true);
   });
 
-  test('treadmill fixture fails (open admissible remains)', () => {
+  // Liveness fix (wi_260719agy): a cap_reached record is the budget-exhausted floor —
+  // deriveClosureMode maps it to a VALID ledger_only closure, so the gate must NOT
+  // re-force convergence on it (that would livelock; the residual is delegated to the
+  // completion gate / handoff). The treadmill fixture is cap_reached with an open
+  // admissible objection, so it now PASSES the convergence gate.
+  test('treadmill (cap_reached) passes — ledger_only floor, not a re-forced round', () => {
     const c = convergence.parse(load('convergence/treadmill.json'));
     const r = convergenceGate(c);
+    expect(c.exit.reason).toBe('cap_reached');
+    expect(r.pass).toBe(true);
+    expect(r.reasons.some((x) => x.includes('수렴 안 됨'))).toBe(false);
+  });
+
+  // Over-suppression guard: the cap_reached carve-out must NOT leak to a non-converged
+  // record that still has budget (exit.reason='blocked') — that one STILL blocks.
+  test('blocked (budget remaining) still fails — not over-suppressed by the cap carve-out', () => {
+    const base = load('convergence/treadmill.json') as Record<string, unknown>;
+    const c = convergence.parse({
+      ...base,
+      rounds_run: 1, // < round_cap (3): budget remains, so this is a genuine block
+      exit: { ...(base.exit as Record<string, unknown>), reason: 'blocked', closure_mode: 'safe_default' },
+    });
+    const r = convergenceGate(c);
+    expect(c.exit.reason).toBe('blocked');
     expect(r.pass).toBe(false);
     expect(r.reasons.some((x) => x.includes('수렴 안 됨'))).toBe(true);
+  });
+
+  // The converged-flag consistency checks stay intact even under cap_reached: a
+  // cap_reached record that MISLABELS `converged` is still caught.
+  test('cap_reached with a mislabelled converged flag still fails (consistency intact)', () => {
+    const base = load('convergence/treadmill.json') as Record<string, unknown>;
+    const c = convergence.parse({
+      ...base,
+      gate: { ...(base.gate as Record<string, unknown>), converged: true }, // lie: openComputed=1 ⇒ expected false
+    });
+    const r = convergenceGate(c);
+    expect(r.pass).toBe(false);
+    expect(r.reasons.some((x) => x.includes('수렴 판정 기록값'))).toBe(true);
   });
 
   test('early-converge fixture fails (declares converged with open admissible)', () => {

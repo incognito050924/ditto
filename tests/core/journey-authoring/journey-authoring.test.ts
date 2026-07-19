@@ -233,11 +233,6 @@ describe('story child reduction → superseded (ac-7)', () => {
       expect(res.status).toBe('finalized');
 
       expect((await store.getJourney('jrn-b'))?.status).toBe('superseded');
-      // projection excludes superseded from the active mapping
-      const activeIds = (await store.activeJourneys()).map((j) => j.id);
-      expect(activeIds).not.toContain('jrn-b');
-      // story no longer references the dropped journey
-      expect((await store.getStory('us-shop'))?.journey_ids).not.toContain('jrn-b');
     } finally {
       await rm(repo, { recursive: true, force: true });
     }

@@ -3,13 +3,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  DITTO_AGENT_MARKER,
   PLAYWRIGHT_TEST_MCP_KEY,
   buildE2eAgentsRecord,
   detectVersionSkew,
   gatePlaywrightVersion,
-  hasDittoAgentMarker,
-  installAgentFile,
   mergeMcpServers,
   parsePlaywrightVersion,
   readE2eAgentsRecord,
@@ -121,44 +118,6 @@ describe('.mcp.json backup + merge (claude loop clobbers with a fresh file)', ()
       const written = JSON.parse(await readFile(mcpPath, 'utf8'));
       expect(written.mcpServers['user-db']).toBeDefined();
       expect(written.mcpServers[PLAYWRIGHT_TEST_MCP_KEY]).toBeDefined();
-    });
-  });
-});
-
-describe('agent-file overwrite guard (ditto marker)', () => {
-  test('hasDittoAgentMarker detects the v1 marker', () => {
-    expect(hasDittoAgentMarker(`${DITTO_AGENT_MARKER}\n# healer`)).toBe(true);
-    expect(hasDittoAgentMarker('# a user-authored agent')).toBe(false);
-  });
-
-  test('installAgentFile backs up a pre-existing NON-ditto file, then writes', async () => {
-    await withTmp(async (dir) => {
-      const dest = join(dir, 'playwright-test-healer.md');
-      await Bun.write(dest, '# my own healer\n');
-      const res = await installAgentFile(dest, `${DITTO_AGENT_MARKER}\n# constrained\n`);
-      expect(res.action).toBe('backed-up');
-      expect(await readFile(`${dest}.ditto_bak`, 'utf8')).toBe('# my own healer\n');
-      expect(await readFile(dest, 'utf8')).toContain('constrained');
-    });
-  });
-
-  test('installAgentFile refreshes our own marked file in place (no backup)', async () => {
-    await withTmp(async (dir) => {
-      const dest = join(dir, 'playwright-test-planner.md');
-      await Bun.write(dest, `${DITTO_AGENT_MARKER}\n# old\n`);
-      const res = await installAgentFile(dest, `${DITTO_AGENT_MARKER}\n# new\n`);
-      expect(res.action).toBe('refreshed');
-      expect(res.backupPath).toBeNull();
-      expect(await readFile(dest, 'utf8')).toContain('new');
-    });
-  });
-
-  test('installAgentFile installs when absent', async () => {
-    await withTmp(async (dir) => {
-      const dest = join(dir, 'playwright-test-generator.md');
-      const res = await installAgentFile(dest, `${DITTO_AGENT_MARKER}\n# gen\n`);
-      expect(res.action).toBe('installed');
-      expect(res.backupPath).toBeNull();
     });
   });
 });

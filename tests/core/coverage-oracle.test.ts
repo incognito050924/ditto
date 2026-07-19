@@ -22,7 +22,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  correlateFabrication,
   enforcementTierForCategory,
   evaluateOracleClaim,
   isHardRejected,
@@ -265,91 +264,6 @@ describe('tool-absent degradation (ac-7, ADR-0018)', () => {
     // Even in the risk tier, tool absence must not fail closed into a reject
     // (a missing optional tool cannot block intent realization).
     expect(isHardRejected(v)).toBe(false);
-  });
-});
-
-describe('fabrication correlation — deterministic CORRELATE slot (ac-5, n9)', () => {
-  test('empty sets → zero counts and NULL rates (0/0 is unmeasurable, never 0%)', () => {
-    const c = correlateFabrication([], []);
-    expect(c.oracle).toEqual({ claims: 0, confirmed: 0, refuted: 0, advisory_unverified: 0 });
-    expect(c.labeler).toEqual({ claims: 0, real: 0, fabricated: 0 });
-    expect(c.joint.pairs).toBe(0);
-    expect(c.unmatched).toEqual({ oracle_only: 0, labeler_only: 0 });
-    expect(c.rates.oracle_fabrication_rate).toBeNull();
-    expect(c.rates.labeler_fabrication_rate).toBeNull();
-    expect(c.rates.decidable_agreement_rate).toBeNull();
-  });
-
-  const oVerdict = (
-    claim_id: string,
-    outcome: 'confirmed' | 'refuted' | 'advisory_unverified',
-  ): Parameters<typeof correlateFabrication>[0][number] => ({
-    claim_id,
-    claim: absence('tok', 'src'),
-    outcome,
-    tier: 'advisory',
-    ...(outcome === 'advisory_unverified' ? { advisory_reason: 'shape_gate' as const } : {}),
-  });
-  const lLabel = (
-    claim_id: string,
-    label: 'real' | 'fabricated',
-  ): Parameters<typeof correlateFabrication>[1][number] => ({ claim_id, label });
-
-  test('joins the two independent sets on claim_id into the contingency matrix + rates', () => {
-    const c = correlateFabrication(
-      [
-        oVerdict('c1', 'confirmed'),
-        oVerdict('c2', 'refuted'),
-        oVerdict('c3', 'refuted'),
-        oVerdict('c4', 'advisory_unverified'),
-        oVerdict('c5', 'confirmed'), // unlabeled → oracle_only
-      ],
-      [
-        lLabel('c1', 'real'),
-        lLabel('c2', 'fabricated'),
-        lLabel('c3', 'real'),
-        lLabel('c4', 'fabricated'),
-      ],
-    );
-    expect(c.oracle).toEqual({ claims: 5, confirmed: 2, refuted: 2, advisory_unverified: 1 });
-    expect(c.labeler).toEqual({ claims: 4, real: 2, fabricated: 2 });
-    expect(c.joint).toEqual({
-      pairs: 4,
-      confirmed_real: 1,
-      confirmed_fabricated: 0,
-      refuted_real: 1,
-      refuted_fabricated: 1,
-      advisory_real: 0,
-      advisory_fabricated: 1,
-    });
-    expect(c.unmatched).toEqual({ oracle_only: 1, labeler_only: 0 });
-    // oracle: 2 refuted / 4 decidable; labeler: 2 fabricated / 4 labeled.
-    expect(c.rates.oracle_fabrication_rate).toBe(0.5);
-    expect(c.rates.labeler_fabrication_rate).toBe(0.5);
-    // decidable joint pairs = c1, c2, c3 (advisory c4 excluded); agree on c1 + c2.
-    expect(c.rates.decidable_agreement_rate).toBeCloseTo(2 / 3);
-  });
-
-  test('duplicate claim_id last-wins in BOTH sets (mirrors the sidecar claim_id merge)', () => {
-    const c = correlateFabrication(
-      [oVerdict('c1', 'confirmed'), oVerdict('c1', 'refuted')],
-      [lLabel('c1', 'real'), lLabel('c1', 'fabricated')],
-    );
-    expect(c.oracle).toEqual({ claims: 1, confirmed: 0, refuted: 1, advisory_unverified: 0 });
-    expect(c.labeler).toEqual({ claims: 1, real: 0, fabricated: 1 });
-    expect(c.joint.pairs).toBe(1);
-    expect(c.joint.refuted_fabricated).toBe(1);
-  });
-
-  test('a label with no matching verdict stays visible as labeler_only (blind-spot guard)', () => {
-    // A claim self-declaring a user-intent category bypasses the oracle and never
-    // lands in the sidecar — a label outside the ENFORCE set is an anomaly the
-    // measurement must surface, never silently drop.
-    const c = correlateFabrication([], [lLabel('ghost', 'fabricated')]);
-    expect(c.unmatched).toEqual({ oracle_only: 0, labeler_only: 1 });
-    expect(c.joint.pairs).toBe(0);
-    expect(c.rates.oracle_fabrication_rate).toBeNull();
-    expect(c.rates.labeler_fabrication_rate).toBe(1);
   });
 });
 

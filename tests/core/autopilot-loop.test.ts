@@ -7,9 +7,10 @@ import { assembleCompletionFromGraph } from '~/core/autopilot-complete';
 import { buildInitialNodes } from '~/core/autopilot-graph';
 import { nextNode, recordResult } from '~/core/autopilot-loop';
 import { AutopilotStore, isDecisivePost } from '~/core/autopilot-store';
+import { ConvergenceStore } from '~/core/convergence-store';
 import { CoverageStore } from '~/core/coverage-store';
 import { localDir } from '~/core/ditto-paths';
-import { directionForkGate } from '~/core/gates';
+import { convergenceGate, directionForkGate } from '~/core/gates';
 import * as gitModule from '~/core/git';
 import { IntentStore } from '~/core/intent-store';
 import { WorkItemStore } from '~/core/work-item-store';
@@ -289,6 +290,41 @@ describe('nextNode terminal surfacing (작은 고정: §6.8 done disposition + A
     expect(res.action).toBe('done');
     if (res.action !== 'done') throw new Error('expected done');
     expect(res.all_passed).toBe(false);
+  });
+
+  // Wiring (wi_260719agy): the loop WRITES the per-work-item convergence sidecar on the
+  // termination transition the stop hook observes, with REAL data — an all-passed close
+  // records `converged`, a not-all-passed close records `blocked` (budget remaining, so
+  // the stop hook keeps going), never a stale/absent record.
+  test('all-passed done writes convergence.json with exit.reason=converged', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) => ({ ...n, status: 'passed' as const })),
+      }),
+    );
+    await nextNode(repo, WI);
+    const conv = new ConvergenceStore(repo);
+    expect(await conv.exists(WI)).toBe(true);
+    const c = await conv.get(WI);
+    expect(c.exit.reason).toBe('converged');
+    expect(c.gate.converged).toBe(true);
+    expect(convergenceGate(c).pass).toBe(true);
+  });
+
+  test('not-all-passed done writes convergence.json with exit.reason=blocked (gate keeps going)', async () => {
+    await seed(
+      graph({
+        nodes: buildInitialNodes(['ac-1']).map((n) => ({
+          ...n,
+          status: n.id === 'N3' ? ('failed' as const) : ('passed' as const),
+        })),
+      }),
+    );
+    await nextNode(repo, WI);
+    const c = await new ConvergenceStore(repo).get(WI);
+    expect(c.gate.converged).toBe(false);
+    expect(c.exit.reason).toBe('blocked');
+    expect(convergenceGate(c).pass).toBe(false);
   });
 
   // Fix 1 (A-2 surfacing): a blocked node with nothing runnable is an escalated,
