@@ -13,7 +13,6 @@
  * private path methods composing dittoDir/localDir, IO via fs.ts
  * (readJson/writeJson/ensureDir).
  */
-import { createHash } from 'node:crypto';
 import { open, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { type MemoryEvent, memoryEvent } from '~/schemas/memory-event';
@@ -219,7 +218,6 @@ export class MemoryProjectionStore {
   }
 }
 
-/** sha256 hex over content (mirrors evidence-store.sha256Hex). */
-export function sha256Hex(content: string | Uint8Array): string {
-  return createHash('sha256').update(content).digest('hex');
-}
+// Canonical sha256Hex lives in evidence-store; re-exported here so existing
+// `./memory-store` importers keep working without a duplicate body.
+export { sha256Hex } from './evidence-store';

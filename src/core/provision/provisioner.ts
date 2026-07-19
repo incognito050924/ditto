@@ -70,18 +70,6 @@ export interface ProvisionerRegistry {
 }
 
 /**
- * LSP 표면(다른 세션)의 유일 의존 계약: 한 언어의 LSP 서버 경로를 resolve, 없으면 null.
- * 이 시그니처는 불변 계약으로 고정한다 — 소비자는 이 함수에만 결합한다.
- */
-export async function resolveServer(
-  registry: ProvisionerRegistry,
-  language: string,
-): Promise<string | null> {
-  const server = registry.lsp.get(language);
-  return server ? server.resolveExisting() : null;
-}
-
-/**
  * CodeQL 어댑터: 기존 `installCodeqlCli` + `defaultInstallDeps`를 Provisioner 모양으로 감싼다.
  * codeql/install.ts는 손대지 않는다(기존 단위테스트 GREEN 유지) — 통일은 이 어댑터 위에서.
  */

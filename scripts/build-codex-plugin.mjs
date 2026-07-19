@@ -23,18 +23,10 @@
 // CLAUDE_PLUGIN_ROOT to plugin hook commands as a legacy-compat variable, so it
 // resolves under Codex too (plan F1, dual-host-codex-fact-verification.md).
 
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { projectAgent } from '../src/core/agent-projection.ts';
+import { projectAgents as projectAgentsShared } from '../src/core/agent-projection.ts';
 import { normalizedSha256 } from '../src/core/instruction-bridge.ts';
 import { buildBinInto, syncManagedResources } from './build-bin.mjs';
 
@@ -98,7 +90,12 @@ function injectCodexHost() {
 }
 
 // Project agents/*.md → dist/codex-plugin/.codex/agents/<name>.toml (M4).
-function projectAgents() {
+// Reuses the shared projectAgents (src/core/agent-projection.ts) for the
+// read-dir + projectAgent loop so the Codex build and the runtime projection
+// stay in lockstep (no re-implemented loop to drift). This file keeps the
+// build-only concerns: the existence guard, writing the TOMLs, and the OBJ-7
+// duplicate-name build error.
+async function projectAgents() {
   const agentsDir = join(REPO, 'agents');
   if (!existsSync(agentsDir)) throw new Error('missing surface dir: agents/');
   const outDir = join(OUT, '.codex', 'agents');
@@ -108,12 +105,10 @@ function projectAgents() {
   // the same name would silently overwrite one TOML, breaking surface parity with
   // no failing signal. A collision is a build error, not a silent last-writer-wins.
   const seen = new Set();
-  for (const file of readdirSync(agentsDir).sort()) {
-    if (!file.endsWith('.md')) continue;
-    const projection = projectAgent(readFileSync(join(agentsDir, file), 'utf8'));
+  for (const projection of await projectAgentsShared(REPO)) {
     if (seen.has(projection.name)) {
       throw new Error(
-        `duplicate projected agent name "${projection.name}" (from ${file}) — would overwrite ${projection.name}.toml`,
+        `duplicate projected agent name "${projection.name}" — would overwrite ${projection.name}.toml`,
       );
     }
     seen.add(projection.name);
@@ -123,7 +118,7 @@ function projectAgents() {
   return names;
 }
 
-function main() {
+async function main() {
   // 0. Record the current charter sha into the recognition manifest BEFORE
   //    regenerating the managed resources from the canonical charter.
   appendCharterManifest();
@@ -153,7 +148,7 @@ function main() {
   injectCodexHost();
 
   // 4. Project Claude agents/*.md into Codex custom-agent TOMLs (M4).
-  const agents = projectAgents();
+  const agents = await projectAgents();
 
   console.log(`[ditto] build:codex-plugin OK → ${OUT}`);
   console.log(
@@ -161,9 +156,7 @@ function main() {
   );
 }
 
-try {
-  main();
-} catch (err) {
+main().catch((err) => {
   console.error(`[ditto] build:codex-plugin FAILED — ${err.message}`);
   process.exit(1);
-}
+});

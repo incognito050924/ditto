@@ -5,79 +5,9 @@ import { join } from 'node:path';
 import {
   readDeepInterviewConfigDefaults,
   readGithubConfig,
-  readQuestionConfigDefaults,
   seedGithubConfigIfAbsent,
   writeGithubConfig,
 } from '~/core/ditto-config';
-
-describe('readQuestionConfigDefaults — per-user .ditto/local/config.json (wi_260619jmu)', () => {
-  let repo: string;
-
-  beforeEach(async () => {
-    repo = await mkdtemp(join(tmpdir(), 'ditto-config-'));
-  });
-  afterEach(async () => {
-    await rm(repo, { recursive: true, force: true });
-  });
-
-  async function writeConfig(content: string): Promise<void> {
-    const dir = join(repo, '.ditto', 'local');
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, 'config.json'), content, 'utf8');
-  }
-
-  test('reads prism.question back from the config file', async () => {
-    await writeConfig(
-      JSON.stringify({ prism: { question: { performance: 'exhaustive', generators: 5 } } }),
-    );
-    expect(await readQuestionConfigDefaults(repo)).toEqual({
-      performance: 'exhaustive',
-      generators: 5,
-    });
-  });
-
-  test('absent file → {} (fail-open)', async () => {
-    expect(await readQuestionConfigDefaults(repo)).toEqual({});
-  });
-
-  test('malformed JSON → {} (fail-open, never throws)', async () => {
-    await writeConfig('{ not json');
-    expect(await readQuestionConfigDefaults(repo)).toEqual({});
-  });
-
-  test('schema-invalid (out-of-bounds) → {} (fail-open)', async () => {
-    // generators 99 violates the 1..6 bound → whole config rejected, returns {}
-    await writeConfig(JSON.stringify({ prism: { question: { generators: 99 } } }));
-    expect(await readQuestionConfigDefaults(repo)).toEqual({});
-  });
-
-  test('config present but no prism.question block → {}', async () => {
-    await writeConfig(JSON.stringify({ prism: {} }));
-    expect(await readQuestionConfigDefaults(repo)).toEqual({});
-  });
-
-  test('onMalformed fires only when a present file fails to parse (not absent/valid)', async () => {
-    let calls = 0;
-    const onMalformed = () => {
-      calls++;
-    };
-    // absent file → fail-open, NOT malformed (no warning)
-    await readQuestionConfigDefaults(repo, onMalformed);
-    expect(calls).toBe(0);
-    // valid config → no warning
-    await writeConfig(JSON.stringify({ prism: { question: { generators: 3 } } }));
-    await readQuestionConfigDefaults(repo, onMalformed);
-    expect(calls).toBe(0);
-    // present + invalid JSON → warning (fail-open still returns {})
-    await writeConfig('{ not json');
-    expect(await readQuestionConfigDefaults(repo, onMalformed)).toEqual({});
-    expect(calls).toBe(1);
-    // present + schema-invalid → warning
-    await writeConfig(JSON.stringify({ prism: { question: { generators: 99 } } }));
-    await readQuestionConfigDefaults(repo, onMalformed);
-    expect(calls).toBe(2);
-  });
-});
 
 describe('readDeepInterviewConfigDefaults — deep_interview block (wi_260621p6a)', () => {
   let repo: string;
@@ -196,7 +126,11 @@ describe('readGithubConfig / writeGithubConfig — github block (wi_260628d79)',
       'utf8',
     );
     await writeGithubConfig(repo, { ...sample });
-    expect(await readQuestionConfigDefaults(repo)).toEqual({ generators: 3 });
+    const raw = JSON.parse(await Bun.file(join(dir, 'config.json')).text()) as Record<
+      string,
+      unknown
+    >;
+    expect(raw.prism).toEqual({ question: { generators: 3 } });
     expect(await readGithubConfig(repo)).toEqual({ ...sample });
   });
 
@@ -282,7 +216,8 @@ describe('seedGithubConfigIfAbsent — bootstrap-once github seed (wi_260629vnt)
     const r = await seedGithubConfigIfAbsent(repo, { ...backlog });
     expect(r).toEqual({ seeded: true, reason: 'absent' });
     expect(await readGithubConfig(repo)).toEqual({ ...backlog });
-    expect(await readQuestionConfigDefaults(repo)).toEqual({ generators: 3 });
+    const raw = JSON.parse(await Bun.file(configPath()).text()) as Record<string, unknown>;
+    expect(raw.prism).toEqual({ question: { generators: 3 } });
     expect(await readDeepInterviewConfigDefaults(repo)).toEqual({ generators: 4 });
   });
 

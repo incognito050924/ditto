@@ -1,12 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { InstallDeps } from '~/core/codeql/install';
-import {
-  type Provisioner,
-  type ProvisionerRegistry,
-  codeqlProvisioner,
-  defaultRegistry,
-  resolveServer,
-} from '~/core/provision/provisioner';
+import { codeqlProvisioner, defaultRegistry } from '~/core/provision/provisioner';
 
 /** 네트워크/fs 없이 동작을 검증하기 위한 가짜 codeql deps. */
 function fakeCodeqlDeps(over: Partial<InstallDeps> = {}): InstallDeps {
@@ -20,18 +14,6 @@ function fakeCodeqlDeps(over: Partial<InstallDeps> = {}): InstallDeps {
     fileExists: () => true,
     pathIncludes: () => true,
     ...over,
-  };
-}
-
-/** resolveServer 검증용 최소 가짜 provisioner. */
-function fakeProvisioner(id: string, path: string | null): Provisioner {
-  return {
-    id,
-    label: id,
-    resolveExisting: async () => path,
-    install: async () => ({ status: 'already-present', message: 'fake' }),
-    manual: () => [],
-    prereqs: () => [],
   };
 }
 
@@ -55,29 +37,6 @@ describe('codeqlProvisioner adapter', () => {
   test('install() happy path → installed (주입 deps로 실제 spawn 없이)', async () => {
     const result = await codeqlProvisioner(fakeCodeqlDeps()).install();
     expect(result.status).toBe('installed');
-  });
-});
-
-describe('resolveServer (LSP 표면 계약)', () => {
-  test('등록되지 않은 언어는 null', async () => {
-    const reg: ProvisionerRegistry = { tools: new Map(), lsp: new Map() };
-    expect(await resolveServer(reg, 'python')).toBeNull();
-  });
-
-  test('등록된 언어는 그 provisioner의 resolveExisting에 위임', async () => {
-    const reg: ProvisionerRegistry = {
-      tools: new Map(),
-      lsp: new Map([['typescript', fakeProvisioner('lsp:typescript', '/bin/tsserver')]]),
-    };
-    expect(await resolveServer(reg, 'typescript')).toBe('/bin/tsserver');
-  });
-
-  test('등록됐지만 부재(probe null)면 null', async () => {
-    const reg: ProvisionerRegistry = {
-      tools: new Map(),
-      lsp: new Map([['go', fakeProvisioner('lsp:go', null)]]),
-    };
-    expect(await resolveServer(reg, 'go')).toBeNull();
   });
 });
 

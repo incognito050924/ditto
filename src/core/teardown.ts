@@ -2,7 +2,7 @@ import { copyFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { refreshCharterRegion } from './charter-region';
 import { atomicWriteText } from './fs';
-import { fileExists, readJsonIfExists } from './hosts/shared';
+import { fileExists } from './hosts/shared';
 import { normalizedSha256 } from './instruction-bridge';
 import { stripManagedBlock } from './managed-resource';
 import { type RoutingScope, discoverResources, routeResource } from './resource-routing';
@@ -12,6 +12,7 @@ import {
   PUSH_GATE_HOOK_BACKUP_SUFFIX,
   PUSH_GATE_HOOK_MARKER,
   gitHooksDir,
+  loadCharterShas,
 } from './setup';
 
 /**
@@ -166,19 +167,6 @@ async function teardownFile(destPath: string): Promise<TeardownAction> {
     return 'restored-from-backup';
   }
   return 'left-untouched';
-}
-
-/**
- * Load the normalized charter shas from the bundled `charter-manifest.json` (current +
- * prior versions). Missing/malformed manifest → `[]`, degrading to current-bundle-only
- * recognition. Mirrors setup's private loader over the same committed recognition asset.
- */
-async function loadCharterShas(resourcesDir: string): Promise<string[]> {
-  const raw = await readJsonIfExists(join(resourcesDir, CHARTER_MANIFEST_FILENAME));
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return [];
-  const shas = (raw as { shas?: unknown }).shas;
-  if (!Array.isArray(shas)) return [];
-  return shas.filter((s): s is string => typeof s === 'string');
 }
 
 /**

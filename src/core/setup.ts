@@ -120,7 +120,7 @@ const CODEX_BIN_NAME = 'ditto';
  * or malformed manifest → `[]` (no recognized priors), so a fresh install and any
  * target lacking the manifest degrade gracefully to create-if-missing behavior.
  */
-async function loadCharterShas(resourcesDir: string): Promise<string[]> {
+export async function loadCharterShas(resourcesDir: string): Promise<string[]> {
   const raw = await readJsonIfExists(join(resourcesDir, CHARTER_MANIFEST_FILENAME));
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return [];
   const shas = (raw as { shas?: unknown }).shas;
