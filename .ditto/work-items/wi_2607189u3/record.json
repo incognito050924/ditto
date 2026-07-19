@@ -1,0 +1,108 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607189u3",
+  "title": "엔진 복잡도 self-audit — dialectic로 죽은 게이트·얕은 추상화 식별·제거",
+  "source_request": "엔진 복잡도 self-audit — dialectic로 죽은 게이트·얕은 추상화 식별·제거\n\n## 문제\n\ncharter §4-3(단일 사용 추상화·얕은 추상화·과잉 엔지니어링 금지)은 사용자 프로젝트에는 게이트로 집행되지만, ditto 자기 엔진에는 적용된 적이 없다. 어느 게이트/추상화가 실제로 값을 하는지 데이터가 없어, 77K줄 엔진의 복잡도가 정당한지 판정할 수 없다.\n\n## 방향\n\n- dialectic-review로 엔진 핵심(autopilot-loop 등)을 태워 단일 사용·얕은 추상화를 식별한다. ditto가 자기 도구로 자기를 심판하는 self-audit.\n- 게이트 catch-rate 계측과 교차한다: 결함을 한 번도 안 잡은 게이트 = 과잉 엔지니어링 1순위 제거 후보.\n\n## 근거\n\n- ditto에 dialectic(Producer/Opponent/Synthesizer) 심사 도구가 이미 있다.\n\n## 열린 항목\n\n- 감사 대상 범위(전 엔진 vs 핵심 파일).\n- 이 이슈는 게이트 catch-rate 계측 결과에 의존한다.",
+  "goal": "핵심 집행 표면(gates.ts 게이트 16개 + autopilot-loop.ts 게이트 사이트 + completion assembly)을 dialectic-review로 self-audit하여, 다중신호로 입증된 죽은 게이트·얕은 추상화만 증거와 함께 식별하고 결정적 dead 후보만 제거한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "핵심 집행 표면(gates.ts 16게이트 + autopilot-loop.ts 게이트 사이트 + completion assembly)을 dialectic-review로 감사한 findings 산출물이 존재하고, 게이트별로 dialectic 얕음-판정과 catch-rate 신호(caught/missed/untargeted)를 함께 담는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "제거 후보는 다중신호 AND(dialectic 얕음 ∧ catch-rate 방어가치 없음) 충족분에 한정되고, untargeted 게이트는 findings에서 dead 아님·증거 부족으로 명시 구분되어 제거 후보에서 제외된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "artifact"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "제거는 판정 규율을 통과한 결정적 dead 후보만 수행하며 제거 후 전체 테스트가 GREEN이다; 미통과·모호 후보는 후속 work item으로 물질화되고 이번 WI에서 제거되지 않는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "게이트 catch-rate 계측 확장: seeded-defect 스위트를 untargeted 9개 게이트(resolvability, pass_close_residual, frozen_tests_intact, completion, decision_conflict, intent_drift, direction_fork, interface_baseline_drift, land)로 확장 + loop에서 gate_id를 16개 전체 stamp. '측정 불가'를 실신호로 전환해야 이들의 방어가치를 실측 판정 가능(현재 self-audit가 9개를 제거 판정 못 하는 근본 이유). 두 dialectic 심사 공통 권고.",
+      "severity": "low",
+      "priority": 1
+    },
+    {
+      "kind": "idea",
+      "note": "얕음/과잉 findings F1: direction_fork 게이트의 purposeCheck 확장(2번째 매개변수 + PurposeChangeCheck 인터페이스 + purposeConserved 분기 ~25줄, src/core/gates.ts:1173-1178,1218-1235)이 production에서 한 번도 공급 안 됨(유일 호출 src/hooks/stop.ts:851 단일인자, 주석도 명시). 테스트만 2-인자 호출. 의도된 확장 seam이 아니면 제거 대상(charter §4-3 미래 요구용 추상화). seam 여부=design-intent 결정.",
+      "severity": "medium",
+      "priority": 2
+    },
+    {
+      "kind": "idea",
+      "note": "얕음 findings F2: roster 밖 한 줄 술어 isConditionB(gates.ts:407), knowledgeTriggerFired(gates.ts:883), safeDefaultable(gates.ts:854)가 넓은 인터페이스+한 줄 본문·내부 단일소비. 정의 게이트 안으로 인라인하면 미세 표면 축소(방어가치·의미 무관). GATE_ID 주석이 이미 roster에서 의도적 제외.",
+      "severity": "info",
+      "priority": 4
+    },
+    {
+      "kind": "idea",
+      "note": "얕음 findings F3: interface_baseline_drift가 COVERAGE_AXIS_MECHANISMS.temporal.enforce에 위임하는 얇은 adapter(gates.ts:1277-1300). 단 enforce 재사용은 anti-duplication이고 테스트 3파일 존재 → 정리 이득 미미, 존치 권장. 정보성 기록.",
+      "severity": "info",
+      "priority": 5
+    },
+    {
+      "kind": "idea",
+      "note": "ditto 엔진 한계(dogfood 발견): guardMutatingEvidence(src/core/autopilot-dispatch.ts:446)가 refactorer no-op은 면제(#34 wi_260713j6x)하지만 implementer의 정당한 no-op은 claim≠proof로 거부. 조건부 제거/구현 노드가 '할 일 없음'(예: audit가 dead_candidate 0 판정)으로 끝나면 그 노드를 depends_on하는 verify 노드가 데드락. #34가 refactorer만 예외 처리한 것과 동형 갭. 후보 수정: 정당화(justification) 신호를 동반한 implementer no-op을 면제하도록 확장, 또는 planner가 조건부 제거를 refactorer/조건부 노드로 모델링. 완료 게이트 무결성 가드라 변경은 사용자 승인 필요.",
+      "severity": "medium",
+      "resolved": true,
+      "priority": 3
+    }
+  ],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 46,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgzSUnY"
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "ditto work handoff wi_2607189u3 --show",
+    "fresh_evidence_needed": [
+      "미pass acceptance에 대한 검증 결과"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_2607189u3.md",
+  "started_at_sha": "d6fd24f16b7051cec36bfec1c6092db1ab51f9a8",
+  "started_untracked_baseline": [],
+  "created_at": "2026-07-18T20:11:55.914Z",
+  "updated_at": "2026-07-19T03:05:14.249Z",
+  "closed_at": "2026-07-19T03:05:14.248Z"
+}

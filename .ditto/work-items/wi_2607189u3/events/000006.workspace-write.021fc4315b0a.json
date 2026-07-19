@@ -1,0 +1,21 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607189u3",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "021fc4315b0a459d7830f09d7c58054abcc04e913dd5f688d86752430d7bfd29",
+  "ts": "2026-07-19T01:26:04.495Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "artifact"
+      },
+      {
+        "kind": "artifact"
+      }
+    ]
+  }
+}
