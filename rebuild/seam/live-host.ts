@@ -1,4 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import type { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { decideGate, type GateResult } from '../schemas';
 import {
   boundaryEnvelope,
@@ -58,19 +61,59 @@ export class LiveHost implements HostAdapter {
   }
 }
 
+// The boundary JSON Schema handed to `claude --json-schema` is DERIVED from the
+// zod boundaryEnvelope (schema SoT, invariant 9) — never hand-duplicated. Refs
+// are inlined so the CLI's structured-output enforcement needs no $ref resolver.
+const BOUNDARY_JSON_SCHEMA = JSON.stringify(
+  zodToJsonSchema(boundaryEnvelope, { $refStrategy: 'none' }),
+);
+
+// `claude --print --output-format json` prefixes an OSC terminal-title escape
+// before the JSON object; slice from the first brace to get parseable JSON.
+function parseCliJson(raw: string): {
+  session_id?: string;
+  structured_output?: unknown;
+  result?: string;
+} {
+  const start = raw.indexOf('{');
+  if (start < 0) throw new Error('claude CLI returned no JSON object');
+  return JSON.parse(raw.slice(start));
+}
+
+const runClaude = (args: string[]): string =>
+  execFileSync('claude', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+
 /**
- * Live HostDeps backed by the real Claude Code CLI. `readFile` is the real
- * `readFileSync`. The exact headless CLI flags for a fresh-context drive step
- * and subagent fanout cannot be verified in this environment, so those two
- * crossings throw a clear "not wired" error rather than fabricating arg strings;
- * the live-CLI smoke test is deferred to an integration environment.
+ * Live HostDeps backed by the real Claude Code CLI (verified live, #63).
+ * - runDrive: a fresh/resumed `--print` step whose `--json-schema` forces the
+ *   structured boundary (the queue oracle); returns session_id + that boundary.
+ * - runFanout: one isolated `--print` call per task, returning its free text
+ *   (agentType-to-subagent mapping is later orchestration, out of this scope).
+ * - readFile: the real readFileSync.
  */
 export const liveHostDeps: HostDeps = {
-  runDrive: () => {
-    throw new Error('live-CLI integration not wired in this environment');
+  runDrive: (input) => {
+    const args = [
+      '--print',
+      '--output-format',
+      'json',
+      '--json-schema',
+      BOUNDARY_JSON_SCHEMA,
+    ];
+    if (input.resume) args.push('--resume', input.resume);
+    args.push(input.prompt);
+    const json = parseCliJson(runClaude(args));
+    return {
+      sessionId: json.session_id ?? '',
+      boundaryJson: JSON.stringify(json.structured_output),
+    };
   },
-  runFanout: () => {
-    throw new Error('live-CLI integration not wired in this environment');
-  },
-  readFile: (path) => require('node:fs').readFileSync(path, 'utf8'),
+  runFanout: (tasks) =>
+    tasks.map((task) => {
+      const json = parseCliJson(
+        runClaude(['--print', '--output-format', 'json', task.prompt]),
+      );
+      return json.result ?? '';
+    }),
+  readFile: (path) => readFileSync(path, 'utf8'),
 };
