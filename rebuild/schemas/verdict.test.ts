@@ -5,7 +5,7 @@ import { verdict } from './verdict';
 describe('verdict', () => {
   test('accepts exactly pass/fail/partial/unverified', () => {
     expect(verdict.options).toEqual(['pass', 'fail', 'partial', 'unverified']);
-    for (const value of ['pass', 'fail', 'partial', 'unverified']) {
+    for (const value of ['pass', 'fail', 'partial', 'unverified'] as const) {
       expect(verdict.parse(value)).toBe(value);
     }
   });
