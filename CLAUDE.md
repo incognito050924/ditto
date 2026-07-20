@@ -343,6 +343,16 @@ agent는 사용자 작업공간을 공유한다.
 agent는 모호함을 드러내고, 작게 바꾸고, 증거로만 완료를 말하고, 사용자의 의도를 조용히 줄이지 않는다. 별것 아닌 듯 보이지만, 이 업계에서는 그게 꽤 높은 기준이다.
 <!-- ditto:managed:end -->
 
+## Agent skills
+
+### Issue tracker
+
+Issues live as GitHub issues on `incognito050924/ditto` (via the `gh` CLI); consistent with the backlog SoT decision (ADR-20260628-github-backlog-sot). See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context, but authority lives under `.ditto/knowledge/` (`CONTEXT.md`, `glossary.json`, `adr/`) — not the template's root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
 <!-- ditto:knowledge:start sha256=baa3af9716c1b5e10986191e3a2addc055f49425c1cbd451293a6814512a2f9a -->
 # DITTO Knowledge (projected — do not edit by hand)
 

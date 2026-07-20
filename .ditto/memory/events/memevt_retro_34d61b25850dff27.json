@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_34d61b25850dff27",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] git push 자체의 인증은 기존 git credential에 위임 — 이 변경은 새 인증 경로를 만들지 않는다.\n[residual] 커밋된 원격 핸드오프 가시성은 브랜치 접근 권한(git)에 종속 — 이 변경은 별도 인가 검사를 도입하지 않는다.\n[residual] same-branch targeted 연속이 의도된 모델이며 별도 권한 모델 부재는 설계 의도(비목표)다.\n[residual] 핸드오프 파일 누적은 기존 age-sweep 정리로 유계 — 이 변경은 새 무한 성장 경로를 만들지 않는다.\n[residual] 커밋된 본문 비밀 유출은 secret-exposure(관련 유지)+기존 redaction 스크럽으로 처리 — abuse 표면 자체는 무관.\n[residual] 본문의 규제 데이터 가능성은 pii-leak/secret-exposure(관련 유지)로 처리 — 규제 프레임워크 자체는 무관.\n[close_reason] 핸드오프는 로컬 fs·git-tracked 파일 I/O이며 이 기능에 도달하는 인증 경로·자격증명 검증이 없다(네트워크 서비스·API 토큰·세션 주체 부재).\n[close_reason] 핸드오프 파일 읽기/쓰기에 권한 부여·검사 로직이 없다 — 파일시스템·git 접근 권한에 위임한다.\n[close_reason] 접근제어 모델(RBAC/ABAC 등)이 없는 개인·브랜치 스코프 파일 — 누가 접근하는지는 git 브랜치 경계가 결정한다.\n[close_reason] 핸드오프는 작성자·세션당 유계 per-scope 파일이며 정상 부하로 자원이 고갈되는 경로가 없다(무한 누적 없음, age-sweep 정리 존재).\n[close_reason] 의도적 오남용 표면이 없다 — 핸드오프는 작성자 자신이 남기는 컨텍스트 파일이고 외부 미신뢰 입력을 실행/신뢰하지 않는다.\n[close_reason] 규제 데이터 클래스(PII/PHI/재무 등)를 다루지 않는 개발 워크플로 내부 아티팩트 — 이 변경에 규제 준수 의무가 없다.",
+  "created_at": "2026-07-14T11:02:56.597Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

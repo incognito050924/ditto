@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_adbf256104143ce6",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] none reachable: no principals or credentials handled\n[residual] none; enforcement-bypass covered under kept 'authorization'\n[residual] mis-recorded command is a data-integrity concern (kept), not an audit failure\n[residual] tree crafted to fool clean-check is enforcement-bypass (covered under authorization), not rate/replay abuse\n[residual] stale hook runs harmless surfaces:gen prestep until postinstall re-runs\n[residual] would matter only if a future clean-check shell-interpolated a filename\n[residual] none: no secret material flows through these paths\n[residual] none: no PII present\n[residual] none: no regulated data domain reached\n[residual] clock skew corrupts only the audit timestamp, never a skip/eviction decision\n[residual] a hanging git status is a pre-existing bounded sync call already made by computeTreeState\n[residual] only if the removed diagnostic line had carried an operative cue an agent depended on (it did not)\n[close_reason] git pre-push hook + test harness + pure clean-check touch no login/credential path\n[close_reason] no inbound access-control model, no principals/roles in a dev git hook / cache clean-check\n[close_reason] only audit-ish artifact is write-only green-cache 'command' field with no non-repudiation consumer\n[close_reason] local dev git hook has no external/at-scale attacker surface\n[close_reason] green-cache format unchanged, content-addressed by tree hash; no schema/API bump, no external consumer\n[close_reason] git invoked with fixed arg arrays; porcelain paths parsed as data, never interpolated into shell/command\n[close_reason] clean-check/green-cache store only tree hash + command string + timestamp\n[close_reason] internal dev tooling, no user/personal data collected or logged\n[close_reason] no personal data / retention / deletion obligation in a git hook + test harness + cache\n[close_reason] recorded_at is audit-only; shouldSkipGate + FIFO eviction are insertion-order, not time-dependent\n[close_reason] push-gate referenced only in comments in autopilot-loop/complete; sync leaf clean-check adds no new spawn, no loop/terminal logic modified\n[close_reason] removes an obsolete diagnostic stderr line; no charter/operative-banner rewrite; blocking bypass directive untouched",
+  "created_at": "2026-07-15T06:03:45.828Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

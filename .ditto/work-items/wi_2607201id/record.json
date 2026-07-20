@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607201id",
+  "title": "재구축 빅뱅 착수단위: 얇은 게이트 코어 + drive-loop + 실 HostAdapter 네이티브 배선",
+  "source_request": "DITTO 재구축(zero-start, 철학·불변식 보존)의 빅뱅 착수 단위를 구현한다: 얇은 게이트 코어 + drive-loop + 실 HostAdapter 네이티브 배선. 브랜치 rebuild/foundation, 계약(rebuild/schemas·rebuild/seam)은 잠김. 사용자가 명시적으로 끌어올린 핵심 요구: 자율 루프의 자기참조 표류(후속 자가생성·테스트 자가작성·완료 자가판정 → self-written green만으로는 잘못될 확률 높음)를 막는 가드레일과 근본목표를 일급 AC로 락한다 — 얼어붙은 목표(intent-lock/capture-window)·비-self 오라클(락된 AC red-first·교차모델 diff 리뷰·구조 앵커·라이브 검증)·외부 완료권위(maker≠checker≠사용자)·유계+escape·근본목표(per-run intent-lock + net-efficacy). 빌드수단은 Ralph형 하이브리드로 별도 결정됨(reports/research/goal-loop-*.md).",
+  "goal": "재구축 빅뱅 착수단위: 얇은 게이트 코어 + drive-loop + 실 HostAdapter 네이티브 배선",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-20T04:14:44.509Z",
+  "updated_at": "2026-07-20T04:14:44.509Z"
+}

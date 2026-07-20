@@ -1,0 +1,686 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607156f8",
+  "title": "worktree 작업의 landing을 로컬 main 워킹트리를 건드리지 않고 origin/main으로 병합·푸시하도록 강제한다 — 동시 세션이",
+  "source_request": "worktree 작업은 항상 origin/main 에 병합, 푸시하는거야. 이거 코드로 구현하고(cli 또는 skill 등 있다면), 이 규칙이 어디에서든 반드시 지켜지도록 강제해",
+  "goal": "worktree 작업의 landing이 로컬 공유 main 워킹트리를 건드리지 않고 worktree 브랜치 커밋을 origin/<기본브랜치>로 직접 push하도록 바꾸고, 로컬 main 병합 경로를 제거해 구조적으로 강제한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "worktree land가 worktree 브랜치 커밋을 origin/<기본>로 직접 push하고, 로컬 공유 main 체크아웃에 git merge/commit을 절대 하지 않는다(로컬 main HEAD·워킹트리 불변) — 구조적 강제",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 630,
+            "end": 702
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 501,
+            "end": 557
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 183,
+            "end": 201
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 142,
+            "end": 157
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 94,
+            "end": 161
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/chain-drive.ts",
+          "lines": {
+            "start": 256,
+            "end": 265
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate.ts",
+          "lines": {
+            "start": 18,
+            "end": 29
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607156f8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "grep LAND_PUSH_TIMEOUT_MS git.ts -> 660_000 at :252 applied :316; LAND_RECOVERY_TIMEOUT_MS 120_000 :258; no orphan LAND_ATTEMPT_TIMEOUT_MS"
+        },
+        {
+          "kind": "command",
+          "command": "bun test git.test.ts+worktree-drive+worktree-lifecycle -> 56 pass/0 fail; RED(120000<600000)->GREEN"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit -> 0 errors; biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "worktree full suite (pre-fix impl) -> 4942 pass, ac-oracle env-only fail unrelated"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 252,
+            "end": 258
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 203,
+            "end": 203
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/git.test.ts -> 12 pass/0 fail; grep orphan LAND_ATTEMPT_TIMEOUT_MS -> none; ditto acg-review -> 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test worktree-lifecycle 28 pass / git 12 pass / push-gate 31 pass / worktree-drive 16 pass"
+        },
+        {
+          "kind": "command",
+          "command": "full worktree suite: 4933 pass / 11 skip / 1 fail (ac-oracle env-only, not in change surface, passes on main)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 545,
+            "end": 646
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 308,
+            "end": 371
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun run adr:check -> knowledge adr-check: OK"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260715-worktree-land-to-origin.md"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "원격이 앞선(non-FF) 경우 origin/<기본> fetch → worktree 커밋을 rebase(선형, merge커밋 회피) → 재push하고, rebase 충돌 시 멈추고 인계한다(force-push·조용한 오적용 없음, 반복 race는 bounded retry)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 630,
+            "end": 702
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 501,
+            "end": 557
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 183,
+            "end": 201
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 142,
+            "end": 157
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 94,
+            "end": 161
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/chain-drive.ts",
+          "lines": {
+            "start": 256,
+            "end": 265
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate.ts",
+          "lines": {
+            "start": 18,
+            "end": 29
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607156f8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "grep LAND_PUSH_TIMEOUT_MS git.ts -> 660_000 at :252 applied :316; LAND_RECOVERY_TIMEOUT_MS 120_000 :258; no orphan LAND_ATTEMPT_TIMEOUT_MS"
+        },
+        {
+          "kind": "command",
+          "command": "bun test git.test.ts+worktree-drive+worktree-lifecycle -> 56 pass/0 fail; RED(120000<600000)->GREEN"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit -> 0 errors; biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "worktree full suite (pre-fix impl) -> 4942 pass, ac-oracle env-only fail unrelated"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 252,
+            "end": 258
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 203,
+            "end": 203
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/git.test.ts -> 12 pass/0 fail; grep orphan LAND_ATTEMPT_TIMEOUT_MS -> none; ditto acg-review -> 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test worktree-lifecycle 28 pass / git 12 pass / push-gate 31 pass / worktree-drive 16 pass"
+        },
+        {
+          "kind": "command",
+          "command": "full worktree suite: 4933 pass / 11 skip / 1 fail (ac-oracle env-only, not in change surface, passes on main)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 545,
+            "end": 646
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 308,
+            "end": 371
+          }
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "직접 origin/<기본> push에도 pre-push 테스트 게이트가 그대로 발동한다(게이트 우회 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 630,
+            "end": 702
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 501,
+            "end": 557
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 183,
+            "end": 201
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 142,
+            "end": 157
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 94,
+            "end": 161
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/chain-drive.ts",
+          "lines": {
+            "start": 256,
+            "end": 265
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate.ts",
+          "lines": {
+            "start": 18,
+            "end": 29
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607156f8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "grep LAND_PUSH_TIMEOUT_MS git.ts -> 660_000 at :252 applied :316; LAND_RECOVERY_TIMEOUT_MS 120_000 :258; no orphan LAND_ATTEMPT_TIMEOUT_MS"
+        },
+        {
+          "kind": "command",
+          "command": "bun test git.test.ts+worktree-drive+worktree-lifecycle -> 56 pass/0 fail; RED(120000<600000)->GREEN"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit -> 0 errors; biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "worktree full suite (pre-fix impl) -> 4942 pass, ac-oracle env-only fail unrelated"
+        },
+        {
+          "kind": "command",
+          "command": "bun test worktree-lifecycle 28 pass / git 12 pass / push-gate 31 pass / worktree-drive 16 pass"
+        },
+        {
+          "kind": "command",
+          "command": "full worktree suite: 4933 pass / 11 skip / 1 fail (ac-oracle env-only, not in change surface, passes on main)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 545,
+            "end": 646
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 308,
+            "end": 371
+          }
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "멀티레포 sub-repo worktree는 각자의 origin/<기본>로 land한다(레포별 기본브랜치 파생)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 630,
+            "end": 702
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 501,
+            "end": 557
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 183,
+            "end": 201
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 142,
+            "end": 157
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 94,
+            "end": 161
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/chain-drive.ts",
+          "lines": {
+            "start": 256,
+            "end": 265
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate.ts",
+          "lines": {
+            "start": 18,
+            "end": 29
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607156f8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "grep LAND_PUSH_TIMEOUT_MS git.ts -> 660_000 at :252 applied :316; LAND_RECOVERY_TIMEOUT_MS 120_000 :258; no orphan LAND_ATTEMPT_TIMEOUT_MS"
+        },
+        {
+          "kind": "command",
+          "command": "bun test git.test.ts+worktree-drive+worktree-lifecycle -> 56 pass/0 fail; RED(120000<600000)->GREEN"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit -> 0 errors; biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "worktree full suite (pre-fix impl) -> 4942 pass, ac-oracle env-only fail unrelated"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 252,
+            "end": 258
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 203,
+            "end": 203
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/git.test.ts -> 12 pass/0 fail; grep orphan LAND_ATTEMPT_TIMEOUT_MS -> none; ditto acg-review -> 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test worktree-lifecycle 28 pass / git 12 pass / push-gate 31 pass / worktree-drive 16 pass"
+        },
+        {
+          "kind": "command",
+          "command": "full worktree suite: 4933 pass / 11 skip / 1 fail (ac-oracle env-only, not in change surface, passes on main)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 545,
+            "end": 646
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 308,
+            "end": 371
+          }
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "origin 원격이 없으면 land를 skip하고 명확히 보고한다(로컬 main 병합 fallback 없음); land 후 로컬 main이 미갱신임도 명확히 보고한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 630,
+            "end": 702
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 501,
+            "end": 557
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 183,
+            "end": 201
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 142,
+            "end": 157
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 94,
+            "end": 161
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/chain-drive.ts",
+          "lines": {
+            "start": 256,
+            "end": 265
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate.ts",
+          "lines": {
+            "start": 18,
+            "end": 29
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607156f8/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "grep LAND_PUSH_TIMEOUT_MS git.ts -> 660_000 at :252 applied :316; LAND_RECOVERY_TIMEOUT_MS 120_000 :258; no orphan LAND_ATTEMPT_TIMEOUT_MS"
+        },
+        {
+          "kind": "command",
+          "command": "bun test git.test.ts+worktree-drive+worktree-lifecycle -> 56 pass/0 fail; RED(120000<600000)->GREEN"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit -> 0 errors; biome exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "worktree full suite (pre-fix impl) -> 4942 pass, ac-oracle env-only fail unrelated"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 252,
+            "end": 258
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree-drive.ts",
+          "lines": {
+            "start": 203,
+            "end": 203
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/git.test.ts -> 12 pass/0 fail; grep orphan LAND_ATTEMPT_TIMEOUT_MS -> none; ditto acg-review -> 0 high-risk without evidence"
+        },
+        {
+          "kind": "command",
+          "command": "bun test worktree-lifecycle 28 pass / git 12 pass / push-gate 31 pass / worktree-drive 16 pass"
+        },
+        {
+          "kind": "command",
+          "command": "full worktree suite: 4933 pass / 11 skip / 1 fail (ac-oracle env-only, not in change surface, passes on main)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/worktree.ts",
+          "lines": {
+            "start": 545,
+            "end": 646
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/git.ts",
+          "lines": {
+            "start": 308,
+            "end": 371
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun run adr:check -> knowledge adr-check: OK"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/knowledge/adr/ADR-20260715-worktree-land-to-origin.md"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/git.ts",
+    "src/core/worktree.ts",
+    "src/core/worktree-drive.ts",
+    "src/cli/commands/worktree.ts",
+    "tests/core/git.test.ts",
+    "tests/core/worktree-lifecycle.test.ts",
+    "tests/core/worktree-drive.test.ts",
+    ".ditto/knowledge/adr/ADR-20260715-worktree-land-to-origin.md"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 44
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_2607156f8",
+    "fresh_evidence_needed": [
+      "land aborted — 20 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_2607156f8/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607156f8/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607156f8/events/000002.workspace-write.8ab20fa128dc.json, .ditto/work-items/wi_2607156f8/events/000003.workspace-write.f5c69dd9c151.json, .ditto/work-items/wi_2607156f8/events/000004.workspace-write.d90f4e424783.json, .ditto/work-items/wi_2607156f8/events/000005.workspace-write.b07f7b413b60.json, .ditto/work-items/wi_2607156f8/events/000006.workspace-write.5c100ff39312.json, .ditto/work-items/wi_2607156f8/record.json, .ditto/work-items/wi_260715ujg/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260715ujg/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260715ujg/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260715ujg/events/000003.workspace-write.7a9b711b8673.json, .ditto/work-items/wi_260715ujg/events/000004.workspace-write.e53adf8459f1.json, .ditto/work-items/wi_260715ujg/events/000005.workspace-write.4d94f7571b27.json, .ditto/work-items/wi_260715ujg/events/000006.workspace-write.fcdc275bd591.json, .ditto/work-items/wi_260715ujg/events/000007.workspace-write.3932206c28a9.json, .ditto/work-items/wi_260715ujg/events/000008.workspace-write.9ca996a1341d.json, .ditto/work-items/wi_260715ujg/events/000009.workspace-write.1362a3007cac.json, .ditto/work-items/wi_260715ujg/events/000010.workspace-write.fd0367c511ce.json, .ditto/work-items/wi_260715ujg/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "85deeb222d3d4651f5a97945c17b13dcccda8811",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_34d61b25850dff27.json",
+    ".ditto/memory/events/memevt_retro_adbf256104143ce6.json",
+    ".ditto/memory/events/memevt_retro_bd0767dd39a62619.json",
+    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json",
+    ".ditto/work-items/wi_2607156f8/",
+    ".ditto/work-items/wi_260715ujg/"
+  ],
+  "created_at": "2026-07-15T07:02:28.462Z",
+  "updated_at": "2026-07-15T12:43:04.930Z",
+  "closed_at": "2026-07-15T10:01:32.997Z"
+}

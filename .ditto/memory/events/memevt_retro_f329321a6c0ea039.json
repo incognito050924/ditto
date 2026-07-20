@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_f329321a6c0ea039",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 인증 관련 식별자가 향후 질문 면에 노출돼도 미검출로 남을 수 있으나 이는 유출-검출 커버리지 공백(cross-feature/boundary 소관).\n[residual] 게이트 과잉 차단으로 질문이 부당 거부될 수 있으나 autonomy-liveness 소관이며 authz bypass 경로 부재.\n[residual] 인가 결정 지점 부재로 모델 오정합 표면 없음.\n[residual] advisory 배너 경고가 삼켜지면 유출 이력 미기록 가능하나 이는 observability 소관.\n[residual] 손상된 glossary.json 읽기 시 잘못된 데이터 유입 가능하나 input-validation 소관.\n[residual] 타 프로세스가 읽기 중 glossary.json 편집 시 torn read 가능성 낮음.\n[residual] 거대 alias 목록 악성 glossary가 매칭 비용 부풀릴 수 있으나 신뢰된 repo 파일이고 resource-exhaustion로 라우팅.\n[residual] violation 메시지가 내부 식별자 에코하나 비밀값 아님 — 무시 가능.\n[residual] violation이 질문 텍스트 일부 에코 가능하나 새 로깅 싱크 없어 유출 경로 미형성.\n[residual] material 잔여 위험 없음.\n[residual] 없음 — 결정론적 동작은 시간 불변.\n[close_reason] 질문/배너 문자열을 매칭하는 순수 검출기 + 골든 코퍼스 테스트만 건드림 — 로그인/세션/자격증명 경로 없음.\n[close_reason] 검출기는 자원 접근을 통제하지 않음. 유일한 '차단'은 질문 제시 게이트(표현 계약)지 권한 강제가 아님.\n[close_reason] 인가 모델(주체·자원·정책)이 없음 — 순수 문자열 검출과 질문 표현 게이트뿐.\n[close_reason] violation은 인프로세스 반환일 뿐 영속·서명·부인방지 안 됨. 새 감사 싱크 없음.\n[close_reason] glossary WRITES가 out-of-scope이며 읽기만 함 — 쓰기·부분쓰기·마이그레이션·상태 변이 없음.\n[close_reason] 공유 가변 상태·async·락 없는 순수 결정론 함수이며 glossary 읽기는 동기 파일 읽기(범위 내 동시 writer 없음).\n[close_reason] 입력은 내부 생성 질문/배너 문자열이지 공격자 제어 트래픽 아님 — 엔드포인트·replay·스크래핑 표면 없음.\n[close_reason] 시크릿/토큰/키를 다루지 않음 — 내부 어휘만 읽고 영속·전송 안 함.\n[close_reason] 내부 생성 문자열을 읽고 매치 토큰만 인프로세스 반환 — PII 수집·로깅·전송 없음, 새 싱크 없음.\n[close_reason] 순수 내부-어휘 린팅 — 개인·규제 대상 데이터 처리, 동의·보존·삭제 표면 없음.\n[close_reason] 타임스탬프·만료·타임존·clock 의존 없는 순수 문자열 매칭 — aliases/forbidden_abbreviations만 읽고 updated_at/agreed_at 미참조.",
+  "created_at": "2026-07-14T02:12:34.855Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

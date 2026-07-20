@@ -1,0 +1,773 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260715ujg",
+  "title": "[harness] push-gate가 공유·gitignored 개인 tier 생성물(surfaces.json)을 검증 → 동시 세션 push 상호 차단 + 위생",
+  "source_request": "[harness] push-gate가 공유·gitignored 개인 tier 생성물(surfaces.json)을 검증 → 동시 세션 push 상호 차단 + 위생\n\n심각도: high. 로컬에서 동시 작업(main + worktree, 또는 여러 worktree)이 잦은데, 그때 push가 서로 때문에 막히면 안 된다.\n\n## 문제\n\npush-gate(`recipe.yaml` push_gate `test_command: \"bun test\"`)가 **gitignored·공유·임시 개인 tier 생성물을 검증**한다. 이 때문에 두 부작용이 생긴다.\n\n### facet 1 — 동시 세션이 서로의 push를 flake시킨다 (관측됨)\n- pre-push 훅(`.githooks/pre-push:23`)이 게이트 직전에 `bun run surfaces:gen`을 돌려 `.ditto/local/surfaces.json`(+ `surfaces.codex.json`)을 재생성한다.\n- 이 파일은 ADR-0012 tier ③ 개인 런타임(gitignored)이고, worktree들은 session-rooting invariant로 **같은 워크스페이스의 `.ditto/local`을 공유**한다(ADR-0011).\n- surface-drift 테스트(`tests/core/surface-inventory.plugin.test.ts`, `tests/host/codex/surface-inventory.surface.test.ts`)는 regen(code)을 **on-disk 공유 파일**과 비교한다.\n- 두 세션이 동시에 게이트(`surfaces:gen` write + `bun test` ~144초 read)를 돌리면, 한쪽의 write가 다른쪽의 read 중 파일을 바꿔 surface 테스트가 spurious하게 실패 → push가 코드와 무관하게 막힌다.\n- 관측: 이 세션의 push(144초 게이트)가 도는 동안 다른 세션 push가 막혔다.\n\n### facet 2 — 위생: 검증 대상이 커밋/푸시되지 않고 사라진다\n- worktree 작업의 `.ditto/local`은 커밋 대상이 아니라 main 병합 시 따라오지 않고, worktree 폴더는 완료 후 대개 삭제된다.\n- 즉 게이트가 검증하는 surfaces.json 등은 **push되는 상태와 무관한, 세션마다 다르고 사라지는 로컬 산출물**이다. push-gate가 이런 ephemeral·공유·비-push 상태를 검증하는 구조 자체가 fragile하다.\n- 같은 뿌리의 다른 증상으로, 로컬 half-state가 게이트를 깨던 건은 방금 별건으로 수정했다(work-item.json 자기검증이 Run-only 로컬 디렉터리 허용, main `857ae41`).\n\n## 불변식 (요구)\n- 로컬 동시 작업(main·worktree)이 서로의 push를 막지 않는다.\n- 단, 게이트는 **실제 push되는 코드/표면의 회귀는 계속 잡아야** 한다(게이트 약화·바이패스로 회피하지 않는다).\n\n## 열린 선택지 (미결정 — 구현 시 정한다)\n- 게이트의 surface 재생성·검증을 **세션/worktree-격리된 임시 경로**에서 수행(공유 `.ditto/local` 미접촉).\n- 또는 게이트가 **커밋 tier 베이스라인**(코드에서 파생) 기준으로 검증하고, 공유 로컬 산출물에 의존하지 않게.\n- 또는 공유-산출물 drift 검사를 push-gate에서 빼고 **CI의 clean checkout**에서 수행(개인 tier는 push 대상이 아니므로).\n\n## 증거/코드 포인터\n- `.githooks/pre-push:18-27`, `recipe.yaml` push_gate, `scripts/gen-surfaces.ts:37`, `src/core/ditto-paths.ts`(`.ditto/local` tier), ADR-0011(session-rooting), ADR-0012(3-tier), ADR-20260706(Record/Run 분리).\n\n\n## facet 3 — 매 push마다 전체 ~4분 스위트 재실행 (green-tree 캐시 무력화)\n\n같은 뿌리의 또 다른 낭비. push-gate에는 재실행을 피하는 green-tree 캐시가 있다(`push-gate.ts`: 같은 clean tree에서 test_command가 이미 통과했으면 skip). 그런데 캐시 히트 조건이 **git tree가 clean일 때**인데, 도그푸딩 트리는 untracked work-items(`.ditto/work-items/…`)·`.ditto/local` 산출물 churn으로 **만성 dirty**라 캐시가 거의 안 맞는다 → 매 push가 ~3-4분 전체 스위트를 재실행한다(실측 144~184초).\n\n- 이 역시 게이트가 휘발·비-push 로컬 상태에 얽혀 있어서 생기는 증상이다(facet 1·2와 동일 뿌리).\n- 참고: 별개로, 에이전트가 전체 테스트/푸시를 harness Bash 기본 타임아웃(2분)으로 돌려 잘리고 재시도하던 낭비도 있었으나 이건 ditto 결함이 아니라 실행 방식 문제(ditto 자체 타임아웃은 10분)라 범위 밖 — 긴 타임아웃/백그라운드로 처리.",
+  "goal": "push-gate가 공유·gitignored 개인 tier 산출물(surfaces.json)에 의존하지 않게 해 동시 로컬 세션(main·worktree)이 서로의 push를 막지 않고, 매 push 전체 스위트 재실행 낭비를 없애되, 실제 push되는 코드/표면 회귀는 계속 잡는다(게이트 약화·바이패스 없음)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "surface 테스트가 on-disk 공유 surfaces.json/surfaces.codex.json을 읽지 않고 코드에서 직접 표면을 생성·검증한다(동시 세션 파일변이로 spurious fail 불가)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/surface-inventory.ts",
+          "lines": {
+            "start": 66,
+            "end": 88
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/surface-inventory.plugin.test.ts",
+          "lines": {
+            "start": 12,
+            "end": 22
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/host/codex/surface-inventory.surface.test.ts",
+          "lines": {
+            "start": 72,
+            "end": 73
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/doctor/surface.test.ts",
+          "lines": {
+            "start": 243,
+            "end": 251
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "lines": {
+            "start": 567,
+            "end": 573
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/hooks/push-gate-dogfood.test.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".githooks/pre-push",
+          "lines": {
+            "start": 18,
+            "end": 27
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 44,
+            "end": 47
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 243,
+            "end": 248
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/land-commit.ts",
+          "lines": {
+            "start": 45,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": "scripts/check-test-isolation.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715ujg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/surface-inventory.plugin.test.ts tests/host/codex/surface-inventory.surface.test.ts tests/doctor/surface.test.ts tests/conformance/m1.conformance.test.ts tests/hooks/push-gate-dogfood.test.ts  -> exit 0, 67 pass / 0 fail (baseline: 2 skip + 4 fail on absent on-disk catalog)"
+        },
+        {
+          "kind": "command",
+          "command": "grep -n surfaces:gen .githooks/pre-push  -> exit 1 (no match; prestep removed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run check:test-isolation  -> exit 0 (위반 0, 377 tests scanned, allowlist 7)"
+        },
+        {
+          "kind": "command",
+          "command": "npx biome check <7 files>  -> exit 0 (no lint/unused-import regression)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (4 surface tests) -> exit 0, 59 pass/0 fail (worktree has no .ditto/local)"
+        },
+        {
+          "kind": "command",
+          "command": "inject skills/zz-verify-dummy -> plugin.test.ts:19 + m1.conformance.test.ts:571 RED (Received 50); rm -> 48 pass, git clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache.test.ts -> 20 pass; push-gate.ts:257-259 wiring confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "git diff dd04d91..HEAD -- .gitignore -> empty; git ls-files .ditto/local/surfaces.json -> empty"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "pre-push 훅이 .ditto/local/surfaces.json을 재생성하지 않는다(surfaces:gen 단계 제거)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/surface-inventory.ts",
+          "lines": {
+            "start": 66,
+            "end": 88
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/surface-inventory.plugin.test.ts",
+          "lines": {
+            "start": 12,
+            "end": 22
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/host/codex/surface-inventory.surface.test.ts",
+          "lines": {
+            "start": 72,
+            "end": 73
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/doctor/surface.test.ts",
+          "lines": {
+            "start": 243,
+            "end": 251
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "lines": {
+            "start": 567,
+            "end": 573
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/hooks/push-gate-dogfood.test.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".githooks/pre-push",
+          "lines": {
+            "start": 18,
+            "end": 27
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 44,
+            "end": 47
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 243,
+            "end": 248
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/land-commit.ts",
+          "lines": {
+            "start": 45,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": "scripts/check-test-isolation.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715ujg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/surface-inventory.plugin.test.ts tests/host/codex/surface-inventory.surface.test.ts tests/doctor/surface.test.ts tests/conformance/m1.conformance.test.ts tests/hooks/push-gate-dogfood.test.ts  -> exit 0, 67 pass / 0 fail (baseline: 2 skip + 4 fail on absent on-disk catalog)"
+        },
+        {
+          "kind": "command",
+          "command": "grep -n surfaces:gen .githooks/pre-push  -> exit 1 (no match; prestep removed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run check:test-isolation  -> exit 0 (위반 0, 377 tests scanned, allowlist 7)"
+        },
+        {
+          "kind": "command",
+          "command": "npx biome check <7 files>  -> exit 0 (no lint/unused-import regression)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (4 surface tests) -> exit 0, 59 pass/0 fail (worktree has no .ditto/local)"
+        },
+        {
+          "kind": "command",
+          "command": "inject skills/zz-verify-dummy -> plugin.test.ts:19 + m1.conformance.test.ts:571 RED (Received 50); rm -> 48 pass, git clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache.test.ts -> 20 pass; push-gate.ts:257-259 wiring confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "git diff dd04d91..HEAD -- .gitignore -> empty; git ls-files .ditto/local/surfaces.json -> empty"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "실제 표면 회귀(스킬/에이전트/훅 추가·삭제)를 게이트가 여전히 red로 잡는다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/surface-inventory.ts",
+          "lines": {
+            "start": 66,
+            "end": 88
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/surface-inventory.plugin.test.ts",
+          "lines": {
+            "start": 12,
+            "end": 22
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/host/codex/surface-inventory.surface.test.ts",
+          "lines": {
+            "start": 72,
+            "end": 73
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/doctor/surface.test.ts",
+          "lines": {
+            "start": 243,
+            "end": 251
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "lines": {
+            "start": 567,
+            "end": 573
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/hooks/push-gate-dogfood.test.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".githooks/pre-push",
+          "lines": {
+            "start": 18,
+            "end": 27
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 44,
+            "end": 47
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 243,
+            "end": 248
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/land-commit.ts",
+          "lines": {
+            "start": 45,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": "scripts/check-test-isolation.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715ujg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/surface-inventory.plugin.test.ts tests/host/codex/surface-inventory.surface.test.ts tests/doctor/surface.test.ts tests/conformance/m1.conformance.test.ts tests/hooks/push-gate-dogfood.test.ts  -> exit 0, 67 pass / 0 fail (baseline: 2 skip + 4 fail on absent on-disk catalog)"
+        },
+        {
+          "kind": "command",
+          "command": "grep -n surfaces:gen .githooks/pre-push  -> exit 1 (no match; prestep removed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run check:test-isolation  -> exit 0 (위반 0, 377 tests scanned, allowlist 7)"
+        },
+        {
+          "kind": "command",
+          "command": "npx biome check <7 files>  -> exit 0 (no lint/unused-import regression)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (4 surface tests) -> exit 0, 59 pass/0 fail (worktree has no .ditto/local)"
+        },
+        {
+          "kind": "command",
+          "command": "inject skills/zz-verify-dummy -> plugin.test.ts:19 + m1.conformance.test.ts:571 RED (Received 50); rm -> 48 pass, git clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache.test.ts -> 20 pass; push-gate.ts:257-259 wiring confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "git diff dd04d91..HEAD -- .gitignore -> empty; git ls-files .ditto/local/surfaces.json -> empty"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 60,
+            "end": 66
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 255,
+            "end": 259
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache -> 45 pass/0 fail; tracked/staged-under-prefix asserted DIRTY"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260715ujg/reviewer-output.json"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "green-cache가 untracked 런타임 트레일(.ditto/work-items·.ditto/memory)만 dirty인 tree에서 히트하고, 실제 tracked/staged/source 변경엔 여전히 miss한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/surface-inventory.ts",
+          "lines": {
+            "start": 66,
+            "end": 88
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/surface-inventory.plugin.test.ts",
+          "lines": {
+            "start": 12,
+            "end": 22
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/host/codex/surface-inventory.surface.test.ts",
+          "lines": {
+            "start": 72,
+            "end": 73
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/doctor/surface.test.ts",
+          "lines": {
+            "start": 243,
+            "end": 251
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "lines": {
+            "start": 567,
+            "end": 573
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/hooks/push-gate-dogfood.test.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".githooks/pre-push",
+          "lines": {
+            "start": 18,
+            "end": 27
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 44,
+            "end": 47
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 243,
+            "end": 248
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/land-commit.ts",
+          "lines": {
+            "start": 45,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": "scripts/check-test-isolation.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715ujg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/push-gate-cache.test.ts  (driver re-ran in worktree) -> 20 pass / 0 fail, 22 expect() calls"
+        },
+        {
+          "kind": "command",
+          "command": "grep -n 'export function isTreeCleanIgnoringTrails' src/core/push-gate-cache.ts  -> line 63 (export confirmed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (5 push-gate test files) -> 92 pass / 0 fail, exit 0 (implementer); RED-2 naive impl -> 2 fail on tracked+staged-under-prefix DIRTY assertions"
+        },
+        {
+          "kind": "command",
+          "command": "npx biome check src/core/push-gate-cache.ts src/cli/commands/push-gate.ts tests/core/push-gate-cache.test.ts -> exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (4 surface tests) -> exit 0, 59 pass/0 fail (worktree has no .ditto/local)"
+        },
+        {
+          "kind": "command",
+          "command": "inject skills/zz-verify-dummy -> plugin.test.ts:19 + m1.conformance.test.ts:571 RED (Received 50); rm -> 48 pass, git clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache.test.ts -> 20 pass; push-gate.ts:257-259 wiring confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "git diff dd04d91..HEAD -- .gitignore -> empty; git ls-files .ditto/local/surfaces.json -> empty"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 60,
+            "end": 66
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 255,
+            "end": 259
+          }
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache -> 45 pass/0 fail; tracked/staged-under-prefix asserted DIRTY"
+        },
+        {
+          "kind": "artifact",
+          "path": ".ditto/local/work-items/wi_260715ujg/reviewer-output.json"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "surfaces 카탈로그는 개인 tier(gitignored) 유지 — .gitignore·ADR-0012 tier 결정 불변",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/surface-inventory.ts",
+          "lines": {
+            "start": 66,
+            "end": 88
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/core/surface-inventory.plugin.test.ts",
+          "lines": {
+            "start": 12,
+            "end": 22
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/host/codex/surface-inventory.surface.test.ts",
+          "lines": {
+            "start": 72,
+            "end": 73
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/doctor/surface.test.ts",
+          "lines": {
+            "start": 243,
+            "end": 251
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/conformance/m1.conformance.test.ts",
+          "lines": {
+            "start": 567,
+            "end": 573
+          }
+        },
+        {
+          "kind": "file",
+          "path": "tests/hooks/push-gate-dogfood.test.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".githooks/pre-push",
+          "lines": {
+            "start": 18,
+            "end": 27
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/push-gate-cache.ts",
+          "lines": {
+            "start": 44,
+            "end": 47
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/cli/commands/push-gate.ts",
+          "lines": {
+            "start": 243,
+            "end": 248
+          }
+        },
+        {
+          "kind": "file",
+          "path": "src/core/land-commit.ts",
+          "lines": {
+            "start": 45,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": "scripts/check-test-isolation.ts",
+          "lines": {
+            "start": 42,
+            "end": 45
+          }
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260715ujg/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test tests/core/surface-inventory.plugin.test.ts tests/host/codex/surface-inventory.surface.test.ts tests/doctor/surface.test.ts tests/conformance/m1.conformance.test.ts tests/hooks/push-gate-dogfood.test.ts  -> exit 0, 67 pass / 0 fail (baseline: 2 skip + 4 fail on absent on-disk catalog)"
+        },
+        {
+          "kind": "command",
+          "command": "grep -n surfaces:gen .githooks/pre-push  -> exit 1 (no match; prestep removed)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run check:test-isolation  -> exit 0 (위반 0, 377 tests scanned, allowlist 7)"
+        },
+        {
+          "kind": "command",
+          "command": "npx biome check <7 files>  -> exit 0 (no lint/unused-import regression)"
+        },
+        {
+          "kind": "command",
+          "command": "bun test (4 surface tests) -> exit 0, 59 pass/0 fail (worktree has no .ditto/local)"
+        },
+        {
+          "kind": "command",
+          "command": "inject skills/zz-verify-dummy -> plugin.test.ts:19 + m1.conformance.test.ts:571 RED (Received 50); rm -> 48 pass, git clean"
+        },
+        {
+          "kind": "command",
+          "command": "bun test push-gate-cache.test.ts -> 20 pass; push-gate.ts:257-259 wiring confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "git diff dd04d91..HEAD -- .gitignore -> empty; git ls-files .ditto/local/surfaces.json -> empty"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "tests/core/surface-inventory.plugin.test.ts",
+    "tests/host/codex/surface-inventory.surface.test.ts",
+    "tests/doctor/surface.test.ts",
+    "tests/conformance/m1.conformance.test.ts",
+    "tests/hooks/push-gate-dogfood.test.ts",
+    ".githooks/pre-push",
+    "scripts/check-test-isolation.ts",
+    "src/core/push-gate-cache.ts",
+    "src/cli/commands/push-gate.ts",
+    "tests/core/push-gate-cache.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "ac-oracle 'legacy round-trip' 테스트가 gitignored per-developer .ditto/local/work-items/*/intent.json 존재(files.length>0)에 의존 → fresh worktree/CI clean checkout에서 실패. #42가 surfaces.json에 대해 고친 것과 동일한 shared-gitignored-state 취약성. 같은 패턴(코드-자족 or fixture)으로 고칠 후보."
+    },
+    {
+      "kind": "idea",
+      "note": "green-tree 캐시 push-gate-green.json의 RMW가 last-writer-wins(makeRecordGreen이 snapshot 위 append) → 동시 worktree pass가 green 항목을 잃을 수 있음. pre-existing(wi_260706d0i)·fail-safe(잃으면 miss=재실행, 절대 false-skip 아님). facet3이 히트 빈도를 올려 재실행 낭비 가능성 증가 시 atomic write+re-read-merge로 강화 후보(ADR-20260628 정합)."
+    },
+    {
+      "kind": "idea",
+      "note": "surface-drift 앵커가 count-only(49/25)라 동일-개수 rename/kind-swap(A삭제+B추가)은 미검출. ac-3(add/delete)은 충족되고 swap 미검출은 pre-existing. 커밋된 id+kind 집합 앵커로 강화 후보(reviewer non-blocking low)."
+    }
+  ],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 42
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260715ujg",
+    "fresh_evidence_needed": [
+      "land aborted — 12 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_260715clv/events/000006.workspace-write.9e93c898dbe6.json, .ditto/work-items/wi_260715clv/record.json, .ditto/work-items/wi_260715ujg/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260715ujg/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260715ujg/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260715ujg/events/000003.workspace-write.7a9b711b8673.json, .ditto/work-items/wi_260715ujg/events/000004.workspace-write.e53adf8459f1.json, .ditto/work-items/wi_260715ujg/events/000005.workspace-write.4d94f7571b27.json, .ditto/work-items/wi_260715ujg/events/000006.workspace-write.fcdc275bd591.json, .ditto/work-items/wi_260715ujg/events/000007.workspace-write.3932206c28a9.json, .ditto/work-items/wi_260715ujg/events/000008.workspace-write.9ca996a1341d.json, .ditto/work-items/wi_260715ujg/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "a33e188e4ce77a85da5234a78837cefedc77a7c2",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_34d61b25850dff27.json",
+    ".ditto/memory/events/memevt_retro_f329321a6c0ea039.json",
+    ".ditto/work-items/wi_260715ffn/",
+    ".ditto/work-items/wi_260715ujg/",
+    ".ditto/work-items/wi_260715zba/"
+  ],
+  "created_at": "2026-07-15T02:19:51.669Z",
+  "updated_at": "2026-07-15T06:44:07.619Z",
+  "closed_at": "2026-07-15T06:10:26.871Z"
+}

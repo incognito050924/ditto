@@ -1,0 +1,140 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260715ujg",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "3932206c28a90b62e2349b57bb367d227169392843f781d4c6bad9118cbf2f97",
+  "ts": "2026-07-15T06:03:59.618Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "src/core/surface-inventory.ts",
+        "lines": {
+          "start": 66,
+          "end": 88
+        }
+      },
+      {
+        "kind": "file",
+        "path": "tests/core/surface-inventory.plugin.test.ts",
+        "lines": {
+          "start": 12,
+          "end": 22
+        }
+      },
+      {
+        "kind": "file",
+        "path": "tests/host/codex/surface-inventory.surface.test.ts",
+        "lines": {
+          "start": 72,
+          "end": 73
+        }
+      },
+      {
+        "kind": "file",
+        "path": "tests/doctor/surface.test.ts",
+        "lines": {
+          "start": 243,
+          "end": 251
+        }
+      },
+      {
+        "kind": "file",
+        "path": "tests/conformance/m1.conformance.test.ts",
+        "lines": {
+          "start": 567,
+          "end": 573
+        }
+      },
+      {
+        "kind": "file",
+        "path": "tests/hooks/push-gate-dogfood.test.ts",
+        "lines": {
+          "start": 42,
+          "end": 45
+        }
+      },
+      {
+        "kind": "file",
+        "path": ".githooks/pre-push",
+        "lines": {
+          "start": 18,
+          "end": 27
+        }
+      },
+      {
+        "kind": "file",
+        "path": "src/core/push-gate-cache.ts",
+        "lines": {
+          "start": 44,
+          "end": 47
+        }
+      },
+      {
+        "kind": "file",
+        "path": "src/cli/commands/push-gate.ts",
+        "lines": {
+          "start": 243,
+          "end": 248
+        }
+      },
+      {
+        "kind": "file",
+        "path": "src/core/land-commit.ts",
+        "lines": {
+          "start": 45,
+          "end": 45
+        }
+      },
+      {
+        "kind": "file",
+        "path": "scripts/check-test-isolation.ts",
+        "lines": {
+          "start": 42,
+          "end": 45
+        }
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260715ujg/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/surface-inventory.plugin.test.ts tests/host/codex/surface-inventory.surface.test.ts tests/doctor/surface.test.ts tests/conformance/m1.conformance.test.ts tests/hooks/push-gate-dogfood.test.ts  -> exit 0, 67 pass / 0 fail (baseline: 2 skip + 4 fail on absent on-disk catalog)"
+      },
+      {
+        "kind": "command",
+        "command": "grep -n surfaces:gen .githooks/pre-push  -> exit 1 (no match; prestep removed)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run check:test-isolation  -> exit 0 (위반 0, 377 tests scanned, allowlist 7)"
+      },
+      {
+        "kind": "command",
+        "command": "npx biome check <7 files>  -> exit 0 (no lint/unused-import regression)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (4 surface tests) -> exit 0, 59 pass/0 fail (worktree has no .ditto/local)"
+      },
+      {
+        "kind": "command",
+        "command": "inject skills/zz-verify-dummy -> plugin.test.ts:19 + m1.conformance.test.ts:571 RED (Received 50); rm -> 48 pass, git clean"
+      },
+      {
+        "kind": "command",
+        "command": "bun test push-gate-cache.test.ts -> 20 pass; push-gate.ts:257-259 wiring confirmed"
+      },
+      {
+        "kind": "command",
+        "command": "git diff dd04d91..HEAD -- .gitignore -> empty; git ls-files .ditto/local/surfaces.json -> empty"
+      }
+    ]
+  }
+}
