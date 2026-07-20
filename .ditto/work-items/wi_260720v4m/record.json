@@ -1,0 +1,70 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260720v4m",
+  "title": "재설계 정초 빌드 vehicle: /goal + 디스패처 (순수 CC·무-ditto)",
+  "source_request": "순수 Claude Code·무-ditto 환경에서 도는 /goal 구동 빌드 vehicle을 엔지니어링한다. redesign(docs/redesign) 정초를 자율 빌드하되 완주가 자기채점이 아니게 실제 테스트+Codex 교차검증으로 강제. 사용자 확정: vehicle=A(/goal + 디스패처화). 저작은 새 세션에서. 흡수한 폐기 초안: wi_260720tsf·wi_2607201id.",
+  "goal": "순수 Claude Code·무-ditto 환경에서 도는 /goal 구동 빌드 vehicle을 엔지니어링한다 — 재설계 ditto 정초(12 불변식 게이트 + 얇은 drive-loop + 네이티브 위임 seam + §5 완전성 기계)를 자율 빌드하고, 완주가 자기채점이 아니게(실제 테스트 실행 + Codex 교차검증) 강제한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "vehicle 번들이 self-contained하다 — grep으로 ditto import·CLI 호출 0건이고, ditto 없는 깨끗한 복사 디렉토리에서 vehicle 진입점 실행이 exit 0로 성공한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-2",
+      "statement": "command형 Stop hook가 실제 테스트 러너를 실행해, 테스트 red일 때 exit 2로 정지를 차단(block)하고 green일 때 통과(allow)시키는 두 경로가 각각 실행 로그로 실증된다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-3",
+      "statement": "Codex 교차검증이 처분·종료 시점에 발화되고(호출 로그), Codex 부재 시 run 판정이 unverified로 fail-closed되는 두 경로가 각각 실행 결과로 실증된다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-4",
+      "statement": "goal 프롬프트 텍스트에 디스패처-위임 규율·목표 봉인(frozen goal/AC)·유계+escape 세 앵커가 각각 존재함을 정적 grep 체크가 통과한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-5",
+      "statement": "프로세스1이 디스크 상태를 기록 후 종료하고 프로세스2가 그 상태만으로 동일한 미처분 큐를 재개함(재개 후 미처분 항목 집합이 종료 시점과 일치)을 재시작 테스트가 통과로 실증한다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-6",
+      "statement": "무-ditto 깨끗한 워킹트리에서 vehicle 실행이 정초 첫 슬라이스(fail-closed 불변식 게이트 1개 + 그것을 통과시키는 drive-loop 스텝)를 생성하고 그 슬라이스 테스트가 green으로 통과하며 Codex 교차검증 발화까지 실제로 호출된다",
+      "verdict": "unverified",
+      "evidence": []
+    },
+    {
+      "id": "ac-7",
+      "statement": "격리된 CLAUDE_CONFIG_DIR + repo-밖 git-init 워킹트리에서 vehicle 스모크가 돌 때 캡처된 세션 로그에 ditto SessionStart 배너 문자열과 prime-directive 주입 텍스트가 0건 나타남을 grep이 확인한다(ditto 플러그인 훅·글로벌 CLAUDE.md·ditto git 훅 비활성)",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "draft",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [
+    {
+      "owning_repo": ".",
+      "worktree_path": ".ditto/local/worktrees/wi_260720v4m",
+      "branch": "ditto/wi_260720v4m"
+    }
+  ],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-20T08:45:24.368Z",
+  "updated_at": "2026-07-20T09:24:13.642Z"
+}
