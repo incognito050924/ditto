@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/codex-crosscheck",
+  "title": "CodexCrossCheck",
+  "description": "maker≠checker external authority. IN-WORKFLOW this shape is ADVISORY (the codex-opponent agent cannot prove it actually shelled out to codex). The AUTHORITATIVE maker≠checker gate is guardrails/codex-crosscheck.sh, run by the calling session directly on the evidence files; its exit code — not this JSON — gates the real verdict. absent/unauthenticated codex → available:false → fail-closed to unverified.",
+  "type": "object",
+  "required": ["available", "termination_verdict", "carves"],
+  "additionalProperties": false,
+  "properties": {
+    "available": { "type": "boolean", "description": "false if codex CLI is missing/unauthenticated → harness fails closed to unverified." },
+    "termination_verdict": {
+      "enum": ["concur", "dissent", "unverified"],
+      "description": "concur only if the current-intent queue is genuinely drained to fixpoint with live evidence; dissent if anything is undecided/unwired; unverified if it cannot adjudicate."
+    },
+    "grounds": { "type": "string" },
+    "carves": {
+      "type": "array",
+      "description": "Adjudication of proposed new-scope carves. Only concurred carves leave the queue; dissent keeps an item open (blocks laundering an in-scope residual out).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "verdict"],
+        "properties": {
+          "id": { "type": "string" },
+          "verdict": { "enum": ["concur", "dissent"] },
+          "grounds": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/queue-item",
+  "title": "QueueItem (harness-adjacent)",
+  "description": "The drive-loop's disposition-queue item AND the resume_state persistence shape. This is a HARNESS-ADJACENT type, NOT the locked rebuild/schemas queueItem: that one is .strict() with exactly {id, kind, exit} and would REJECT the summary/classification/proposed/evidence fields the harness needs. The kind + exit vocabularies are reused from the locked contract (3-kind × 3-exit completeness), but the surrounding envelope is the harness's own. Keep the kind/exit enums in sync with rebuild/schemas/queue-item.ts.",
+  "type": "object",
+  "required": ["id", "kind", "classification"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "kind": {
+      "enum": ["found-defect", "in-scope-residual", "unverified-ac"],
+      "description": "Mirrors rebuild/schemas queueItemKind."
+    },
+    "exit": {
+      "enum": ["resolved", "new-scope-deferral", "escape", null],
+      "description": "Mirrors rebuild/schemas queueExit (+ null = still open). An item leaves the queue only through one of the three doors."
+    },
+    "classification": {
+      "enum": ["current-scope", "new-scope", "blocking"],
+      "description": "current-scope blocks completion; new-scope is backlog/carve (needs Codex concurrence); blocking is escape."
+    },
+    "summary": { "type": "string" },
+    "proposed": {
+      "enum": ["new-scope", null],
+      "description": "A carve proposal awaiting Codex adjudication."
+    },
+    "evidence": { "type": "array", "description": "Evidence refs attached on resolution (mirrors slice-observation.evidence items)." }
+  }
+}

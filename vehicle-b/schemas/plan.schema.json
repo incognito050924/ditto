@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/plan",
+  "title": "SlicePlan",
+  "description": "One slice's minimal TDD step, emitted by the planner. Contract-only input (AC + oracle), no implementation narrative.",
+  "type": "object",
+  "required": ["failing_test", "minimal_change", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "failing_test": { "type": "string", "description": "The ONE failing test to write first (RED)." },
+    "minimal_change": { "type": "string", "description": "The smallest change that makes it pass — no more." },
+    "files": { "type": "array", "items": { "type": "string" }, "description": "Files this step touches (prefer existing rebuild/ patterns)." }
+  }
+}

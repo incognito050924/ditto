@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/intent-lock",
+  "title": "IntentLockSet",
+  "description": "The FROZEN closed set of remaining build slices = the completion denominator (§5.10 capture window). Emitted once by intent-locker; never shrunk and never grown afterward. Discoveries are classified against it into a separate backlog, never folded back in.",
+  "type": "object",
+  "required": ["intent_id", "slices"],
+  "additionalProperties": false,
+  "properties": {
+    "intent_id": { "type": "string", "minLength": 1 },
+    "slices": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered smallest-fail-closed-gate first. slice[0] MUST be a single fail-closed gate + its passing step.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "invariant_ref", "gate_kind", "planned_application_oracle", "test_command", "done_state"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "invariant_ref": { "type": "string", "description": "e.g. 'invariant #6' or 'F4.park'" },
+          "gate_kind": { "enum": ["schema", "fail-closed-gate"] },
+          "planned_application_oracle": {
+            "type": "string",
+            "description": "Write-time, falsifiable spec of how the live/applied behavior will be checked (the 'applied' facet of §5.8, distinct from correctness)."
+          },
+          "test_command": {
+            "type": "string",
+            "description": "PER-SLICE command that targets ONLY the test this slice adds (e.g. 'bun test rebuild/schemas/ac-verdict-2facet.test.ts'). MUST NOT be the whole 'bun test rebuild/' island, which is already 51-green and would pass regardless of the slice."
+          },
+          "done_state": {
+            "type": "string",
+            "description": "REALIZED-STATE AC ('entrypoint call yields improved behavior · no orphan'), never build activity ('add function · unit green')."
+          },
+          "touches_intent": {
+            "type": "boolean",
+            "description": "true only if this slice needs a user-owned intent decision → upfront escalation."
+          }
+        }
+      }
+    }
+  }
+}

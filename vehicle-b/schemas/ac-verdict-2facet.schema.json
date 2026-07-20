@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/ac-verdict-2facet",
+  "title": "AcVerdict (2-facet)",
+  "description": "The BUILD-TARGET's acVerdict, extended so correctness ⊥ application are separate, required facets (§5.8 wire-or-drop). This is the output shape slice[0] produces INSIDE rebuild/ — it is a build product, authored by the build against the locked rebuild/schemas SoT, NOT a harness type. The write-time gate rejects a capability-change AC that lacks planned_application_oracle; the verify-time gate checks observed_application_evidence for truth. Whether this extends rebuild/schemas' acVerdict in place or lives as a sibling schema is an open question (see OPEN-QUESTIONS.md).",
+  "type": "object",
+  "required": ["criterion_id", "verdict", "evidence", "planned_application_oracle"],
+  "additionalProperties": false,
+  "properties": {
+    "criterion_id": { "type": "string", "minLength": 1 },
+    "verdict": { "enum": ["pass", "fail", "partial", "unverified"] },
+    "evidence": {
+      "type": "array",
+      "description": "Correctness-facet evidence (mirrors rebuild/schemas evidence: reference-carrying, no inline content)."
+    },
+    "planned_application_oracle": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Write-time, falsifiable spec of how the applied/live behavior WILL be checked. Write-time gate: presence + falsifiability only (not truth). Required for a capability-change AC."
+    },
+    "observed_application_evidence": {
+      "type": "string",
+      "description": "Verify-time evidence that the applied behavior was actually reached through the live path. Verify-time gate checks truth. Absent until verification."
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/slice-observation",
+  "title": "SliceObservation (Live-Verify raw facts)",
+  "description": "One fresh verifier's RAW FACTS about a slice. NO verdict field — the harness decides 'resolved' by consensus COUNT across the panel, and the calling-session guardrail re-runs the evidence deterministically (this report is advisory, an LLM self-report). This is the disposition-verdict boundary the drive-loop reads from.",
+  "type": "object",
+  "required": ["test_command", "exit_code", "pass", "fail", "evidence", "observed_application_evidence", "orphan_free", "discovered"],
+  "additionalProperties": false,
+  "properties": {
+    "test_command": { "type": "string", "description": "The per-slice command actually run (must match the slice's; whole-island runs are a protocol violation)." },
+    "exit_code": { "type": "integer" },
+    "pass": { "type": "integer", "description": "Passing test count reported by the runner." },
+    "fail": { "type": "integer", "description": "Failing test count reported by the runner." },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "description": "REFERENCES only (path or content hash + short preview), re-runnable/re-hashable by the calling-session guardrail. Never inline dumps.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref"],
+        "properties": {
+          "ref": { "type": "string", "description": "file path or content hash the guardrail can re-execute/re-hash" },
+          "preview": { "type": "string", "maxLength": 2000 }
+        }
+      }
+    },
+    "observed_application_evidence": {
+      "type": "string",
+      "description": "Confirmation the improvement is reached through the LIVE path (reachable entrypoint + real effect), not a unit-isolated call. The 'observed applied' facet of §5.8."
+    },
+    "orphan_free": {
+      "type": "boolean",
+      "description": "REQUIRED. false if any added symbol is unwired/unreachable (§5.8 wire-or-drop). A missing value must not silently pass — hence required, not optional."
+    },
+    "discovered": {
+      "type": "array",
+      "description": "Found items. BACKLOG-ONLY — never turned into a drivable slice (no test_command/oracle) and never grows the frozen denominator.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "summary", "classification"],
+        "properties": {
+          "kind": { "enum": ["found-defect", "in-scope-residual", "unverified-ac"] },
+          "summary": { "type": "string" },
+          "classification": { "enum": ["current-scope", "new-scope", "blocking"] },
+          "change_kind": {
+            "enum": ["method", "intent"],
+            "description": "intent = an existing AC's meaning or live-path expectation changes → forces user-owned escalation (no method-laundering)."
+          }
+        }
+      }
+    }
+  }
+}

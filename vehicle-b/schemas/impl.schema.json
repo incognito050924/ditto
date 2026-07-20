@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vehicle-b/impl",
+  "title": "ImplReport",
+  "description": "Implementer's surgical-change report. The implementer writes the failing test first, then the minimal code; it does NOT run the full suite or claim pass — the fresh verifier panel does.",
+  "type": "object",
+  "required": ["changed_files", "test_command", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "changed_files": { "type": "array", "items": { "type": "string" } },
+    "test_command": {
+      "type": "string",
+      "description": "The narrowed command that targets the test this slice added (equals the slice test_command unless a tighter one is justified)."
+    },
+    "summary": { "type": "string", "description": "One-line summary of the change." }
+  }
+}
