@@ -22,10 +22,13 @@ export function driveStep(
 ): DriveStepResult {
   const gate = decideGate(signal);
   if (gate.decision === 'pass') {
+    // decideGate guarantees non-empty grounds on pass, but GateResult types it
+    // optional (string | undefined). Include the key only when present so the
+    // optional DriveStepResult.grounds stays exactOptionalPropertyTypes-clean.
     return {
       item: { ...item, exit: 'resolved' },
       disposed: true,
-      grounds: gate.grounds,
+      ...(gate.grounds !== undefined ? { grounds: gate.grounds } : {}),
     };
   }
   // Gate blocked. A caller may still route the item out the other two doors —
