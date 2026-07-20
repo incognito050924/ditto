@@ -1,6 +1,0 @@
-{
-  "statement": "Rename a local private helper variable",
-  "non_local": false,
-  "irreversible": false,
-  "unaudited": false
-}

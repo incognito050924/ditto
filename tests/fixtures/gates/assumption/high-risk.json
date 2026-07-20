@@ -1,6 +1,0 @@
-{
-  "statement": "Run a destructive DB migration to rename the users table",
-  "non_local": true,
-  "irreversible": true,
-  "unaudited": false
-}
