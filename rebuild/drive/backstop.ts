@@ -13,13 +13,16 @@ export interface BackstopDecision {
 
 export function evaluateBackstop(
   backstop: Backstop,
-  opts: { maxNoProgressRounds: number },
+  opts: { maxNoProgressRounds: number; maxTurns?: number },
 ): BackstopDecision {
   const reasons: string[] = [];
   if (backstop.no_progress_rounds >= opts.maxNoProgressRounds) {
     reasons.push(
       `no_progress_rounds ${backstop.no_progress_rounds} >= limit ${opts.maxNoProgressRounds}`,
     );
+  }
+  if (opts.maxTurns !== undefined && backstop.turns >= opts.maxTurns) {
+    reasons.push(`turns ${backstop.turns} >= limit ${opts.maxTurns}`);
   }
   const t = backstop.queue_size_trend;
   const n = t.length;

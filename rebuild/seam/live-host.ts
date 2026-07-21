@@ -80,40 +80,83 @@ function parseCliJson(raw: string): {
   return JSON.parse(raw.slice(start));
 }
 
-const runClaude = (args: string[]): string =>
-  execFileSync('claude', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+// Injectable process crossing so the flag/opts construction is unit-testable
+// without a real CLI (mirrors HostDeps: the ONE place real spawning happens).
+export interface ClaudeSpawnOpts {
+  cwd?: string;
+  timeoutMs?: number;
+}
+export type ClaudeSpawn = (args: string[], opts: ClaudeSpawnOpts) => string;
+
+const realClaudeSpawn: ClaudeSpawn = (args, opts) =>
+  execFileSync('claude', args, {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    cwd: opts.cwd,
+    timeout: opts.timeoutMs,
+  });
+
+/**
+ * Per-workspace drive knobs. When a nested AUTONOMOUS session must run inside an
+ * ephemeral workspace that carries its OWN Stop-hook settings, these inject that
+ * hook + headless autonomy spawn-scoped — WITHOUT ever editing the repo-global
+ * .claude/settings.json. All optional: the repo-global default (liveHostDeps)
+ * leaves them off, so an ordinary drive step is unchanged.
+ */
+export interface LiveDriveConfig {
+  cwd?: string; // spawn cwd = the ephemeral workspace dir
+  settingsPath?: string; // --settings <path>: spawn-scoped hook injection
+  skipPermissions?: boolean; // --dangerously-skip-permissions: headless autonomy
+  timeoutMs?: number; // per-subprocess timeout (cost/hang bound)
+}
 
 /**
  * Live HostDeps backed by the real Claude Code CLI (verified live, #63).
  * - runDrive: a fresh/resumed `--print` step whose `--json-schema` forces the
  *   structured boundary (the queue oracle); returns session_id + that boundary.
+ *   When `config` carries workspace knobs it also injects --settings (the Stop
+ *   hook), --dangerously-skip-permissions, and spawn cwd — all driven by the
+ *   injected config so the flag construction is unit-testable.
  * - runFanout: one isolated `--print` call per task, returning its free text
  *   (agentType-to-subagent mapping is later orchestration, out of this scope).
  * - readFile: the real readFileSync.
  */
-export const liveHostDeps: HostDeps = {
-  runDrive: (input) => {
-    const args = [
-      '--print',
-      '--output-format',
-      'json',
-      '--json-schema',
-      BOUNDARY_JSON_SCHEMA,
-    ];
-    if (input.resume) args.push('--resume', input.resume);
-    args.push(input.prompt);
-    const json = parseCliJson(runClaude(args));
-    return {
-      sessionId: json.session_id ?? '',
-      boundaryJson: JSON.stringify(json.structured_output),
-    };
-  },
-  runFanout: (tasks) =>
-    tasks.map((task) => {
-      const json = parseCliJson(
-        runClaude(['--print', '--output-format', 'json', task.prompt]),
-      );
-      return json.result ?? '';
-    }),
-  readFile: (path) => readFileSync(path, 'utf8'),
-};
+export function makeLiveHostDeps(
+  config: LiveDriveConfig = {},
+  spawn: ClaudeSpawn = realClaudeSpawn,
+): HostDeps {
+  const spawnOpts: ClaudeSpawnOpts = {};
+  if (config.cwd !== undefined) spawnOpts.cwd = config.cwd;
+  if (config.timeoutMs !== undefined) spawnOpts.timeoutMs = config.timeoutMs;
+  return {
+    runDrive: (input) => {
+      const args = [
+        '--print',
+        '--output-format',
+        'json',
+        '--json-schema',
+        BOUNDARY_JSON_SCHEMA,
+      ];
+      if (config.settingsPath) args.push('--settings', config.settingsPath);
+      if (config.skipPermissions) args.push('--dangerously-skip-permissions');
+      if (input.resume) args.push('--resume', input.resume);
+      args.push(input.prompt);
+      const json = parseCliJson(spawn(args, spawnOpts));
+      return {
+        sessionId: json.session_id ?? '',
+        boundaryJson: JSON.stringify(json.structured_output),
+      };
+    },
+    runFanout: (tasks) =>
+      tasks.map((task) => {
+        const json = parseCliJson(
+          spawn(['--print', '--output-format', 'json', task.prompt], spawnOpts),
+        );
+        return json.result ?? '';
+      }),
+    readFile: (path) => readFileSync(path, 'utf8'),
+  };
+}
+
+// Repo-global default: no workspace knobs (ordinary drive step, verified #63).
+export const liveHostDeps: HostDeps = makeLiveHostDeps();

@@ -1,0 +1,30 @@
+{
+  "round": 0,
+  "items": [
+    {
+      "id": "q1",
+      "kind": "unverified-ac",
+      "exit": null,
+      "evidence_ref": null,
+      "disposition_note": "seed: ac-1 outer drive loop not yet verified"
+    },
+    {
+      "id": "q2",
+      "kind": "in-scope-residual",
+      "exit": null,
+      "evidence_ref": null,
+      "disposition_note": "seed: ac-6 absolute round ceiling not yet verified"
+    }
+  ],
+  "acceptance_criteria": [
+    { "id": "ac-1", "status": "unverified", "evidence_ref": null },
+    { "id": "ac-6", "status": "unverified", "evidence_ref": null }
+  ],
+  "last_stop_hook": null,
+  "backstop": {
+    "turns": 0,
+    "no_progress_rounds": 0,
+    "queue_size_trend": []
+  },
+  "blocker": null
+}

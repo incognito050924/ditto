@@ -1,0 +1,78 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607201id",
+  "seq": 11,
+  "actor": "workspace-write",
+  "event_id": "a8cdbb0697a1dd0346c203067805c8316f9f116a8e76f32e35819ba1a6994a5c",
+  "ts": "2026-07-21T02:15:58.755Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607201id/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "artifact"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607201id/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "artifact"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command",
+        "command": "bash -c grep -q 'HOOK_FIRED_INSIDE_DRIVE: true' .ditto/local/work-items/wi_2607201id/evidence/ac1-integrated-drive.log && grep -q 'FINAL_OUTCOME: drained' .ditto/local/work-items/wi_2607201id/evidence/ac1-integrated-drive.log && echo 'ac-1 integrated: hook fired inside drive + drained to fixpoint via shipped seam'",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

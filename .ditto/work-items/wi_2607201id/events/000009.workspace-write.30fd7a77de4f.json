@@ -1,0 +1,41 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607201id",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "30fd7a77de4f3ab3b44b27d7648b206721f46fe243c6e5c3c5c06fe10f3ae539",
+  "ts": "2026-07-21T01:59:03.687Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-8",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607201id/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "artifact"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      }
+    ]
+  }
+}
