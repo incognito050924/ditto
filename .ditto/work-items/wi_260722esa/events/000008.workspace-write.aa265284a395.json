@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722esa",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "aa265284a3957851e6555b0c9bafc8b0d4874bda640a66703e17394a789babdc",
+  "ts": "2026-07-22T13:51:14.565Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command",
+        "command": "bash -c set -e\nbun test src/hooks/ 2>&1 | tail -3\nDITTO_HOOKS_LEGACY=1 bun test src/hooks/ 2>&1 | tail -3\ngrep -q \"~/core/gates\" src/hooks/rebuilt/stop-gate.ts\necho AC2-OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722esa",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "17719c30fc4122d3d81b6f86fbd70c6306e3777df5481fd240b6a3dc540b879d",
+  "ts": "2026-07-22T13:50:19.784Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "partial",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      }
+    ]
+  }
+}

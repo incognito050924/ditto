@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722esa",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "e212f2c370544894cb43609ff14d337cd6ab5d82d71905e8583fa74a90557999",
+  "ts": "2026-07-22T13:50:19.785Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "partial",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "url"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "url"
+      }
+    ]
+  }
+}

@@ -1,0 +1,431 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260722esa",
+  "title": "hook 최적화 증분3: 실제 플러그인 hook(src/hooks/* → bin/ditto hook)을 rebuild/ 설계로 재배선 — 계약 ",
+  "source_request": "hook 최적화 증분 3: 실제 플러그인 hook을 재구축 rebuild/ 설계로 재배선. rebuild/hook은 Stop 훅 하나뿐이고 계약이 실제 플러그인 Stop 게이트 계약과 다르므로, 무엇을 어느 계약으로 이관할지 매핑을 설계-먼저로 심의 후 진행. 우선순위: 컨텍스트/토큰 절감 · 실행 오버헤드 절감 · 게이트 정확성 · 코드 단순화. 내부 동작은 영어, 사용자 출력은 한국어. 증분 2(옛 핸들러 in-place 슬림화)는 보류.",
+  "goal": "Rewire all 6 live plugin hook events (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PreCompact, Stop) from the legacy src/hooks handlers onto rebuild-design thin handlers, Claude-Code-only, preserving DECISION parity (every observable blocking decision of the current gates), with measured token-injection and process-overhead reduction on the two heavy events.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "Zero hook events still routed through the old handler layer: each of the 6 events is rewired to a rebuild-contract handler or consolidated/retired by the recorded design mapping; routing is reversible and one rollback flip is verified.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bash -c set -e\n# rollback flip: default(rebuilt) blocks, legacy flag blocks, unset rebuilt again; routing identity tests prove which table serves\necho \"{\\\"tool_name\\\":\\\"Bash\\\",\\\"tool_input\\\":{\\\"command\\\":\\\"rm -rf /\\\"}}\" | bun bin/ditto hook pre-tool-use && exit 1 || [ $? -eq 2 ]\necho \"{\\\"tool_name\\\":\\\"Bash\\\",\\\"tool_input\\\":{\\\"command\\\":\\\"rm -rf /\\\"}}\" | DITTO_HOOKS_LEGACY=1 bun bin/ditto hook pre-tool-use && exit 1 || [ $? -eq 2 ]\nbun test src/hooks/rebuilt/hook-routing.test.ts 2>&1 | tail -3\ngit diff --quiet HEAD -- hooks/hooks.json\necho AC1-OK",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "Decision parity holds: every observable blocking decision of the current PreToolUse and Stop gates is preserved, evidenced by characterization/parity tests created before rewiring (PreToolUse inline logic) and by reuse of the pure gate library (Stop); fail-open crash semantics and the stop loop guard are preserved.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bash -c set -e\nbun test src/hooks/ 2>&1 | tail -3\nDITTO_HOOKS_LEGACY=1 bun test src/hooks/ 2>&1 | tail -3\ngrep -q \"~/core/gates\" src/hooks/rebuilt/stop-gate.ts\necho AC2-OK",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "Before/after measurements of injected tokens and hook process overhead on the two heavy events are recorded and reported honestly, including a near-zero delta if that is the outcome.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "The new hooks demonstrably fire in one live session in this repo (live-fire check).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "The dual-host supersede is recorded as an ADR in this work item, the new hook command fails loudly (non-zero) on --host codex, and Codex-surface removal exists as a tracked follow-up work item.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "url"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "url"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "url"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "url"
+        },
+        {
+          "kind": "command",
+          "command": "bash -c set -e\ntest -f .ditto/knowledge/adr/ADR-20260722-claude-code-only-host.md\ngrep -q \"superseded by ADR-20260722-claude-code-only-host\" .ditto/knowledge/adr/ADR-0016-dual-host-claude-codex.md\nbun bin/ditto hook pre-tool-use --host codex < /dev/null && exit 1 || [ $? -eq 2 ]\ngh issue view 70 --repo incognito050924/ditto --json state --jq .state | grep -q OPEN\necho AC5-OK",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "blocked",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/knowledge/adr/ADR-20260722-claude-code-only-host.md",
+    ".ditto/knowledge/adr/ADR-0016-dual-host-claude-codex.md",
+    "CLAUDE.md",
+    ".ditto/local/work-items/wi_260722esa/knowledge-gate.json",
+    "src/hooks/parity-cases.ts",
+    "src/hooks/pre-tool-use.characterization.test.ts",
+    "src/hooks/stop.characterization.test.ts",
+    "src/hooks/runtime.characterization.test.ts",
+    "src/hooks/rebuilt/pre-tool-use-policy.ts",
+    "src/hooks/rebuilt/pre-tool-use.ts",
+    "src/hooks/rebuilt/stop-gate.ts",
+    "src/hooks/rebuilt/stop.ts",
+    "src/hooks/rebuilt/session-start.ts",
+    "src/hooks/rebuilt/user-prompt-submit.ts",
+    "src/hooks/rebuilt/post-tool-use.ts",
+    "src/hooks/rebuilt/pre-compact.ts",
+    "src/hooks/rebuilt/hook-routing.test.ts",
+    "src/cli/commands/hook.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260722esa",
+    "fresh_evidence_needed": [
+      "land aborted — 79 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_2607130ld/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130ld/record.json, .ditto/work-items/wi_2607130oc/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130oc/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607130oc/events/000002.workspace-write.3ed6a2cd8aca.json, .ditto/work-items/wi_2607130oc/events/000003.workspace-write.7388b14cbddc.json, .ditto/work-items/wi_2607130oc/events/000004.workspace-write.6034daaeaa33.json, .ditto/work-items/wi_2607130oc/events/000005.workspace-write.ec4ed759cc75.json, .ditto/work-items/wi_2607130oc/events/000006.workspace-write.69c47b255e09.json, .ditto/work-items/wi_2607130oc/record.json, .ditto/work-items/wi_26071389d/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_26071389d/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_26071389d/events/000002.workspace-write.745d477797fa.json, .ditto/work-items/wi_26071389d/events/000003.workspace-write.48cbc7f13879.json, .ditto/work-items/wi_26071389d/events/000004.workspace-write.71a59e762eef.json, .ditto/work-items/wi_26071389d/events/000005.workspace-write.c98e330c7d24.json, .ditto/work-items/wi_26071389d/events/000006.workspace-write.1d4a9e51bfd9.json, .ditto/work-items/wi_26071389d/record.json, .ditto/work-items/wi_2607138pr/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607138pr/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607138pr/events/000002.workspace-write.886a35a07b28.json, .ditto/work-items/wi_2607138pr/events/000003.workspace-write.952789b0dfa4.json, .ditto/work-items/wi_2607138pr/events/000004.workspace-write.9b80d1421a1d.json, .ditto/work-items/wi_2607138pr/events/000005.workspace-write.02d1bc21e71f.json, .ditto/work-items/wi_2607138pr/events/000006.workspace-write.92a85e525a94.json, .ditto/work-items/wi_2607138pr/events/000007.workspace-write.754980ac2685.json, .ditto/work-items/wi_2607138pr/record.json, .ditto/work-items/wi_260713be4/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713be4/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713be4/events/000002.workspace-write.67eaae88477f.json, .ditto/work-items/wi_260713be4/events/000003.workspace-write.f05f5a6b6ecc.json, .ditto/work-items/wi_260713be4/events/000004.workspace-write.abbb6a5075e1.json, .ditto/work-items/wi_260713be4/events/000005.workspace-write.ca8f709a3d72.json, .ditto/work-items/wi_260713be4/record.json, .ditto/work-items/wi_260713bo1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713bo1/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713bo1/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260713bo1/events/000003.workspace-write.bd0ab762e187.json, .ditto/work-items/wi_260713bo1/events/000004.workspace-write.ae52d2961e0a.json, .ditto/work-items/wi_260713bo1/events/000005.workspace-write.ce0c15d2eab5.json, .ditto/work-items/wi_260713bo1/events/000006.workspace-write.0b8dddd3a42f.json, .ditto/work-items/wi_260713bo1/events/000007.workspace-write.ac4f70291432.json, .ditto/work-items/wi_260713bo1/record.json, .ditto/work-items/wi_260713kyb/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713kyb/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713kyb/events/000002.workspace-write.90cf1b24a3d9.json, .ditto/work-items/wi_260713kyb/record.json, .ditto/work-items/wi_260713tsw/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713tsw/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260713tsw/record.json, .ditto/work-items/wi_260713w0g/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713w0g/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713w0g/events/000002.workspace-write.a608710a213e.json, .ditto/work-items/wi_260713w0g/events/000003.workspace-write.40a853809739.json, .ditto/work-items/wi_260713w0g/events/000004.workspace-write.9571c04e1eb2.json, .ditto/work-items/wi_260713w0g/events/000005.workspace-write.cba10747e468.json, .ditto/work-items/wi_260713w0g/record.json, .ditto/work-items/wi_260722esa/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260722esa/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260722esa/events/000002.workspace-write.242b7d80532c.json, .ditto/work-items/wi_260722esa/events/000003.workspace-write.17719c30fc41.json, .ditto/work-items/wi_260722esa/events/000004.workspace-write.7947bfe4f4cb.json, .ditto/work-items/wi_260722esa/events/000005.workspace-write.4389c3e9014b.json, .ditto/work-items/wi_260722esa/events/000006.workspace-write.e212f2c37054.json, .ditto/work-items/wi_260722esa/events/000007.workspace-write.d09ee7c2aa3c.json, .ditto/work-items/wi_260722esa/events/000008.workspace-write.aa265284a395.json, .ditto/work-items/wi_260722esa/events/000009.workspace-write.f3a34e7a5712.json, .ditto/work-items/wi_260722esa/events/000010.workspace-write.863af826ea11.json, .ditto/work-items/wi_260722esa/events/000011.workspace-write.826302cc0a05.json, .ditto/work-items/wi_260722esa/events/000012.workspace-write.97f82a5ccf64.json, .ditto/work-items/wi_260722esa/record.json, docs/redesign/ditto-presentation/assets/css/theme.css, docs/redesign/ditto-presentation/assets/js/deck.js, docs/redesign/ditto-presentation/index.html, docs/redesign/ditto-presentation/opinion.md, docs/redesign/ditto-presentation/vendor/fonts/PretendardVariable.woff2, docs/redesign/ditto-presentation/vendor/reveal/reset.css, docs/redesign/ditto-presentation/vendor/reveal/reveal.css, docs/redesign/ditto-presentation/vendor/reveal/reveal.js. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "062e40b72c07faec1361153addea615ca8710c0c",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_260722esa/",
+    "docs/redesign/ditto-presentation/"
+  ],
+  "created_at": "2026-07-22T12:26:14.326Z",
+  "updated_at": "2026-07-22T13:51:19.542Z"
+}

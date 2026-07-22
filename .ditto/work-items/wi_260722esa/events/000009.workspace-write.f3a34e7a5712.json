@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722esa",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "f3a34e7a5712d99c51239765c222646589524699c6f314bf8c7988ac423cf367",
+  "ts": "2026-07-22T13:51:15.239Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "url"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "url"
+      },
+      {
+        "kind": "command",
+        "command": "bash -c set -e\ntest -f .ditto/knowledge/adr/ADR-20260722-claude-code-only-host.md\ngrep -q \"superseded by ADR-20260722-claude-code-only-host\" .ditto/knowledge/adr/ADR-0016-dual-host-claude-codex.md\nbun bin/ditto hook pre-tool-use --host codex < /dev/null && exit 1 || [ $? -eq 2 ]\ngh issue view 70 --repo incognito050924/ditto --json state --jq .state | grep -q OPEN\necho AC5-OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

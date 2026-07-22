@@ -1,0 +1,98 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722esa",
+  "seq": 10,
+  "actor": "workspace-write",
+  "event_id": "863af826ea110b0a1ac67f52360ca500a009683406deedbebde7c128e18e8ce3",
+  "ts": "2026-07-22T13:51:19.345Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command",
+        "command": "bash -c set -e\n# rollback flip: default(rebuilt) blocks, legacy flag blocks, unset rebuilt again; routing identity tests prove which table serves\necho \"{\\\"tool_name\\\":\\\"Bash\\\",\\\"tool_input\\\":{\\\"command\\\":\\\"rm -rf /\\\"}}\" | bun bin/ditto hook pre-tool-use && exit 1 || [ $? -eq 2 ]\necho \"{\\\"tool_name\\\":\\\"Bash\\\",\\\"tool_input\\\":{\\\"command\\\":\\\"rm -rf /\\\"}}\" | DITTO_HOOKS_LEGACY=1 bun bin/ditto hook pre-tool-use && exit 1 || [ $? -eq 2 ]\nbun test src/hooks/rebuilt/hook-routing.test.ts 2>&1 | tail -3\ngit diff --quiet HEAD -- hooks/hooks.json\necho AC1-OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
