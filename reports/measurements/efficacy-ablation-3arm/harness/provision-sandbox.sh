@@ -178,8 +178,37 @@ if (( WITH_AUTH )); then
     cp "$GDIR/.credentials.json" "$SANDBOX/claude-config/.credentials.json"
     chmod 600 "$SANDBOX/claude-config/.credentials.json"
     AUTH_NOTE="copied .credentials.json (auth only — no instructions/config)"
+  elif security find-generic-password -s "Claude Code-credentials" -w \
+      > "$SANDBOX/claude-config/.credentials.json" 2>/dev/null; then
+    # Measured (probe on attempt-99 scratch sandbox): with CLAUDE_CONFIG_DIR
+    # set, the CLI reads the credential FILE in that dir and ignores the
+    # Keychain — Keychain-only auth yields "Not logged in". Materialize the
+    # OAuth blob (auth only — no instructions/config) into the isolated config.
+    chmod 600 "$SANDBOX/claude-config/.credentials.json"
+    AUTH_NOTE="materialized Keychain OAuth blob into isolated config (auth only)"
   else
-    AUTH_NOTE="no credential file; macOS Keychain likely holds auth (reachable despite HOME isolation — documented limit)"
+    rm -f "$SANDBOX/claude-config/.credentials.json"
+    AUTH_NOTE="no credential source (no file, no Keychain entry) — headless session will fail auth"
+  fi
+  # Keychain tokens alone are NOT enough for headless: the CLI decides
+  # "logged in" from login state in .claude.json (measured: attempt-1-B0 died
+  # with authentication_failed "Not logged in" despite a reachable Keychain
+  # entry). Materialize the MINIMAL login state — oauthAccount + userID +
+  # hasCompletedOnboarding only; no instructions, no settings, no memory, no
+  # project history — into the isolated HOME and CLAUDE_CONFIG_DIR (CLI
+  # versions differ on which location they read).
+  LOGIN_SRC=""
+  for c in "$GDIR/.claude.json" "$HOME/.claude.json"; do
+    [[ -f "$c" ]] && { LOGIN_SRC="$c"; break; }
+  done
+  if [[ -n "$LOGIN_SRC" ]]; then
+    LS_SRC="$LOGIN_SRC" bun -e 'const s=JSON.parse(require("fs").readFileSync(process.env.LS_SRC,"utf8"));const out={hasCompletedOnboarding:true};for(const k of ["oauthAccount","userID"])if(s[k]!=null)out[k]=s[k];console.log(JSON.stringify(out))' \
+      > "$SANDBOX/home/.claude.json"
+    chmod 600 "$SANDBOX/home/.claude.json"
+    cp "$SANDBOX/home/.claude.json" "$SANDBOX/claude-config/.claude.json"
+    AUTH_NOTE="$AUTH_NOTE; minimal login state materialized (oauthAccount+userID+hasCompletedOnboarding only)"
+  else
+    AUTH_NOTE="$AUTH_NOTE; NO login-state source found — headless session will fail auth"
   fi
 fi
 
