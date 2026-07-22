@@ -24,10 +24,11 @@ function safeSessionId(sessionId: string): string {
 }
 
 /**
- * Session pointers older than this (by filesystem mtime) are swept. Mirrors the
- * handoff store's STALE_ACTIVE_RETENTION_DAYS (WS-HND-T3, wi_260706kdx): a pointer
- * a reused session never overwrote would otherwise re-bind that session to a
- * long-dead work item forever.
+ * Session pointers older than this (by filesystem mtime) are swept
+ * (WS-HND-T3, wi_260706kdx): a pointer a reused session never overwrote would
+ * otherwise re-bind that session to a long-dead work item forever. (The 7-day
+ * figure originally mirrored the retired file-based handoff store's
+ * active-sweep retention; it now stands on its own.)
  */
 const STALE_SESSION_RETENTION_DAYS = 7;
 const STALE_SESSION_RETENTION_MS = STALE_SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -77,12 +78,12 @@ export class SessionPointerStore {
 
   /**
    * GC stale session pointers (WS-HND-T3, wi_260706kdx) — the once-per-prompt tick
-   * that stops a reused session id from re-binding to a long-dead work item. Sibling
-   * of HandoffStore.sweepStaleActive and, like it, CONTENT-BLIND: staleness is decided
-   * by the filesystem mtime, NOT the parsed `updated_at`, so a malformed pointer file
-   * still retires by age. Best-effort / fail-open: a failed stat/unlink just leaves the
-   * file for a later turn and never throws. DELETES (pointers are cheap, single-source
-   * state — nothing to preserve, unlike a handoff artifact). Returns the swept paths.
+   * that stops a reused session id from re-binding to a long-dead work item.
+   * CONTENT-BLIND: staleness is decided by the filesystem mtime, NOT the parsed
+   * `updated_at`, so a malformed pointer file still retires by age. Best-effort /
+   * fail-open: a failed stat/unlink just leaves the file for a later turn and never
+   * throws. DELETES (pointers are cheap, single-source state — nothing to preserve).
+   * Returns the swept paths.
    */
   async sweepStale(now: Date = new Date()): Promise<string[]> {
     let names: string[];

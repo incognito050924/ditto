@@ -2,7 +2,6 @@ import { join } from 'node:path';
 import { type CharterContext, charterProjection } from '~/core/charter';
 import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir } from '~/core/fs';
-import { HandoffStore } from '~/core/handoff-store';
 import { IntentStore } from '~/core/intent-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import type { WorkItem } from '~/core/work-item-store';
@@ -15,6 +14,7 @@ import {
   allAcceptancePlaceholders,
   classifyPromptAdvisory,
   hasHeavyRiskSignal,
+  legacyHandoffLeftoverWarning,
   looksCodebaseAnswerable,
   resolveActiveWorkItem,
 } from '../user-prompt-submit';
@@ -26,7 +26,10 @@ import {
  * `~/core/charter` and unchanged here), single-active work-item resolution
  * (no-auto-pick), the deep-interview directive (placeholder-AC or risk signal ∧
  * execution intent), the self-answer hint, the classification log line, and the
- * handoff / session-pointer stale-GC tick.
+ * session-pointer stale-GC tick. The handoff stale-sweep that used to run here
+ * was removed without replacement (wi_260722g7h): ref-baton consume deletes
+ * immediately, so there is no stale-active handoff set to sweep; only the
+ * transitional legacy-leftover 1-line warning remains.
  */
 
 /** Heavy signal on a finalized intent: unresolved unknowns. Fail-open. */
@@ -87,11 +90,11 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
 
   const ctx: CharterContext = {};
 
-  // Handoff bodies are not auto-injected; the once-per-prompt tick only runs GC
-  // (stale handoffs + stale session pointers). Fail-open: a GC error must not
-  // break the prompt hook.
+  // Handoff bodies are not auto-injected; the once-per-prompt tick only runs
+  // the session-pointer stale GC (the handoff sweep is gone — consume on the
+  // baton ref deletes immediately; no network call may enter this path).
+  // Fail-open: a GC error must not break the prompt hook.
   try {
-    await new HandoffStore(input.repoRoot).sweepStaleActive();
     await new SessionPointerStore(input.repoRoot).sweepStale();
   } catch {
     // sweep failure is observational, non-blocking
@@ -122,5 +125,8 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
   // Empty state: inject the work-item guide (no auto-create, no block).
   if (resolved.action === 'guide') ctx.workItemGuide = true;
 
-  return contextOutput(charterProjection(ctx));
+  // Transitional 1-line cutover warning for old file-tier handoff leftovers.
+  const legacyWarning = await legacyHandoffLeftoverWarning(input.repoRoot);
+
+  return contextOutput(charterProjection(ctx) + (legacyWarning ? `\n\n${legacyWarning}` : ''));
 };

@@ -89,7 +89,7 @@ import {
 import { createGhClient } from './gh-client';
 import { captureGitDiff, listChangedFiles } from './git';
 import { postUnpostedDecisions } from './github-progress';
-import { HandoffStore } from './handoff-store';
+import { countHandoffBatonRounds } from './handoff-store';
 import { IntentStore } from './intent-store';
 import { MemoryEventStore, MemorySourceStore } from './memory-store';
 import { warmStartMemoryContext } from './memory-warmstart';
@@ -504,13 +504,10 @@ async function computePostCost(
   } catch {
     /* metrics absent ⇒ 0 */
   }
-  try {
-    handoffRounds = (await new HandoffStore(repoRoot).listActive()).filter(
-      (h) => h.handoff.scope.kind === 'work_item' && h.handoff.scope.work_item_id === workItemId,
-    ).length;
-  } catch {
-    /* handoffs absent ⇒ 0 */
-  }
+  // Persistent rounds off the refs/ditto/handoffs HISTORY (local ref read, no
+  // fetch) — a consumed baton still counts, so the churn signal survives the
+  // consume-deletes-immediately baton model. Fail-open to 0 inside the helper.
+  handoffRounds = countHandoffBatonRounds(repoRoot, workItemId);
   return driftEvents + reworkAttempts + retrySwitch + handoffRounds;
 }
 

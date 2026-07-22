@@ -1,8 +1,8 @@
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type CharterContext, PLACEHOLDER_AC_STATEMENT, charterProjection } from '~/core/charter';
 import { localDir } from '~/core/ditto-paths';
 import { atomicWriteText, ensureDir } from '~/core/fs';
-import { HandoffStore } from '~/core/handoff-store';
 import { IntentStore } from '~/core/intent-store';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { type WorkItem, WorkItemStore } from '~/core/work-item-store';
@@ -252,12 +252,37 @@ async function intentHasRiskSignal(repoRoot: string, workItemId: string): Promis
   }
 }
 
-// re_entry 명령만 보조 힌트로 남긴다 (work item 필드). handoff 본문·알림은 어떤 훅도
-// 컨텍스트에 자동 주입하지 않는다 — 발견·소비는 명시적 pull(CLI/스킬)로만 한다
-// (`ditto work handoff <id> --show` = 읽기 전용 수동 로드). 아래 handler 는 handoff 를
-// GC(stale sweep)만 할 뿐, 본문이나 "핸드오프 있음" 알림을 컨텍스트에 넣지 않는다.
+// re_entry 명령만 보조 힌트로 남긴다 (work item 필드 — 값이 무엇이든 그대로 전달).
+// handoff 본문·알림은 어떤 훅도 컨텍스트에 자동 주입하지 않는다 — 발견·소비는 명시적
+// pull로만 한다 (ref-baton 모델: `ditto handoff show` = 읽기 전용, `ditto handoff
+// consume` = 1회 소비). 아래 handler 는 본문이나 "핸드오프 있음" 알림을 컨텍스트에
+// 넣지 않는다.
 function pendingHandoffHint(item: WorkItem): string | undefined {
   return item.re_entry?.command;
+}
+
+/**
+ * Transitional (old two-tier file store → refs/ditto/handoffs cutover): an
+ * old-plugin session may still have file-tier handoffs under `.ditto/handoff/`
+ * (committed remote tier) or `.ditto/local/handoff/` (local tier) — paths the
+ * new ref consume never reads, so without surfacing they would rot silently
+ * (one-way loss). Detect top-level `.md` leftovers and return a 1-line warning
+ * (archive/ and consumed/ subdirs are intentional residue and excluded). Local
+ * fs read only (hook network-free invariant); fail-open. Remove after cutover.
+ */
+export async function legacyHandoffLeftoverWarning(repoRoot: string): Promise<string | undefined> {
+  const countMd = async (dir: string): Promise<number> => {
+    try {
+      return (await readdir(dir)).filter((n) => n.endsWith('.md')).length;
+    } catch {
+      return 0; // dir absent/unreadable → nothing left over (fail-open)
+    }
+  };
+  const n =
+    (await countMd(join(repoRoot, '.ditto', 'handoff'))) +
+    (await countMd(localDir(repoRoot, 'handoff')));
+  if (n === 0) return undefined;
+  return `WARNING: ${n} legacy file-tier handoff file(s) remain under .ditto/handoff/ or .ditto/local/handoff/ — the ref-baton store (\`ditto handoff\`) does not read them; migrate (ditto handoff write) or read them manually, then delete.`;
 }
 
 async function logClassification(repoRoot: string, entry: Record<string, unknown>): Promise<void> {
@@ -293,17 +318,17 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
 
   const ctx: CharterContext = {};
 
-  // Handoff bodies are NO LONGER auto-injected (wi_260708700). Auto-load
-  // (wi_260605wf3) had no efficacy in practice and dumped the verbatim body into
-  // context on every resume turn. Handoffs now stay active for MANUAL load (a
-  // follow-up read mechanism); the once-per-prompt tick only runs GC:
-  //  - sweepStaleActive (wi_2606289nt): archive a handoff no one picked up past
-  //    the retention limit, so it can never linger forever.
+  // Handoff bodies are NO LONGER auto-injected (wi_260708700). Discovery/consume
+  // is an explicit pull (`ditto handoff show`/`consume` on the baton ref). The
+  // handoff stale-sweep GC tick that used to run here was REMOVED WITHOUT
+  // REPLACEMENT (wi_260722g7h): under the ref-baton model
+  // consume deletes the entry immediately and retention truncation lives in the
+  // ref store, so there is no stale-active set to sweep — and this prompt-path
+  // tick must never grow a network call. The once-per-prompt tick keeps only:
   //  - SessionPointerStore.sweepStale (WS-HND-T3, wi_260706kdx): retire stale
   //    session pointers so a reused session id never re-binds to a dead work item.
   // fail-open: a GC error must not break the prompt hook.
   try {
-    await new HandoffStore(input.repoRoot).sweepStaleActive();
     await new SessionPointerStore(input.repoRoot).sweepStale();
   } catch {
     // sweep 실패는 무시 (관측적, non-blocking)
@@ -338,8 +363,11 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
   // confirmation + how-to-create). Guidance only — no auto-create, no block.
   if (resolved.action === 'guide') ctx.workItemGuide = true;
 
+  // Transitional 1-line cutover warning (see legacyHandoffLeftoverWarning).
+  const legacyWarning = await legacyHandoffLeftoverWarning(input.repoRoot);
+
   // UserPromptSubmit is advisory: never blocks (exit 0 + additionalContext).
-  return contextOutput(charterProjection(ctx));
+  return contextOutput(charterProjection(ctx) + (legacyWarning ? `\n\n${legacyWarning}` : ''));
 };
 
 function contextOutput(text: string) {

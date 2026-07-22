@@ -1,35 +1,36 @@
-import { readdir, rename, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { z } from 'zod';
 import type { evidenceRef } from '~/schemas/common';
 import { type Handoff, type HandoffScope, handoff as handoffSchema } from '~/schemas/handoff';
 import type { WorkItem } from '~/schemas/work-item';
-import { dittoDir, localDir } from './ditto-paths';
-import { atomicWriteText, ensureDir } from './fs';
 import { scrubTokens } from './github-redaction';
-import { WorkItemStore } from './work-item-store';
+// NOTE: module cycle with handoff-ref-store (it imports this module's format
+// helpers; we import only the ref NAME constant, used strictly at call time) —
+// safe under ESM live bindings, and it keeps the ref name single-sourced.
+import { HANDOFF_REF } from './handoff-ref-store';
 
 type EvidenceRef = z.infer<typeof evidenceRef>;
 
 /**
- * Handoff artifact builder + store (M4.1, wi_260605wf3 통일; scope union wi_260714xpw).
+ * Handoff baton FORMAT module (wi_260722g7h ac-rewire).
  *
- * 단일 독립 store. 이전엔 두 갈래가 따로 존재했다 — pre-compact 훅의 json
- * (`HandoffStore`) 과 `ditto work handoff` 의 md (`writeWorkItemHandoff`). 둘 다
- * `.ditto/local/work-items/<wi>/` 에 종속이었다. 이제 둘 다 이 store 로 모이고, 위치는
- * work-item 밖이다.
+ * The two-tier FILE store that used to live here (local gitignored actives under
+ * `.ditto/local/handoff/` + committed remote files under `.ditto/handoff/`, with
+ * soft consumed-markers, archive moves and an mtime age-sweep) was REMOVED:
+ * handoff batons now live solely as tree entries on the hidden per-repo ref
+ * `refs/ditto/handoffs`, written/consumed via `HandoffRefStore`
+ * (`handoff-ref-store.ts`). Consume lands a deletion commit, so no sweep /
+ * archive / consumed-marker machinery exists anymore.
  *
- * 두 계층(tier):
- *  - LOCAL (gitignored, `.ditto/local/handoff/`): 개인 런타임. work_item 은
- *    `<wi>.md`, session 은 `session__<sid>.md`. age-sweep 이 유일한 hard 정리.
- *  - REMOTE (committed, `.ditto/handoff/`): 작업 브랜치에 커밋되어 fetch/checkout
- *    수신자에게 함께 전달된다. 파일명은 scope-key + author-slug 라 동시 작성자가 서로
- *    다른 파일로 분리된다(공유 단일 파일 없음). 절대 auto-push 하지 않는다.
- *
- * 형식 = 1줄 JSON frontmatter(기계 복원용) + 사람용 markdown 본문. frontmatter 로
- * round-trip(write→read 동일 객체)이 보장되고, 본문은 명시적 consume 으로만 로드된다
- * (어떤 훅도 본문을 컨텍스트에 자동 주입하지 않는다). Evidence 는 본문에 inline 으로
- * 렌더되며 raw artifact 는 절대 옮기지 않는다.
+ * What remains here is the baton FORMAT + BUILD surface the ref store (and its
+ * tests) consume:
+ *  - build: `buildHandoff` / `buildSessionHandoff` (+ the blocked-handoff guard),
+ *  - render/parse: 1-line JSON frontmatter (machine round-trip) + human markdown
+ *    body — round-trip(write→read 동일 객체) preserved,
+ *  - commit hardening: `scrubHandoffForCommit` (fail-closed token scrub reusing
+ *    `github-redaction`'s scrubTokens — no second token-pattern list),
+ *  - routing keys: `scopeKey` / `slugifyAuthor` / `gitAuthorSlug`,
+ *  - metrics: `countHandoffBatonRounds` (persistent per-WI round count off the
+ *    ref history).
  */
 export interface HandoffBuildInput {
   workItem: WorkItem;
@@ -97,7 +98,7 @@ export function buildHandoff(input: HandoffBuildInput): Handoff {
     schema_version: '0.1.0',
     // work_item scope: the historical shape, now nested under the discriminated
     // union. Callers keep passing `{workItem}` — the scope is derived here so the
-    // signature is unchanged (pre-compact.ts, work-item-handoff.ts stay callable).
+    // signature is unchanged.
     scope: { kind: 'work_item', work_item_id: input.workItem.id },
     ...(input.autopilotId ? { autopilot_id: input.autopilotId } : {}),
     from_context: input.fromContext,
@@ -121,8 +122,8 @@ export function buildHandoff(input: HandoffBuildInput): Handoff {
 }
 
 /**
- * A SESSION-scoped handoff (not tied to any work item) — the additive new entry
- * for `ditto handoff` with no work item. Its required key is `session_id`; there
+ * A SESSION-scoped handoff (not tied to any work item) — the entry for
+ * `ditto handoff` with no work item. Its required key is `session_id`; there
  * is no `original_intent` from a work item, so the caller states it directly.
  */
 export interface SessionHandoffBuildInput {
@@ -174,26 +175,9 @@ export function scopeKey(scope: HandoffScope): string {
 }
 
 /**
- * Reject a key component BEFORE it reaches an fs path or a git argument. The old
- * store leaned entirely on `work_item_id` being regex-locked (common.ts); the new
- * scope keys (session_id) and the author-slug have no such guard yet reach
- * `join(dir, …)` and (for remote) `git add <path>`. Reject empty, a leading `-`
- * (git option injection), a path separator, `..`, or a NUL byte.
- */
-function assertSafeKey(value: string, label: string): void {
-  if (value.length === 0) throw new Error(`handoff ${label} must not be empty`);
-  if (value.startsWith('-')) throw new Error(`handoff ${label} must not start with '-': ${value}`);
-  if (/[\\/]/.test(value))
-    throw new Error(`handoff ${label} must not contain a path separator: ${value}`);
-  if (value.includes('..')) throw new Error(`handoff ${label} must not contain '..': ${value}`);
-  if ([...value].some((c) => c.charCodeAt(0) === 0))
-    throw new Error(`handoff ${label} must not contain a NUL byte`);
-}
-
-/**
  * A filesystem/git-safe author slug: lowercased, non-`[a-z0-9]` runs collapsed to a
  * single `-`, leading/trailing `-` trimmed. Derived from a git identity so two
- * concurrent authors on the SAME scope land in separate files (ac-1). Pure.
+ * concurrent authors on the SAME scope land in separate baton entries (ac-1). Pure.
  */
 export function slugifyAuthor(raw: string): string {
   return raw
@@ -206,7 +190,7 @@ export function slugifyAuthor(raw: string): string {
  * The author-slug for handoff routing, derived from git identity
  * (`user.email` → `user.name`). Empty / absent identity falls back to the defined
  * non-empty slug `anon` — NEVER an empty key that would collide two authors into
- * one file. Best-effort: a non-repo / missing git just yields the fallback.
+ * one entry. Best-effort: a non-repo / missing git just yields the fallback.
  */
 export function gitAuthorSlug(repoRoot: string): string {
   const read = (key: string): string => {
@@ -292,10 +276,6 @@ export function renderHandoff(h: Handoff): string {
   return lines.join('\n').trimEnd();
 }
 
-function serialize(h: Handoff): string {
-  return `---\n${JSON.stringify(h)}\n---\n\n${renderHandoff(h)}\n`;
-}
-
 /** Parse a serialized handoff file back into its Handoff + human body. */
 export function parseHandoffFile(text: string): { handoff: Handoff; body: string } {
   if (!text.startsWith('---\n')) {
@@ -322,7 +302,7 @@ function scrubDeep(value: unknown): unknown {
 }
 
 /**
- * Harden a handoff body for a COMMITTED (git-history, irreversible) remote write:
+ * Harden a handoff body for a COMMITTED (git-object, irreversible) write:
  * token-scrub every free-text field (reuses `github-redaction`'s scrub). The routing
  * keys (`scope`), `schema_version` and `created_at` pass through verbatim. Re-parse is
  * FAIL-CLOSED: if scrubbing broke a required field (e.g. a secret-laden URL that no
@@ -338,567 +318,40 @@ export function scrubHandoffForCommit(h: Handoff): Handoff {
   });
 }
 
-export interface ActiveHandoff {
-  handoff: Handoff;
-  body: string;
-  path: string;
-}
-
-/** A committed remote handoff waiting to be picked up (per-recipient list). */
-export interface RemoteHandoff {
-  handoff: Handoff;
-  body: string;
-  /** repo-relative committed path (`.ditto/handoff/<stem>.md`). */
-  path: string;
-  /** filename stem — the identity used for this recipient's consumed-marker. */
-  stem: string;
-}
-
-/** A handoff file that was present but failed to parse — surfaced, never silently dropped. */
-export interface HandoffParseFailure {
-  /** absolute path of the unparsable file */
-  path: string;
-  /** scope inferred from the FILENAME (the body did not parse) */
-  scope: 'work_item' | 'session' | 'unknown';
-  error: string;
-}
-
 /**
- * One entry moved by the content-blind stale sweep. `handoff` is present only
- * when the file was schema-valid; a malformed / non-WI file is still swept by
- * age (mtime) but carries no parsed handoff (null).
+ * Persistent per-work-item handoff ROUND count — the `handoff_rounds` /
+ * `post_cost` metric source (autopilot-loop `computePostCost`, intent-quality
+ * doctor row).
+ *
+ * Reads the `refs/ditto/handoffs` HISTORY, not the pending tip: under the
+ * ref-baton model consume lands an immediate deletion commit, so a
+ * "currently pending" source structurally converges to 0 the moment a baton is
+ * picked up and the continuation-churn metric would silently die. A round =
+ * one baton ISSUED for this work item = a ref commit that ADDED a
+ * `<wi>__<author>.md` tree entry (`--diff-filter=A`; an overwrite of a
+ * still-pending same-stem baton is a Modify and does not inflate the count,
+ * matching the old single-file-overwrite semantics). LOCAL ref lookup only —
+ * never fetch/push. Fail-open: unborn ref, non-repo dir or a missing git
+ * binary all count 0, never throw (metrics reader, parity with the other
+ * post_cost sources).
  */
-export interface SweptHandoff {
-  /** the active path that was archived (no longer present in active/) */
-  path: string;
-  /** repo-relative archive destination the file was moved to */
-  archivePath: string;
-  /** parsed handoff when the file was valid; null for malformed / non-WI files */
-  handoff: Handoff | null;
-}
-
-/** Result of committing a remote handoff (produce = local commit only, NO push). */
-export interface RemoteWriteResult {
-  /** repo-relative committed path */
-  rel: string;
-  /** branch the handoff was committed to (verified, never a wrong-branch land) */
-  branch: string;
-  /** the commit sha it landed in */
-  commit: string;
-  /** author-slug used in the filename */
-  author: string;
-  /** filename stem (identity for the recipient's consumed-marker) */
-  stem: string;
-}
-
-export interface RemoteWriteOptions {
-  /** explicit author-slug (else derived from git identity) */
-  author?: string;
-  /** if set, the current branch MUST equal this — else refuse to commit */
-  expectedBranch?: string;
-  now?: Date;
-}
-
-/** A committed-remote write refused/failed — SURFACED (never a silent fail-open no-op). */
-export class HandoffRemoteWriteError extends Error {
-  constructor(
-    public readonly code:
-      | 'detached'
-      | 'branch_mismatch'
-      | 'gitignored'
-      | 'add_failed'
-      | 'commit_failed',
-    message: string,
-  ) {
-    super(message);
-    this.name = 'HandoffRemoteWriteError';
-  }
-}
-
-interface GitResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * Run git, retrying ONLY on a locked index so two concurrent producers serialize
- * instead of failing (`.git/index.lock`). A non-lock failure returns immediately.
- */
-function runGit(repoRoot: string, args: string[]): GitResult {
-  const maxAttempts = 5;
-  let last: GitResult = { exitCode: 1, stdout: '', stderr: '' };
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const proc = Bun.spawnSync(['git', ...args], {
-      cwd: repoRoot,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    last = {
-      exitCode: proc.exitCode,
-      stdout: proc.stdout?.toString() ?? '',
-      stderr: proc.stderr?.toString() ?? '',
-    };
-    if (last.exitCode === 0) return last;
-    if (/index\.lock/.test(last.stderr) && attempt < maxAttempts - 1) {
-      Bun.sleepSync(20 * (attempt + 1));
-      continue;
-    }
-    return last;
-  }
-  return last;
-}
-
-function stamp(now: Date): string {
-  return now.toISOString().replace(/[:.]/g, '-');
-}
-
-// Work-item branch naming convention (mirrors worktree.ts WORK_ITEM_BRANCH_PREFIX,
-// which is not exported): DITTO creates a work item's branch as `ditto/<wi>`.
-const WORK_ITEM_BRANCH_PREFIX = 'ditto/';
-
-/** Active handoffs older than this are swept into archive (move-not-delete). */
-const STALE_ACTIVE_RETENTION_DAYS = 7;
-const STALE_ACTIVE_RETENTION_MS = STALE_ACTIVE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-export class HandoffStore {
-  constructor(public readonly repoRoot: string) {}
-
-  private dir(): string {
-    return localDir(this.repoRoot, 'handoff');
-  }
-  /** The COMMITTED (git-tracked, NOT gitignored) remote handoff dir. */
-  private remoteDir(): string {
-    return join(dittoDir(this.repoRoot), 'handoff');
-  }
-  private activePath(workItemId: string): string {
-    return join(this.dir(), `${workItemId}.md`);
-  }
-  private activeRel(workItemId: string): string {
-    return `.ditto/local/handoff/${workItemId}.md`;
-  }
-  /** The archive filename stem for a scope — session must NOT collapse to `undefined`. */
-  private archiveKeyForScope(scope: HandoffScope): string {
-    return scope.kind === 'work_item' ? scope.work_item_id : `session__${scope.session_id}`;
-  }
-  private archiveRelForScope(scope: HandoffScope, ts: string): string {
-    return `.ditto/local/handoff/archive/${this.archiveKeyForScope(scope)}__${ts}.md`;
-  }
-  /**
-   * Archive destination for a file we can't parse into a scope: derive the name from
-   * the file's own basename stem so nothing is lost and the `stamp(now)` suffix keeps
-   * it collision-free (WS-HND-T1).
-   */
-  private archiveRelFromBasename(name: string, ts: string): string {
-    const stem = name.replace(/\.md$/, '');
-    return `.ditto/local/handoff/archive/${stem}__${ts}.md`;
-  }
-
-  private async link(workItemId: string, rel: string): Promise<void> {
-    const items = new WorkItemStore(this.repoRoot);
-    if (await items.exists(workItemId)) {
-      await items.update(workItemId, (current) => ({ ...current, handoff_path: rel }));
-    }
-  }
-
-  /**
-   * Write an ACTIVE LOCAL handoff (compaction / explicit `ditto work handoff` /
-   * `ditto handoff`). work_item scope keeps the historical `<wi>.md` key (back-compat
-   * + auto-link); session scope routes to `session__<sid>.md` with NO work-item link.
-   * Returns the repo-relative path it was written to.
-   */
-  async write(h: Handoff): Promise<string> {
-    if (h.scope.kind === 'work_item') {
-      const id = h.scope.work_item_id;
-      await atomicWriteText(this.activePath(id), serialize(h));
-      const rel = this.activeRel(id);
-      await this.link(id, rel);
-      return rel;
-    }
-    assertSafeKey(h.scope.session_id, 'session_id');
-    const name = `session__${h.scope.session_id}.md`;
-    await atomicWriteText(join(this.dir(), name), serialize(h));
-    return `.ditto/local/handoff/${name}`;
-  }
-
-  /**
-   * Write straight to ARCHIVE — a completed (pass) handoff that needs no pickup,
-   * so it never appears as active noise. Returns the repo-relative path.
-   */
-  async writeArchived(h: Handoff, now: Date = new Date()): Promise<string> {
-    const rel = this.archiveRelForScope(h.scope, stamp(now));
-    await atomicWriteText(join(this.repoRoot, rel), serialize(h));
-    if (h.scope.kind === 'work_item') await this.link(h.scope.work_item_id, rel);
-    return rel;
-  }
-
-  /**
-   * Commit a REMOTE handoff to the work's branch so a fetch/checkout recipient gets
-   * the body + pointer (ac-4). Produce = local commit ONLY — cross-machine delivery
-   * is a separate user-gated push (charter §4-8); this NEVER pushes.
-   *
-   *  - Routes by scope-key + author-slug so two concurrent authors DON'T share a file
-   *    (ac-1). Keys are charset-validated before any fs/git touch.
-   *  - Verifies the target branch: work_item commits ONLY to `ditto/<wi>` (or an
-   *    explicit `expectedBranch`); a mismatch / detached HEAD is REFUSED, not landed
-   *    on the wrong branch.
-   *  - Body is token-scrubbed fail-closed (git history is irreversible).
-   *  - Serializes on a locked index (retry) and SURFACES a failed commit (a one-shot
-   *    remote write has no GC retry, so a swallowed failure = permanent non-delivery).
-   */
-  async writeRemote(h: Handoff, opts: RemoteWriteOptions = {}): Promise<RemoteWriteResult> {
-    const author =
-      opts.author !== undefined ? slugifyAuthor(opts.author) : gitAuthorSlug(this.repoRoot);
-    assertSafeKey(author, 'author-slug');
-    const key = scopeKey(h.scope);
-    assertSafeKey(key, h.scope.kind === 'work_item' ? 'work_item_id' : 'session_id');
-    const stem = h.scope.kind === 'work_item' ? `${key}__${author}` : `session__${key}__${author}`;
-    const rel = `.ditto/handoff/${stem}.md`;
-
-    // Target branch: don't commit to whatever happens to be checked out.
-    const expected =
-      opts.expectedBranch ??
-      (h.scope.kind === 'work_item' ? `${WORK_ITEM_BRANCH_PREFIX}${key}` : undefined);
-    const current = this.currentBranch();
-    if (current === null) {
-      throw new HandoffRemoteWriteError(
-        'detached',
-        'HEAD is detached — refusing to commit a remote handoff to an orphan commit',
-      );
-    }
-    if (expected !== undefined && current !== expected) {
-      throw new HandoffRemoteWriteError(
-        'branch_mismatch',
-        `refusing remote handoff: on branch '${current}', expected '${expected}'`,
-      );
-    }
-
-    // A gitignored path makes `git add` a silent no-op → nothing commits. Surface it.
-    if (this.isGitIgnored(rel)) {
-      throw new HandoffRemoteWriteError(
-        'gitignored',
-        `committed handoff path ${rel} is gitignored — git add would be a silent no-op`,
-      );
-    }
-
-    // Fail-closed scrub BEFORE anything is written to disk.
-    const committed = scrubHandoffForCommit(h);
-    await atomicWriteText(join(this.repoRoot, rel), serialize(committed));
-
-    const add = runGit(this.repoRoot, ['add', '--', rel]);
-    if (add.exitCode !== 0) {
-      throw new HandoffRemoteWriteError('add_failed', `git add failed: ${add.stderr.trim()}`);
-    }
-    const commit = runGit(this.repoRoot, [
-      'commit',
-      '-m',
-      `chore(handoff): ${stem} (remote handoff, no-push)`,
-      '--',
-      rel,
-    ]);
-    if (commit.exitCode !== 0 && !/nothing to commit/i.test(`${commit.stdout}${commit.stderr}`)) {
-      throw new HandoffRemoteWriteError(
-        'commit_failed',
-        `git commit failed: ${(commit.stderr || commit.stdout).trim()}`,
-      );
-    }
-    const sha = runGit(this.repoRoot, ['rev-parse', 'HEAD']).stdout.trim();
-    return { rel, branch: current, commit: sha, author, stem };
-  }
-
-  /** Current branch name, or null when detached / not a repo. */
-  private currentBranch(): string | null {
-    const r = runGit(this.repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']);
-    if (r.exitCode !== 0) return null;
-    const name = r.stdout.trim();
-    return name === '' || name === 'HEAD' ? null : name;
-  }
-
-  /** True when `rel` is gitignored in this repo (`check-ignore -q` exits 0 = ignored). */
-  private isGitIgnored(rel: string): boolean {
-    return runGit(this.repoRoot, ['check-ignore', '-q', '--', rel]).exitCode === 0;
-  }
-
-  /**
-   * Every active LOCAL handoff waiting to be picked up, PLUS the set of files that
-   * were present but failed to parse. `list` is the sole sanctioned discovery
-   * channel (no auto-inject), so a session handoff that fails to parse must be
-   * SURFACED (ac-3 "fail-open drop 아님") — never a bare silent skip.
-   */
-  async listActiveDetailed(): Promise<{
-    active: ActiveHandoff[];
-    failures: HandoffParseFailure[];
-  }> {
-    let names: string[];
-    try {
-      names = await readdir(this.dir());
-    } catch {
-      return { active: [], failures: [] }; // no handoff dir yet
-    }
-    const active: ActiveHandoff[] = [];
-    const failures: HandoffParseFailure[] = [];
-    for (const name of names) {
-      if (!name.endsWith('.md')) continue; // skip archive/ + consumed/ subdirs and stray files
-      const path = join(this.dir(), name);
-      try {
-        const { handoff, body } = parseHandoffFile(await Bun.file(path).text());
-        active.push({ handoff, body, path });
-      } catch (err) {
-        failures.push({
-          path,
-          scope: name.startsWith('session__')
-            ? 'session'
-            : /^wi_[a-z0-9]+\.md$/.test(name)
-              ? 'work_item'
-              : 'unknown',
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-    active.sort((a, b) => a.handoff.created_at.localeCompare(b.handoff.created_at));
-    return { active, failures };
-  }
-
-  /** Every active LOCAL handoff currently waiting to be picked up (oldest first). */
-  async listActive(): Promise<ActiveHandoff[]> {
-    return (await this.listActiveDetailed()).active;
-  }
-
-  /**
-   * The active LOCAL handoff for this work item (body + path), or null when none /
-   * malformed. The scoped counterpart of listActive — used so a session picks up
-   * ONLY its own work item's handoff (ac-1, wi_260626r3f).
-   */
-  async getActive(workItemId: string): Promise<ActiveHandoff | null> {
-    const path = this.activePath(workItemId);
-    try {
-      const { handoff, body } = parseHandoffFile(await Bun.file(path).text());
-      return { handoff, body, path };
-    } catch {
-      return null; // missing or malformed → nothing to pick up (fail-open)
-    }
-  }
-
-  /**
-   * The latest handoff for this work item for MANUAL reading (wi_260708xgo,
-   * `ditto work handoff <id> --show`) — the active handoff if present, else the
-   * most recent archived copy, else null. Read-only: unlike consumeFor it never
-   * moves or deletes anything, so `--show` can be run repeatedly.
-   */
-  async readLatest(workItemId: string): Promise<ActiveHandoff | null> {
-    const active = await this.getActive(workItemId);
-    if (active) return active;
-    const archiveDir = join(this.dir(), 'archive');
-    let names: string[];
-    try {
-      names = await readdir(archiveDir);
-    } catch {
-      return null; // no archive dir → nothing
-    }
-    const prefix = `${workItemId}__`;
-    // Archive names are `<wi>__<stamp>.md`; the stamp sorts lexically, so the
-    // last entry is the most recent archived handoff.
-    const latest = names
-      .filter((n) => n.startsWith(prefix) && n.endsWith('.md'))
-      .sort()
-      .at(-1);
-    if (!latest) return null;
-    try {
-      const { handoff, body } = parseHandoffFile(await Bun.file(join(archiveDir, latest)).text());
-      return { handoff, body, path: `.ditto/local/handoff/archive/${latest}` };
-    } catch {
-      return null; // malformed archived file → nothing to show (fail-open)
-    }
-  }
-
-  /**
-   * SOFT consume of JUST ONE active LOCAL handoff, addressed by its `stem` — a work
-   * item id (`<wi>`) or a session handoff key (`session__<sid>`), i.e. the same stem
-   * `list` prints. Returns it (body) + records a per-recipient consumed-marker WITHOUT
-   * moving/deleting the file, so a failed resume never loses the handoff (ac-7); the
-   * age-sweep is the sole hard cleanup. Returns null when there is no active handoff.
-   */
-  async consumeFor(
-    stem: string,
-    recipient?: string,
-    now: Date = new Date(),
-  ): Promise<ActiveHandoff | null> {
-    const active = await this.getActive(stem);
-    if (active === null) return null;
-    await this.writeConsumedMarker(this.recipient(recipient), `local-${stem}`, {
-      source: 'local',
-      ref: active.path,
-      consumed_at: now.toISOString(),
-    });
-    return active;
-  }
-
-  /**
-   * Every committed REMOTE handoff still waiting for THIS recipient (a per-recipient
-   * consumed-marker excludes the ones this recipient already consumed). Unparsable
-   * files are surfaced, not silently dropped.
-   */
-  async listRemote(
-    recipient?: string,
-  ): Promise<{ handoffs: RemoteHandoff[]; failures: HandoffParseFailure[] }> {
-    const who = this.recipient(recipient);
-    const dir = this.remoteDir();
-    let names: string[];
-    try {
-      names = await readdir(dir);
-    } catch {
-      return { handoffs: [], failures: [] };
-    }
-    const handoffs: RemoteHandoff[] = [];
-    const failures: HandoffParseFailure[] = [];
-    for (const name of names) {
-      if (!name.endsWith('.md')) continue;
-      const stem = name.replace(/\.md$/, '');
-      const rel = `.ditto/handoff/${name}`;
-      let parsed: { handoff: Handoff; body: string };
-      try {
-        parsed = parseHandoffFile(await Bun.file(join(dir, name)).text());
-      } catch (err) {
-        failures.push({
-          path: join(dir, name),
-          scope: stem.startsWith('session__') ? 'session' : 'work_item',
-          error: err instanceof Error ? err.message : String(err),
-        });
-        continue;
-      }
-      if (await this.hasConsumedMarker(who, `remote-${stem}`)) continue;
-      handoffs.push({ handoff: parsed.handoff, body: parsed.body, path: rel, stem });
-    }
-    handoffs.sort((a, b) => a.handoff.created_at.localeCompare(b.handoff.created_at));
-    return { handoffs, failures };
-  }
-
-  /**
-   * SOFT consume of a committed REMOTE handoff: return the body + write a
-   * per-recipient LOCAL marker (ac-8). NEVER git-delete / commit / push — the
-   * committed file stays in history; only THIS recipient's future `listRemote`
-   * excludes it. The marker lives under `.ditto/local/handoff/consumed/` (gitignored,
-   * and outside the mtime age-sweep set) so a checkout-reset mtime can't re-surface a
-   * consumed remote handoff.
-   */
-  async consumeRemote(
-    remote: RemoteHandoff,
-    recipient?: string,
-    now: Date = new Date(),
-  ): Promise<RemoteHandoff> {
-    await this.writeConsumedMarker(this.recipient(recipient), `remote-${remote.stem}`, {
-      source: 'remote',
-      ref: remote.path,
-      consumed_at: now.toISOString(),
-    });
-    return remote;
-  }
-
-  private recipient(recipient?: string): string {
-    const who = recipient !== undefined ? slugifyAuthor(recipient) : gitAuthorSlug(this.repoRoot);
-    assertSafeKey(who, 'recipient');
-    return who;
-  }
-
-  private consumedMarkerPath(recipient: string, markerId: string): string {
-    assertSafeKey(recipient, 'recipient');
-    assertSafeKey(markerId, 'marker id');
-    // A subdir under the handoff dir: readdir in the sweep/list only touches
-    // top-level `.md`, so markers are never listed nor swept.
-    return join(this.dir(), 'consumed', recipient, `${markerId}.json`);
-  }
-
-  /** Whether `recipient` already consumed the handoff identified by `markerId`. */
-  async hasConsumedMarker(recipient: string, markerId: string): Promise<boolean> {
-    return Bun.file(this.consumedMarkerPath(recipient, markerId)).exists();
-  }
-
-  /** Record that `recipient` consumed `markerId`; returns the marker's absolute path. */
-  async writeConsumedMarker(
-    recipient: string,
-    markerId: string,
-    meta: Record<string, unknown>,
-  ): Promise<string> {
-    const path = this.consumedMarkerPath(recipient, markerId);
-    await atomicWriteText(
-      path,
-      `${JSON.stringify({ marker_id: markerId, recipient, ...meta }, null, 2)}\n`,
+export function countHandoffBatonRounds(repoRoot: string, workItemId: string): number {
+  try {
+    const r = Bun.spawnSync(
+      [
+        'git',
+        'log',
+        HANDOFF_REF,
+        '--format=%H',
+        '--diff-filter=A',
+        '--',
+        `:(glob)${workItemId}__*.md`,
+      ],
+      { cwd: repoRoot, stdout: 'pipe', stderr: 'pipe' },
     );
-    return path;
-  }
-
-  /**
-   * Sweep stale active LOCAL handoffs into archive (MOVE, never delete). An active
-   * file older than STALE_ACTIVE_RETENTION_DAYS that no session ever picked up
-   * would otherwise re-inject into an unrelated session's context forever;
-   * moving it into archive/ (which listActive excludes) stops that injection
-   * while preserving the artifact.
-   *
-   * CONTENT-BLIND (WS-HND-T1): the sweep iterates the active-dir `.md` files
-   * directly and decides staleness by the filesystem mtime — NOT the parsed
-   * created_at. A malformed / non-WI hand-authored file (which listActive surfaces
-   * as a failure) therefore still retires by age; a valid handoff keeps the
-   * scope-derived `<key>__<ts>` archive scheme, a malformed one is archived under its
-   * own basename stem so nothing is lost. Best-effort, fail-open like consume():
-   * a failed stat/rename just leaves the file active for a later turn — never
-   * throws. Returns what was swept.
-   *
-   * The COMMITTED remote handoffs (`.ditto/handoff/`) and the consumed-markers
-   * (`.ditto/local/handoff/consumed/`) are OUTSIDE this sweep set on purpose: it only
-   * reads top-level `.md` under `.ditto/local/handoff/`.
-   */
-  async sweepStaleActive(now: Date = new Date()): Promise<SweptHandoff[]> {
-    const dir = this.dir();
-    let names: string[];
-    try {
-      names = await readdir(dir);
-    } catch {
-      return []; // no handoff dir yet
-    }
-    const swept: SweptHandoff[] = [];
-    let ensured = false;
-    for (const name of names) {
-      if (!name.endsWith('.md')) continue; // skip archive/ + consumed/ subdirs and stray files
-      const path = join(dir, name);
-      let mtimeMs: number;
-      try {
-        mtimeMs = (await stat(path)).mtimeMs;
-      } catch {
-        continue; // can't stat → skip (fail-open)
-      }
-      if (now.getTime() - mtimeMs <= STALE_ACTIVE_RETENTION_MS) continue; // within limit → stays active
-      // Parse is best-effort: it only picks the archive name; a parse-failure
-      // does NOT exempt the file from the age sweep (that was the old bug).
-      let handoff: Handoff | null = null;
-      try {
-        handoff = parseHandoffFile(await Bun.file(path).text()).handoff;
-      } catch {
-        handoff = null;
-      }
-      const archivePath = handoff
-        ? this.archiveRelForScope(handoff.scope, stamp(now))
-        : this.archiveRelFromBasename(name, stamp(now));
-      if (!ensured) {
-        await ensureDir(join(dir, 'archive'));
-        ensured = true;
-      }
-      try {
-        await rename(path, join(this.repoRoot, archivePath));
-        swept.push({ path, archivePath, handoff });
-      } catch {
-        // best-effort: a failed move just leaves it active for the next turn
-      }
-    }
-    return swept;
-  }
-
-  /** Whether an active LOCAL handoff exists for this work item. */
-  async exists(workItemId: string): Promise<boolean> {
-    return Bun.file(this.activePath(workItemId)).exists();
-  }
-
-  /** Read the active LOCAL handoff for this work item (throws if none). */
-  async get(workItemId: string): Promise<Handoff> {
-    return parseHandoffFile(await Bun.file(this.activePath(workItemId)).text()).handoff;
+    if (r.exitCode !== 0) return 0; // unborn ref / not a repo → no rounds
+    return (r.stdout?.toString() ?? '').split('\n').filter((line) => line.trim().length > 0).length;
+  } catch {
+    return 0; // git unavailable → fail-open like every other post_cost source
   }
 }
