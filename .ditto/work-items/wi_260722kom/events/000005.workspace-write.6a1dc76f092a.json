@@ -1,0 +1,103 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722kom",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "6a1dc76f092aa5ec683fd580bda6f87ec17cc44b3e6bd5468800875baeac1374",
+  "ts": "2026-07-22T12:45:27.633Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "rebuild/hook/stop-gate.ts",
+        "lines": {
+          "start": 30,
+          "end": 58
+        }
+      },
+      {
+        "kind": "file",
+        "path": "src/core/autopilot-complete.ts",
+        "lines": {
+          "start": 213,
+          "end": 343
+        }
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/runs/wi_260722kom/plan-dialog.md"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/runs/wi_260722kom/coverage.json"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/memory-curator-baseline.md",
+        "lines": {
+          "start": 1,
+          "end": 9
+        }
+      },
+      {
+        "kind": "command",
+        "command": "bun run scripts/measure-stop-gate/run.ts --self-check"
+      },
+      {
+        "kind": "command",
+        "command": "bun run scripts/measure-stop-gate/run.ts --out <scratchpad>/measure-stop-gate.json"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck"
+      },
+      {
+        "kind": "command",
+        "command": "bun test rebuild/"
+      },
+      {
+        "kind": "file",
+        "path": "scripts/measure-stop-gate/run.ts"
+      },
+      {
+        "kind": "command",
+        "command": "bun run scripts/measure-stop-gate/run.ts --out <scratchpad>/measure-report-run.json"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/stop-gate-parity-baseline.md"
+      },
+      {
+        "kind": "command",
+        "command": "grep -c '/Users/' reports/measurements/stop-gate-parity-baseline.md"
+      },
+      {
+        "kind": "command",
+        "command": "bun run scripts/measure-stop-gate/run.ts --out <scratch>/result.json"
+      },
+      {
+        "kind": "command",
+        "command": "bun test rebuild/"
+      },
+      {
+        "kind": "command",
+        "command": "git status --porcelain 전후 diff + wi sha256 diff (IDENTICAL)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/stop-gate-parity-baseline.md"
+      },
+      {
+        "kind": "file",
+        "path": "scripts/measure-stop-gate/measure-hook.ts",
+        "lines": {
+          "start": 63,
+          "end": 109
+        }
+      }
+    ]
+  }
+}
