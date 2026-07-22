@@ -219,6 +219,13 @@ S11DIR="$SC_ROOT/runs/attempt-2-B1"
 [[ -f "$S11DIR/COMPLETE" ]] && ok "S11 COMPLETE marker written" || fail "S11 COMPLETE marker written"
 [[ -s "$S11DIR/diff.patch" ]] && ok "S11 session diff captured" || fail "S11 session diff captured"
 [[ -s "$S11DIR/session-digest.txt" ]] && ok "S11 session digest computed" || fail "S11 session digest computed"
+# feeder-log duty: every session dir must state its feeder injections — zero
+# injections must be stated explicitly, and the log must be part of the digest
+if [[ -s "$S11DIR/feeder-log.md" ]] && grep -q 'injections: 0' "$S11DIR/feeder-log.md"; then
+  ok "S11 feeder-log written (0 injections stated explicitly)"
+else
+  fail "S11 feeder-log written (0 injections stated explicitly)"
+fi
 check "S11 ledger chain verifies (2 session events)" \
   env "ABLATION_LEDGER_FILE=$SC_ROOT/runs/ledger.jsonl" bun "$HERE/ledger.ts" verify
 if python3 -c 'import pytest' 2>/dev/null; then

@@ -180,6 +180,20 @@ bun -e 'const e=process.env;console.log(JSON.stringify({schema:"ablation-session
   > "$SESSION_DIR/session-meta.json"
 date -u +%Y-%m-%dT%H:%M:%SZ > "$SESSION_DIR/$([[ $TRUNCATED -eq 1 ]] && echo TRUNCATED || echo COMPLETE)"
 
+# ── feeder log — the feeder is an information channel, never an approval
+# channel; every injection must be recorded per session, and ZERO injections
+# must be stated explicitly. The current runner is a single-shot `claude -p`
+# with no interactive input channel, so injections are structurally 0; if an
+# interactive channel is ever opened, the operator appends
+# `(attempt, UTC time, question gist, frozen answer id)` lines here BEFORE the
+# session digest below is computed (the log is part of the digest).
+{
+  echo "# feeder-log — attempt ${ATTEMPT} arm ${ARM}"
+  echo ""
+  echo "- runner: single-shot \`claude -p\` (no interactive feeder channel open)"
+  echo "- injections: 0 (zero feeder injections during this session — stated explicitly)"
+} > "$SESSION_DIR/feeder-log.md"
+
 # ── session digest (post-session, pre-scoring) + ledger append
 DIGEST="$(cd "$SESSION_DIR" && find . -type f ! -name session-digest.txt -print0 | sort -z \
   | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')"
