@@ -259,15 +259,19 @@ export const LAND_RECOVERY_TIMEOUT_MS = 120_000;
 /** Default bound on fetch+rebase+re-push recovery attempts after a non-FF rejection. */
 export const LAND_MAX_RETRIES = 3;
 
-interface GitRun {
+export interface GitRun {
   ok: boolean;
   stdout: string;
   stderr: string;
   timedOut: boolean;
 }
 
-/** Run a git subprocess with a per-attempt timeout; a timeout is reported (never thrown). */
-function runGitBounded(cwd: string, args: string[], timeoutMs: number): GitRun {
+/**
+ * Run a git subprocess with a per-attempt timeout; a timeout is reported (never thrown).
+ * Exported (structural, wi_260722g7h) so handoff-ref-sync shares the SAME bounded runner
+ * and its timeout/SIGTERM/ETIMEDOUT classification instead of growing a second one.
+ */
+export function runGitBounded(cwd: string, args: string[], timeoutMs: number): GitRun {
   try {
     const stdout = execFileSync('git', args, {
       cwd,
