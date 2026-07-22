@@ -342,4 +342,3 @@ export function findDanglingEdges(nodes: MemoryNode[], edges: MemoryEdge[]): str
   const ids = new Set(nodes.map((n) => n.id));
   return edges.filter((e) => !ids.has(e.from) || !ids.has(e.to)).map((e) => e.id);
 }
-
