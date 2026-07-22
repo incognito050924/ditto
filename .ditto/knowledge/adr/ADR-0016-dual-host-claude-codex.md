@@ -1,6 +1,6 @@
 # ADR-0016: Dual-host 아키텍처 — DITTO는 Claude Code와 Codex 두 호스트에서 동작한다
 
-- 상태: accepted (구조 결정. 단, Codex 실 바이너리 런타임 검증=층위③은 미완 — 아래 "검증 상태")
+- 상태: superseded by ADR-20260722-claude-code-only-host
 - 결정 일자: 2026-06-13
 - 결정자: hskim, claude
 - 관련: ADR-0008(HostAdapter 교체축 정립 — 이 ADR이 그 실현), ADR-0011(배포 횡단축), ADR-0012(3계층 격리·dist/plugin 조립), `src/core/hosts/types.ts`(HostAdapter), `src/core/hosts/codex.ts`·`claude-code.ts`, `src/hooks/io.ts`, `src/hooks/envelope.ts`, `scripts/build-codex-plugin.mjs`·`build-plugin.mjs`, `reports/design/dual-host-surface-adapter-plan.md`(§9 진행상태), `reports/design/dual-host-codex-fact-verification.md`, `reports/design/dual-host-test-methods.md`, wi_260613f9d·wi_260613ob2·wi_2606139rs
