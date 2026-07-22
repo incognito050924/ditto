@@ -38,20 +38,8 @@ import {
 } from '~/core/github-coord';
 import { postUnpostedDecisions } from '~/core/github-progress';
 import { reflectTermination } from '~/core/github-reflection';
-import {
-  HandoffRemoteWriteError,
-  HandoffStore,
-  type RemoteWriteResult,
-} from '~/core/handoff-store';
 import { IntentStore } from '~/core/intent-store';
-import {
-  InvalidBaseRefError,
-  InvalidHeadRefError,
-  collectChangedFiles,
-  pickBaseRef,
-  sanitizeDeclaredPaths,
-  writeWorkItemHandoff,
-} from '~/core/work-item-handoff';
+import { collectChangedFiles, pickBaseRef, sanitizeDeclaredPaths } from '~/core/work-item-handoff';
 import { projectBacklog } from '~/core/work-item-project';
 import {
   WorkItemStore,
@@ -60,7 +48,7 @@ import {
   pushReadiness,
 } from '~/core/work-item-store';
 import { createWorktreeForWorkItem, worktreeBindingHint } from '~/core/worktree';
-import { declarerRole, workItemId, workItemStatus } from '~/schemas/common';
+import { workItemId, workItemStatus } from '~/schemas/common';
 import type { CompletionContract } from '~/schemas/completion-contract';
 import type { DittoConfigGithub } from '~/schemas/ditto-config';
 import {
@@ -1760,178 +1748,6 @@ const workStatus = defineCommand({
   },
 });
 
-const workHandoff = defineCommand({
-  meta: {
-    name: 'handoff',
-    description: 'Generate or refresh the handoff document for a work item',
-  },
-  args: {
-    workId: {
-      type: 'positional',
-      description: 'Work item id to hand off',
-      required: true,
-    },
-    base: {
-      type: 'string',
-      description:
-        'Git ref to diff against when collecting changed_files. Default tries started_at_sha, origin/main, origin/master, main, master.',
-      required: false,
-    },
-    head: {
-      type: 'string',
-      description:
-        'Git ref to diff up to when collecting changed_files. Default HEAD. Useful for correcting past handoffs (base...head frozen range).',
-      required: false,
-    },
-    'declared-by': {
-      type: 'string',
-      description:
-        'Agent role that declares this completion (who judged): main|planner|implementer|verifier|reviewer|researcher|synthesizer. Default main.',
-      default: 'main',
-    },
-    show: {
-      type: 'boolean',
-      description:
-        'Read and print the EXISTING handoff (active, else latest archived) instead of generating one — the manual handoff load. Read-only; never regenerates.',
-      default: false,
-    },
-    remote: {
-      type: 'boolean',
-      description:
-        'Also commit the handoff to the work branch (.ditto/handoff/, git-tracked, delivered to a fetch/checkout recipient) — the committed-remote tier. Never pushes (push is a separate user-gated act).',
-      default: false,
-    },
-    output: {
-      type: 'string',
-      description: 'Output format: human|json',
-      default: 'human',
-    },
-  },
-  run: async ({ args }) => {
-    let format: ReturnType<typeof parseOutputFormat>;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    // --show: manual handoff load (wi_260708xgo). Read the existing handoff body
-    // (active, else the latest archived copy) and print it — no regeneration.
-    // Replaces the removed auto-injection: a resuming session runs this to pull
-    // its prior context on demand.
-    if (args.show) {
-      const repoRoot = await resolveRepoRootForCreate();
-      const found = await new HandoffStore(repoRoot).readLatest(args.workId);
-      if (!found) {
-        if (format === 'json') writeJson({ work_item_id: args.workId, handoff: null });
-        else writeHuman(`No handoff found for ${args.workId}.`);
-        return;
-      }
-      if (format === 'json') {
-        writeJson({ work_item_id: args.workId, path: found.path, body: found.body });
-      } else {
-        writeHuman(`Handoff for ${args.workId} (${found.path}):\n`);
-        writeHuman(found.body);
-      }
-      return;
-    }
-    const declaredBy = declarerRole.safeParse(args['declared-by']);
-    if (!declaredBy.success) {
-      writeError(
-        `--declared-by must be one of ${declarerRole.options.join('|')}; got "${args['declared-by']}"`,
-      );
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    const store = new WorkItemStore(repoRoot);
-    try {
-      let result: Awaited<ReturnType<typeof writeWorkItemHandoff>>;
-      try {
-        result = await writeWorkItemHandoff(repoRoot, store, args.workId, {
-          ...(args.base ? { base: args.base } : {}),
-          ...(args.head ? { head: args.head } : {}),
-          declaredBy: declaredBy.data,
-        });
-      } catch (err) {
-        if (err instanceof InvalidBaseRefError || err instanceof InvalidHeadRefError) {
-          writeError(err.message);
-          process.exit(USAGE_ERROR_EXIT);
-          return;
-        }
-        throw err;
-      }
-      // --remote: ALSO commit the just-built work_item handoff to the work branch
-      // `ditto/<wi>` via the store's writeRemote (git-tracked `.ditto/handoff/<stem>.md`,
-      // delivered to a fetch/checkout recipient, NEVER pushed — cross-machine delivery is
-      // a separate user-gated push). The full local flow above is unchanged (completion.json,
-      // status transition, handoff_path link); this layers the committed-remote delivery
-      // tier on top, reusing the store's git/scrub/branch routing (no reimplementation).
-      // Mirrors the session producer `ditto handoff write --remote`. A refusal (wrong branch /
-      // detached / gitignored path) is surfaced by the store as HandoffRemoteWriteError.
-      let remote: RemoteWriteResult | undefined;
-      if (args.remote === true) {
-        const hstore = new HandoffStore(repoRoot);
-        const latest = await hstore.readLatest(args.workId);
-        if (!latest) {
-          writeError(`work handoff --remote: no handoff body found for ${args.workId} to commit`);
-          process.exit(USAGE_ERROR_EXIT);
-          return;
-        }
-        try {
-          remote = await hstore.writeRemote(latest.handoff);
-        } catch (err) {
-          if (err instanceof HandoffRemoteWriteError) {
-            writeError(`work handoff --remote refused: ${err.message}`);
-            process.exit(USAGE_ERROR_EXIT);
-            return;
-          }
-          throw err;
-        }
-      }
-      if (format === 'json') {
-        writeJson({
-          work_item_id: args.workId,
-          final_verdict: result.completion.final_verdict,
-          handoff_path: result.handoffPath,
-          completion_path: result.completionPath,
-          base_used: result.baseUsed,
-          changed_files: result.collectedChangedFiles,
-          ...(remote
-            ? {
-                remote: true,
-                path: remote.rel,
-                branch: remote.branch,
-                commit: remote.commit,
-                author: remote.author,
-                stem: remote.stem,
-              }
-            : {}),
-        });
-      } else {
-        writeHuman(`Handoff for ${args.workId}`);
-        writeHuman(`  final_verdict:  ${result.completion.final_verdict}`);
-        writeHuman(`  base_used:      ${result.baseUsed ?? '(none)'}`);
-        writeHuman(`  changed_files:  ${result.collectedChangedFiles.length}`);
-        writeHuman(`  handoff:        ${result.handoffPath}`);
-        writeHuman(`  completion.json: ${result.completionPath}`);
-        if (remote) {
-          writeHuman(
-            `  remote:         ${remote.rel} (git-tracked on ${remote.branch}, delivered on checkout — NOT pushed)`,
-          );
-          writeHuman(
-            `  pick up:        ditto handoff list  →  ditto handoff consume ${remote.stem}`,
-          );
-        }
-      }
-    } catch (err) {
-      writeError(`work handoff failed: ${err instanceof Error ? err.message : String(err)}`);
-      process.exit(USAGE_ERROR_EXIT);
-    }
-  },
-});
-
 const TERMINAL_STATUSES = ['done', 'abandoned'] as const;
 
 const workAbandon = defineCommand({
@@ -3555,7 +3371,7 @@ const workUnclaim = defineCommand({
 export const workCommand = defineCommand({
   meta: {
     name: 'work',
-    description: 'Manage work items (start, status, handoff, done, abandon, promote, archive)',
+    description: 'Manage work items (start, status, done, abandon, promote, archive)',
   },
   subCommands: {
     start: workStart,
@@ -3566,7 +3382,6 @@ export const workCommand = defineCommand({
     'sync-issue': workSyncIssue,
     'set-criteria': workSetCriteria,
     status: workStatus,
-    handoff: workHandoff,
     done: workDone,
     abandon: workAbandon,
     reopen: workReopen,
