@@ -151,6 +151,18 @@ if [[ "$ARM" == "A" ]]; then
   # of the executable that actually ran
   grep -E '"(hook|hook_event_name|PreToolUse|PostToolUse|Stop)"' "$SESSION_DIR/transcript.jsonl" \
     > "$SESSION_DIR/hooks-observed.jsonl" 2>/dev/null || true
+  # Pilot calibration (attempt-4-A measured): claude stream-json emits NO
+  # events for silently-allowing hooks, so the transcript grep above can be
+  # legitimately empty even while the engine runs. Harvest hook-fire evidence
+  # from the CLI's INTERNAL session record too (hook_additional_context /
+  # hookEvent attachments), and preserve that record alongside the artifacts.
+  for sf in "$SANDBOX/claude-config/projects"/*/*.jsonl; do
+    [[ -f "$sf" ]] || continue
+    cp "$sf" "$SESSION_DIR/claude-internal-session.jsonl"
+    grep -a '"hook_additional_context"\|"hookEvent"\|"hookName"' "$sf" \
+      >> "$SESSION_DIR/hooks-observed.jsonl" 2>/dev/null || true
+    break
+  done
   if [[ -d "$CLONE/.ditto" ]]; then
     cp -R "$CLONE/.ditto" "$SESSION_DIR/ditto-state" 2>/dev/null || true
   fi
