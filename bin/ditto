@@ -5,43 +5,25 @@ var __getProtoOf = Object.getPrototypeOf;
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -23526,28 +23508,28 @@ function planTidyOnImplementPass(input) {
 // src/core/charter.ts
 var MINIMAL_INCREMENT_SELF_CHECK = {
   id: "minimal-increment",
-  question: "\uC774\uAC8C \uC758\uB3C4\uB97C \uB2EC\uC131\uD558\uB294 \uAC00\uC7A5 \uC791\uACE0 \uBA85\uB8CC\uD55C \uC99D\uBD84\uC778\uAC00? \uCD94\uC0C1\uD654\uAC00 \uC2E4\uC81C \uBCF5\uC7A1\uB3C4\uC5D0 \uBE44\uB840\uD558\uB098 \u2014 \uC694\uCCAD\uB418\uC9C0 \uC54A\uC740 \uAE30\uB2A5\xB7\uC124\uC815\xB7\uD655\uC7A5\uC131\uC774\uB098 \uB2E8\uC77C \uC0AC\uC6A9\xB7\uC595\uC740 \uCD94\uC0C1\uD654\uB85C \uACFC\uD558\uC9C0 \uC54A\uACE0(\uD754\uD55C \uC2E4\uD328), \uAC70\uAFB8\uB85C \uC0C8\uB85C \uC0DD\uAE30\uB294 \uC911\uBCF5\uC744 \uBC29\uCE58\uD574 \uBAA8\uC790\uB77C\uC9C0\uB3C4 \uC54A\uB098? \uBCC0\uACBD\uD55C \uBAA8\uB4E0 \uC904\uC774 \uC694\uCCAD\uACFC \uC5F0\uACB0\uB418\uACE0, \uBB34\uAD00\uD55C \uB9AC\uD329\uD130\xB7\uD3EC\uB9F7 \uC815\uB9AC\uAC00 \uC11E\uC774\uC9C0 \uC54A\uC558\uB098?",
-  origin: "far-field taxonomy floor \u2192 charter self-check (wi_260706n4w \u2014 \uC124\uACC4-\uBA54\uD0C0 \uD488\uC9C8\uC774\uB77C \uBA3C \uC704\uD5D8 sweep\uC774 \uC544\uB2C8\uB77C \uB9E4 \uD134 \uC7AC\uC8FC\uC785\uB418\uB294 charter\uAC00 \uC9D1\uD589\uD55C\uB2E4)"
+  question: "Is this the smallest, clearest increment that achieves the intent? Is the abstraction proportional to the real complexity \u2014 not overbuilt with unrequested features, config, or extensibility, nor a single-use or shallow abstraction (the common failure), and not underbuilt by leaving new duplication behind? Does every changed line trace to the request, with no unrelated refactor or formatting mixed in?",
+  origin: "far-field taxonomy floor \u2192 charter self-check (wi_260706n4w \u2014 a design-META quality check, not a far risk, so the every-turn charter enforces it instead of the pre-mortem sweep)"
 };
 var CHARTER_SELF_CHECKS = [MINIMAL_INCREMENT_SELF_CHECK];
 var PRIME_DIRECTIVE = [
-  "DITTO \uAE30\uBCF8 \uC9C0\uCE68(prime directive):",
-  "- \uC6D0\uB798 \uC694\uCCAD\uC744 \uADF8\uB300\uB85C \uC9C0\uD0A8\uB2E4: \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uC5C6\uC774 \uBC94\uC704\uB97C \uB113\uD788\uC9C0\uB3C4, \uC904\uC774\uAC70\uB098 \uCABC\uAC1C\uC9C0\uB3C4 \uC54A\uB294\uB2E4.",
-  '- \uB531 \uD558\uB098\uC758 \uC608\uC678 \u2014 \uC2E4\uD589 \uC911 \uBC1C\uACAC\uD55C \uBC84\uADF8: autopilot\uC774 \uC790\uC728 \uC2E4\uD589 \uB3C4\uC911 \uC7AC\uD604\uB418\uB294 \uC2E4\uB3D9\uC791 \uBC84\uADF8\uB97C \uBC1C\uACAC\uD558\uBA74(\uBD84\uB958\uAE30\uAC00 "\uC7AC\uD604\uB418\uB294 \uC2E4\uB3D9\uC791 \uBC84\uADF8"\uB85C \uD310\uC815\uD55C \uAC83\uB9CC \uD574\uB2F9\uD55C\uB2E4 \u2014 \uB124\uAC00 \uC2A4\uC2A4\uB85C "\uBC84\uADF8"\uB77C\uACE0 \uC774\uB984 \uBD99\uC600\uB2E4\uACE0 \uC5F4\uB9AC\uC9C0 \uC54A\uB294\uB2E4), \uBABB \uBCF8 \uCC99 \uB0A8\uAE30\uC9C0 \uB9D0\uACE0 \uADF8 \uBC84\uADF8\uB97C \uBCC4\uB3C4 work item\uC73C\uB85C \uBB3C\uC9C8\uD654\uD574 \uAC19\uC740 run \uC548\uC5D0\uC11C \uACE0\uCE60 \uB54C\uAE4C\uC9C0 \uAD6C\uB3D9\uD55C\uB2E4. \uC774 \uC608\uC678\uB294 \uBE44-\uACB0\uD568(\uC544\uC774\uB514\uC5B4\xB7\uAE30\uB2A5\xB7\uAE30\uC220\uBD80\uCC44\xB7\uC544\uC9C1 \uC544\uBB34 \uD53C\uD574 \uC5C6\uB294 \uC7A0\uBCF5\uBC84\uADF8)\uC5D0\uB294 \uC5F4\uB9AC\uC9C0 \uC54A\uB294\uB2E4 \u2014 \uADF8\uB7F0 \uD6C4\uC18D\uC740 \uBB3C\uC9C8\uD654\uB9CC \uD558\uACE0 \uAD6C\uB3D9\uD558\uC9C0 \uC54A\uC73C\uBA70, \uADF8\uAC78 \uD551\uACC4\uB85C \uC694\uCCAD \uBC94\uC704\uB97C \uB113\uD788\uC9C0 \uC54A\uB294\uB2E4. \uC774 \uC790\uC728 \uAD6C\uB3D9 \uC911\uC5D0\uB3C4 \uB450 \uACBD\uC6B0 \u2014 \uC815\uCD08 \uACC4\uD68D\xB7\uBC29\uD5A5\uC774 \uB4A4\uC9D1\uD788\uAC70\uB098 \uC9C4\uD589\uC774 \uB9C9\uD790 \uB54C, \uADF8\uB9AC\uACE0 \uBCF4\uC548\xB7\uC2DC\uC2A4\uD15C\xB7\uD504\uB85C\uC81D\uD2B8\xB7\uAE30\uB2A5\uC124\uACC4 \uC758\uB3C4\uB97C \uC704\uD611\uD558\uB294 \uACB0\uC815\uC774 \uD544\uC694\uD560 \uB54C \u2014 \uC5D0\uB294 \uC5EC\uC804\uD788 \uBA48\uCD94\uACE0 \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uC778\uACC4\uD55C\uB2E4.',
-  "- \uCF54\uB4DC\uBCA0\uC774\uC2A4\uB97C \uBC14\uAFB8\uB294 \uBAA8\uB4E0 \uC791\uC5C5\uC740 work item \uC548\uC5D0\uC11C, \uB531 \uB450 \uAC08\uB798 \uD45C\uC900 \uACBD\uB85C\uB85C\uB9CC \uC9C4\uD589\uD55C\uB2E4 \u2014 \uBB34\uAC70\uC6B4 \uACBD\uB85C(`/ditto:deep-interview` \u2192 autopilot) \uB610\uB294 \uAC00\uBCBC\uC6B4 \uACBD\uB85C(`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`). \uC774 \uB450 \uACBD\uB85C \uBC16\uC5D0\uC11C work item \uC5C6\uC774 \uC989\uD765\uC801\uC73C\uB85C \uCF54\uB4DC\uB97C \uACE0\uCE58\uB294 \uAC83(\uCF58\uC194\uC5D0\uC11C \uBC14\uB85C TDD\uB85C \uD3B8\uC9D1)\uC740 \uD5C8\uC6A9\uB418\uC9C0 \uC54A\uB294\uB2E4. TDD\uB294 \uACBD\uB85C \uC548\uC5D0\uC11C \uAD6C\uD604\uD558\uB294 \uBC29\uBC95\uC774\uC9C0, \uACBD\uB85C\uB97C \uB300\uC2E0\uD558\uB294 \uC218\uB2E8\uC774 \uC544\uB2C8\uB2E4.",
-  "- \uC774 \uC694\uCCAD\uC5D0 work item\uC774 \uD544\uC694\uD55C\uC9C0, \uADF8\uB9AC\uACE0 \uC5B4\uB290 \uACBD\uB85C\uB85C \uAC08\uC9C0\uB294 \uB124\uAC00 \uD310\uB2E8\uD55C\uB2E4(\uBB34\uAC8C\uB85C \uB77C\uC6B0\uD305, \uAD8C\uACE0): \uC791\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \u2192 \uAC00\uBCBC\uC6B4 \uACBD\uB85C; \uBAA8\uD638\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uAC70\uB098 \uC5EC\uB7EC \uD45C\uBA74\uC5D0 \uAC78\uCE58\uAC70\uB098 \uC704\uD5D8\uC774 \uC120\uC5B8\uB418\uBA74 \u2192 \uBB34\uAC70\uC6B4 \uACBD\uB85C. \uD6C5\uC740 \uC808\uB300 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E4\uC9C0 \uC54A\uB294\uB2E4. \uD544\uC694\uD558\uB2E4\uACE0 \uBCF4\uBA74 \uB124\uAC00 \uC9C1\uC811 \uB4F1\uB85D\uD55C\uB2E4: `ditto work start`.",
-  "- \uC0AC\uC6A9\uC790\uB9CC \uB2F5\uD560 \uC218 \uC788\uB294 \uAC83\uB9CC \uBB3B\uB294\uB2E4. \uB098\uBA38\uC9C0\uB294 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uC2A4\uC2A4\uB85C \uB2F5\uD55C\uB2E4.",
-  "- \uC644\uB8CC\uB294 \uC99D\uAC70\uB85C\uB9CC \uC778\uC815\uB41C\uB2E4: \uC644\uB8CC(\uD1B5\uACFC)\uB85C \uD310\uC815\uD558\uAE30 \uC804\uC5D0 \uBAA8\uB4E0 acceptance criterion\uC744 \uC99D\uAC70\uC640 \uD568\uAED8 \uB2EB\uB294\uB2E4. \uAE30\uC900\uC740 work item \uC804\uCCB4\uC774\uC9C0 \uC911\uAC04 \uCCB4\uD06C\uD3EC\uC778\uD2B8\uAC00 \uC544\uB2C8\uB2E4.",
-  "- \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBCF4\uC5EC\uC904 \uC751\uB2F5\uC740 \uC0AC\uC6A9\uC790\uC758 \uC5B8\uC5B4\uB85C \uC790\uC5F0\uC2A4\uB7FD\uAC8C \uC4F4\uB2E4: \uB2E8\uC5B4 \uB2E8\uC704\uB85C \uC62E\uAE34 \uC9C1\uC5ED\uCCB4\xB7\uBC88\uC5ED\uD22C\uB97C \uD53C\uD558\uACE0, \uB2E8\uC5B4\uB294 \uC0AC\uC804\uC801 1:1 \uB300\uC751\uC774 \uC544\uB2C8\uB77C \uBB38\uB9E5\uC5D0 \uB9DE\uB294 \uB9D0\uB85C \uC62E\uAE34\uB2E4.",
-  "- \uC0AC\uC6A9\uC790\uAC00 \uBCFC \uC218 \uC5C6\uB294 \uAC83\uC744 \uB2EC\uB791 \uB4E4\uC9C0 \uC54A\uB294\uB2E4: \uC0AC\uC6A9\uC790\uAC00 \uD569\uC758\uD558\uC9C0 \uC54A\uC558\uAC70\uB098 \uB9E4\uBC88 \uCC3E\uC544\uBCF4\uC9C0 \uC54A\uC744 \uB0B4\uBD80 \uBC88\uD638\xB7\uC2DD\uBCC4\uC790\xB7\uBB38\uC11C\uB97C \uB73B \uC5C6\uC774 \uC774\uB984\uB9CC \uB300\uC9C0 \uC54A\uB294\uB2E4 \u2014 \uD544\uC694\uD558\uBA74 \uADF8 \uB0B4\uC6A9\uC744 \uADF8 \uC790\uB9AC\uC5D0 \uD480\uC5B4 \uB2F4\uACE0, \uC544\uB2C8\uBA74 \uBE80\uB2E4.",
-  ...CHARTER_SELF_CHECKS.map((c3) => `- \uC2A4\uC2A4\uB85C \uC810\uAC80(${c3.id}): ${c3.question}`)
+  "DITTO prime directive:",
+  "- Keep the original request exactly: never widen, shrink, or split its scope without user approval.",
+  '- The one exception \u2014 a bug found mid-run: if, during an autonomous autopilot run, you hit a reproducible real-behavior bug (ONLY when the classifier rules it a "reproducible real-behavior bug" \u2014 your own "bug" label does not open this), do not leave it unseen; materialize it as a separate work item and drive it to a fix within the same run. This exception never opens for non-defects (ideas, features, tech debt, harmless latent bugs) \u2014 those are materialized only, never driven, and are no excuse to widen the request. Even during this autonomous drive, still stop and hand off to the user in two cases: the founding plan/direction is overturned or progress is blocked, and a decision threatens security, system, project, or feature-design intent.',
+  "- Every codebase change happens inside a work item, on exactly two standard paths \u2014 heavy (`/ditto:deep-interview` \u2192 autopilot) or lightweight (`ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`). Editing code ad hoc without a work item, outside these two paths (TDD straight from the console), is not allowed. TDD is how you implement within a path, not a substitute for one.",
+  "- You decide whether this request needs a work item and which path (route by weight, advisory): small and reversible \u2192 lightweight; ambiguous, irreversible, spanning several surfaces, or with declared risk \u2192 heavy. The hook never auto-creates a work item. If you judge one is needed, register it yourself: `ditto work start`.",
+  "- Ask only what only the user can answer; answer everything else yourself from code, docs, or the web.",
+  "- Done counts only with evidence: before ruling it done (pass), close every acceptance criterion with evidence. The bar is the whole work item, not an intermediate checkpoint.",
+  "- Write user-facing responses naturally in the user's language: avoid word-for-word translationese, and render each word by context rather than a dictionary 1:1 match.",
+  "- Do not dangle things the user cannot see: never drop a bare internal number, identifier, or doc name the user has not agreed on or would not look up \u2014 inline its content on the spot, or leave it out.",
+  ...CHARTER_SELF_CHECKS.map((c3) => `- self-check (${c3.id}): ${c3.question}`)
 ].join(`
 `);
 var PLACEHOLDER_AC_STATEMENT = "TBD \u2014 derive observable criteria during interview/planning";
-var WORK_ITEM_GUIDE_ADVISORY = '\uD65C\uC131 work item\uC774 \uC5C6\uB2E4. 1\uCC28 \uD310\uB2E8\uC744 \uB124\uAC00 \uC9C1\uC811 \uD55C\uB2E4: \uC774 \uC694\uCCAD\uC774 \uC0B0\uCD9C\uBB3C\uC744 \uB9CC\uB4E4\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uCF54\uB4DC\uBCA0\uC774\uC2A4 \uBCC0\uACBD\uC744 \uC77C\uC73C\uD0A8\uB2E4\uBA74 work item\uC73C\uB85C \uB4F1\uB85D\uD574\uC57C \uD55C\uB2E4(\uAC04\uB2E8\uD55C \uC791\uC5C5\xB7\uD578\uB4DC\uC624\uD504\xB7git \uC870\uC791\uC740 \uC608\uC678). \uADF8\uB807\uB2E4\uBA74 \uC0AC\uC6A9\uC790\uC640 \uC758\uB3C4\uB97C \uD655\uC778\uD55C \uB4A4, \uB124\uAC00 \uC9C1\uC811 `ditto work start "<\uBAA9\uD45C>" --request "<\uC694\uCCAD \uC6D0\uBB38>"`\uC744 \uC2E4\uD589\uD574 \uB4F1\uB85D\uD55C\uB2E4 \u2014 \uC0AC\uC6A9\uC790\uAC00 \uBA85\uB839\uC744 \uC785\uB825\uD558\uB294 \uAC8C \uC544\uB2C8\uB77C \uB124\uAC00 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E0\uB2E4. \uC544\uB2C8\uBA74 \uD3C9\uC18C\uCC98\uB7FC \uC9C4\uD589\uD55C\uB2E4.';
-var PLACEHOLDER_AC_ADVISORY = "acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uB2E4 \u2014 \uD589\uB3D9\uD558\uAE30 \uC804\uC5D0 /ditto:deep-interview\uB85C \uAD6C\uCCB4\uD654\uD558\uB77C";
-var DEEP_INTERVIEW_DIRECTIVE = "\uC9C0\uAE08 /ditto:deep-interview\uB97C \uC2E4\uD589\uD558\uB77C \u2014 acceptance criteria\uAC00 \uC544\uC9C1 \uC790\uB9AC\uD45C\uC2DC\uC790\uC774\uACE0 \uC2E4\uD589 \uC758\uB3C4\uAC00 \uAC10\uC9C0\uB410\uB2E4. \uBCF5\uC7A1\uD558\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC5C6\uB294 \uC791\uC5C5\uC5D0\uB294 \uAD8C\uC7A5\uD55C\uB2E4; \uC694\uCCAD\uC774 \uC791\uAC70\uB098 \uB418\uB3CC\uB9B4 \uC218 \uC788\uC73C\uBA74 \uAC74\uB108\uB6F0\uC5B4\uB3C4 \uB41C\uB2E4. \uAC04\uB2E8\uD558\uACE0 \uB418\uB3CC\uB9B4 \uC218 \uC788\uB294 \uC791\uC5C5\uC758 \uAC00\uBCBC\uC6B4 \uACBD\uB85C: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done`(deep-interview\xB7autopilot \uC5C6\uC774).";
-var SELF_ANSWER_HINT = "\uBB3B\uAE30 \uC804\uC5D0 \uCF54\uB4DC\xB7\uBB38\uC11C\xB7\uC6F9\uC5D0\uC11C \uBA3C\uC800 \uC2A4\uC2A4\uB85C \uB2F5\uD558\uB77C \u2014 \uC774 \uD504\uB86C\uD504\uD2B8\uB294 \uC0AC\uC6A9\uC790 \uC785\uB825 \uC5C6\uC774\uB3C4 \uB2F5\uD560 \uC218 \uC788\uC5B4 \uBCF4\uC778\uB2E4.";
+var WORK_ITEM_GUIDE_ADVISORY = 'No active work item. Make the first-pass judgment yourself: if this request produces an artifact or an irreversible codebase change, it should be registered as a work item (simple tasks, handoffs, and git operations are exempt). If so, confirm intent with the user, then register it yourself by running `ditto work start "<goal>" --request "<original request>"` \u2014 you create it automatically, the user does not type the command. Otherwise proceed as usual.';
+var PLACEHOLDER_AC_ADVISORY = "Acceptance criteria are still placeholders \u2014 sharpen them with /ditto:deep-interview before acting.";
+var DEEP_INTERVIEW_DIRECTIVE = "Run /ditto:deep-interview now \u2014 acceptance criteria are still placeholders and execution intent was detected. Recommended for complex or irreversible work; skip it if the request is small or reversible. Lightweight path for simple, reversible work: `ditto work set-criteria` \u2192 `ditto verify` \u2192 `ditto work done` (no deep-interview or autopilot).";
+var SELF_ANSWER_HINT = "Answer from code, docs, or the web before asking \u2014 this prompt looks answerable without user input.";
 function charterProjection(ctx = {}) {
   const lines = [PRIME_DIRECTIVE];
   if (ctx.workItemId) {
@@ -59288,4 +59270,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=db608a8ee78771804f31269d71470527f2065ff70db88e3c5e865f2d942c9a79
+//# ditto-src-stamp=5a3ef330ace40c48c79631233ad067d3592361cbfa28927a710f7692aae2f858

@@ -31,9 +31,9 @@ export interface CharterSelfCheck {
 export const MINIMAL_INCREMENT_SELF_CHECK: CharterSelfCheck = {
   id: 'minimal-increment',
   question:
-    '이게 의도를 달성하는 가장 작고 명료한 증분인가? 추상화가 실제 복잡도에 비례하나 — 요청되지 않은 기능·설정·확장성이나 단일 사용·얕은 추상화로 과하지 않고(흔한 실패), 거꾸로 새로 생기는 중복을 방치해 모자라지도 않나? 변경한 모든 줄이 요청과 연결되고, 무관한 리팩터·포맷 정리가 섞이지 않았나?',
+    'Is this the smallest, clearest increment that achieves the intent? Is the abstraction proportional to the real complexity — not overbuilt with unrequested features, config, or extensibility, nor a single-use or shallow abstraction (the common failure), and not underbuilt by leaving new duplication behind? Does every changed line trace to the request, with no unrelated refactor or formatting mixed in?',
   origin:
-    'far-field taxonomy floor → charter self-check (wi_260706n4w — 설계-메타 품질이라 먼 위험 sweep이 아니라 매 턴 재주입되는 charter가 집행한다)',
+    'far-field taxonomy floor → charter self-check (wi_260706n4w — a design-META quality check, not a far risk, so the every-turn charter enforces it instead of the pre-mortem sweep)',
 };
 
 /** All executable charter self-checks (projected every turn, below). */
@@ -45,21 +45,21 @@ export const CHARTER_SELF_CHECKS: readonly CharterSelfCheck[] = [MINIMAL_INCREME
 // The minimal-increment self-check is projected VERBATIM (it is a cross-
 // referenced SoT — see MINIMAL_INCREMENT_SELF_CHECK) and stays uncompressed.
 //
-// Reworded to plain, picture-forming Korean (wi_260713nlg): these lines are
-// runtime LLM INSTRUCTION injected every turn, not display copy, so the reword
-// preserves EVERY operative cue with equal force and polarity (every imperative,
-// the forbidden ad-hoc-editing prohibition, the small/reversible→light vs
+// Rendered in compact ENGLISH (user feedback 2026-07-22): these lines are
+// runtime LLM INSTRUCTION injected every turn (internal operation), not text
+// addressed to the user, so keeping them English cuts the per-turn token/context
+// cost while user-facing OUTPUT still goes out in the user's language. The
+// language flip is fidelity-gated (directive-fidelity decision): it preserves
+// EVERY operative cue with equal force and polarity (every imperative, the
+// forbidden ad-hoc-editing prohibition, the small/reversible→light vs
 // ambiguous/irreversible/multi-surface/declared-risk→heavy routing threshold,
-// the evidence completion gate). User feedback (wi_260713nlg iter): DITTO-
-// internal-only identifiers (final_verdict / IntentContract / QuestionGate) are
-// NOT surfaced raw in the banner text — they are expressed in plain Korean. The
-// only kept name anchor is 'prime directive' (a conformance test pins it). The
-// opaque "금지된 세 번째 길" metaphor is replaced with a self-explanatory
-// prohibition. Commands the user types stay literal; "acceptance criterion / AC"
-// and "autopilot" are user-facing general terms and stay.
+// the classifier-keyed defect carve-out with its two fail-stops, the evidence
+// completion gate). No raw DITTO-internal identifier is surfaced; the only kept
+// name anchor is 'prime directive'. Commands the user types stay literal;
+// "acceptance criterion" and "autopilot" are user-facing general terms and stay.
 const PRIME_DIRECTIVE = [
-  'DITTO 기본 지침(prime directive):',
-  '- 원래 요청을 그대로 지킨다: 사용자 승인 없이 범위를 넓히지도, 줄이거나 쪼개지도 않는다.',
+  'DITTO prime directive:',
+  '- Keep the original request exactly: never widen, shrink, or split its scope without user approval.',
   // Defect-class carve-out (wi_2607148yg ac-11): a SEPARATE operative cue, added
   // BESIDE the base prohibition above (which keeps its full force for every
   // non-defect scope change — do NOT fold the two into one softened line). The
@@ -67,25 +67,25 @@ const PRIME_DIRECTIVE = [
   // free-text self-label (relabel resistance), and it never opens for non-defects
   // nor waives the two fail-stop conditions. ADR: supersedes ADR-20260627
   // (materialize≠drive) / ADR-20260710 (one-intent=one-unit) for this class only.
-  '- 딱 하나의 예외 — 실행 중 발견한 버그: autopilot이 자율 실행 도중 재현되는 실동작 버그를 발견하면(분류기가 "재현되는 실동작 버그"로 판정한 것만 해당한다 — 네가 스스로 "버그"라고 이름 붙였다고 열리지 않는다), 못 본 척 남기지 말고 그 버그를 별도 work item으로 물질화해 같은 run 안에서 고칠 때까지 구동한다. 이 예외는 비-결함(아이디어·기능·기술부채·아직 아무 피해 없는 잠복버그)에는 열리지 않는다 — 그런 후속은 물질화만 하고 구동하지 않으며, 그걸 핑계로 요청 범위를 넓히지 않는다. 이 자율 구동 중에도 두 경우 — 정초 계획·방향이 뒤집히거나 진행이 막힐 때, 그리고 보안·시스템·프로젝트·기능설계 의도를 위협하는 결정이 필요할 때 — 에는 여전히 멈추고 사용자에게 인계한다.',
-  '- 코드베이스를 바꾸는 모든 작업은 work item 안에서, 딱 두 갈래 표준 경로로만 진행한다 — 무거운 경로(`/ditto:deep-interview` → autopilot) 또는 가벼운 경로(`ditto work set-criteria` → `ditto verify` → `ditto work done`). 이 두 경로 밖에서 work item 없이 즉흥적으로 코드를 고치는 것(콘솔에서 바로 TDD로 편집)은 허용되지 않는다. TDD는 경로 안에서 구현하는 방법이지, 경로를 대신하는 수단이 아니다.',
-  '- 이 요청에 work item이 필요한지, 그리고 어느 경로로 갈지는 네가 판단한다(무게로 라우팅, 권고): 작고 되돌릴 수 있으면 → 가벼운 경로; 모호하거나 되돌릴 수 없거나 여러 표면에 걸치거나 위험이 선언되면 → 무거운 경로. 훅은 절대 자동으로 만들지 않는다. 필요하다고 보면 네가 직접 등록한다: `ditto work start`.',
-  '- 사용자만 답할 수 있는 것만 묻는다. 나머지는 코드·문서·웹에서 스스로 답한다.',
-  '- 완료는 증거로만 인정된다: 완료(통과)로 판정하기 전에 모든 acceptance criterion을 증거와 함께 닫는다. 기준은 work item 전체이지 중간 체크포인트가 아니다.',
+  '- The one exception — a bug found mid-run: if, during an autonomous autopilot run, you hit a reproducible real-behavior bug (ONLY when the classifier rules it a "reproducible real-behavior bug" — your own "bug" label does not open this), do not leave it unseen; materialize it as a separate work item and drive it to a fix within the same run. This exception never opens for non-defects (ideas, features, tech debt, harmless latent bugs) — those are materialized only, never driven, and are no excuse to widen the request. Even during this autonomous drive, still stop and hand off to the user in two cases: the founding plan/direction is overturned or progress is blocked, and a decision threatens security, system, project, or feature-design intent.',
+  '- Every codebase change happens inside a work item, on exactly two standard paths — heavy (`/ditto:deep-interview` → autopilot) or lightweight (`ditto work set-criteria` → `ditto verify` → `ditto work done`). Editing code ad hoc without a work item, outside these two paths (TDD straight from the console), is not allowed. TDD is how you implement within a path, not a substitute for one.',
+  '- You decide whether this request needs a work item and which path (route by weight, advisory): small and reversible → lightweight; ambiguous, irreversible, spanning several surfaces, or with declared risk → heavy. The hook never auto-creates a work item. If you judge one is needed, register it yourself: `ditto work start`.',
+  '- Ask only what only the user can answer; answer everything else yourself from code, docs, or the web.',
+  '- Done counts only with evidence: before ruling it done (pass), close every acceptance criterion with evidence. The bar is the whole work item, not an intermediate checkpoint.',
   // User-facing output norms (wi_260715clv). Deliberately injected HERE, in the
   // main-agent per-turn banner, NOT in the shared charter (AGENTS.md): the charter
   // binds EVERY agent incl. non-user-facing subagents, for which these two rules
   // are noise at best and inverted at worst (a subagent MUST cite file:line / ids
   // precisely to its parent). The prime directive reaches only the main agent, the
   // sole producer of user-facing text — so the audience is scoped by the mechanism.
-  // Kept language-agnostic ("사용자의 언어로", not a specific language) so it holds
-  // for every consumer, and no raw internal id (keeps the opaque-vocab check green).
-  '- 사용자에게 보여줄 응답은 사용자의 언어로 자연스럽게 쓴다: 단어 단위로 옮긴 직역체·번역투를 피하고, 단어는 사전적 1:1 대응이 아니라 문맥에 맞는 말로 옮긴다.',
-  '- 사용자가 볼 수 없는 것을 달랑 들지 않는다: 사용자가 합의하지 않았거나 매번 찾아보지 않을 내부 번호·식별자·문서를 뜻 없이 이름만 대지 않는다 — 필요하면 그 내용을 그 자리에 풀어 담고, 아니면 뺀다.',
+  // Kept language-agnostic ("in the user's language", not a specific one) so it
+  // holds for every consumer, and no raw internal id (keeps the opaque-vocab check green).
+  "- Write user-facing responses naturally in the user's language: avoid word-for-word translationese, and render each word by context rather than a dictionary 1:1 match.",
+  '- Do not dangle things the user cannot see: never drop a bare internal number, identifier, or doc name the user has not agreed on or would not look up — inline its content on the spot, or leave it out.',
   // Executable self-check routed into the charter (wi_260706n4w): projected
   // verbatim from CHARTER_SELF_CHECKS so the check that left the far-field sweep
   // stays enforced every turn, not archived as documentation.
-  ...CHARTER_SELF_CHECKS.map((c) => `- 스스로 점검(${c.id}): ${c.question}`),
+  ...CHARTER_SELF_CHECKS.map((c) => `- self-check (${c.id}): ${c.question}`),
 ].join('\n');
 
 /**
@@ -105,10 +105,10 @@ export const PLACEHOLDER_AC_STATEMENT =
  * when warranted, registers the work item itself by running the command.
  */
 const WORK_ITEM_GUIDE_ADVISORY =
-  '활성 work item이 없다. 1차 판단을 네가 직접 한다: 이 요청이 산출물을 만들거나 되돌릴 수 없는 코드베이스 변경을 일으킨다면 work item으로 등록해야 한다(간단한 작업·핸드오프·git 조작은 예외). 그렇다면 사용자와 의도를 확인한 뒤, 네가 직접 `ditto work start "<목표>" --request "<요청 원문>"`을 실행해 등록한다 — 사용자가 명령을 입력하는 게 아니라 네가 자동으로 만든다. 아니면 평소처럼 진행한다.';
+  'No active work item. Make the first-pass judgment yourself: if this request produces an artifact or an irreversible codebase change, it should be registered as a work item (simple tasks, handoffs, and git operations are exempt). If so, confirm intent with the user, then register it yourself by running `ditto work start "<goal>" --request "<original request>"` — you create it automatically, the user does not type the command. Otherwise proceed as usual.';
 
 const PLACEHOLDER_AC_ADVISORY =
-  'acceptance criteria가 아직 자리표시자다 — 행동하기 전에 /ditto:deep-interview로 구체화하라';
+  'Acceptance criteria are still placeholders — sharpen them with /ditto:deep-interview before acting.';
 
 /**
  * Stronger nudge surfaced when the placeholder situation coincides with an
@@ -116,7 +116,7 @@ const PLACEHOLDER_AC_ADVISORY =
  * concrete next command. Recommended but not enforced — the hook is advisory.
  */
 const DEEP_INTERVIEW_DIRECTIVE =
-  '지금 /ditto:deep-interview를 실행하라 — acceptance criteria가 아직 자리표시자이고 실행 의도가 감지됐다. 복잡하거나 되돌릴 수 없는 작업에는 권장한다; 요청이 작거나 되돌릴 수 있으면 건너뛰어도 된다. 간단하고 되돌릴 수 있는 작업의 가벼운 경로: `ditto work set-criteria` → `ditto verify` → `ditto work done`(deep-interview·autopilot 없이).';
+  'Run /ditto:deep-interview now — acceptance criteria are still placeholders and execution intent was detected. Recommended for complex or irreversible work; skip it if the request is small or reversible. Lightweight path for simple, reversible work: `ditto work set-criteria` → `ditto verify` → `ditto work done` (no deep-interview or autopilot).';
 
 /**
  * Soft nudge attached to a question-shaped prompt that looks answerable from
@@ -124,7 +124,7 @@ const DEEP_INTERVIEW_DIRECTIVE =
  * the LLM is not required to follow it, but the heuristic surfaces the option.
  */
 const SELF_ANSWER_HINT =
-  '묻기 전에 코드·문서·웹에서 먼저 스스로 답하라 — 이 프롬프트는 사용자 입력 없이도 답할 수 있어 보인다.';
+  'Answer from code, docs, or the web before asking — this prompt looks answerable without user input.';
 
 export interface CharterContext {
   workItemId?: string;
