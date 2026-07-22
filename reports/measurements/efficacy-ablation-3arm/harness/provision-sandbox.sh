@@ -248,6 +248,24 @@ case "$ARM" in
       echo "error: arm A setup failed (see $SANDBOX/logs/arm-a-setup.log)" >&2
       exit 1
     fi
+    # Hook registration: the product ships its hooks via the host PLUGIN
+    # surface (hooks.json in the plugin, loaded from the global claude
+    # config), NOT via `ditto setup` — measured: setup alone leaves ZERO
+    # hooks registered in the sandbox, so the arm A engine would never fire
+    # (silent degrade to "B0 + unused binary"). Register the product's six
+    # hook events in the ISOLATED user config, pointing at the frozen
+    # executable. The global ~/.claude is never touched (PC5 proves it).
+    HOOK_BIN="$SANDBOX/bin/ditto" HOOK_OUT="$SANDBOX/claude-config/settings.json" bun -e '
+      const bin = process.env.HOOK_BIN, out = process.env.HOOK_OUT;
+      const ev = {SessionStart:"session-start",UserPromptSubmit:"user-prompt-submit",Stop:"stop",PreCompact:"pre-compact",PostToolUse:"post-tool-use",PreToolUse:"pre-tool-use"};
+      const hooks = {};
+      for (const [k,sub] of Object.entries(ev)) hooks[k] = [{matcher:"",hooks:[{type:"command",command:`bun "${bin}" hook ${sub}`}]}];
+      require("fs").writeFileSync(out, JSON.stringify({hooks},null,2)+"\n");
+    '
+    if ! grep -q '"pre-tool-use"\|hook pre-tool-use' "$SANDBOX/claude-config/settings.json" 2>/dev/null; then
+      echo "error: arm A post-condition failed — PreToolUse hook not registered in isolated config" >&2
+      exit 1
+    fi
     if ! grep -rq "ditto" "$SANDBOX/claude-config" 2>/dev/null \
       && ! grep -rq "ditto" "$CLONE/.claude" 2>/dev/null; then
       echo "error: arm A post-condition failed — no ditto hook registration in isolated config or clone/.claude" >&2
