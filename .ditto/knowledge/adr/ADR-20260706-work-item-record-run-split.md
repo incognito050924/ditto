@@ -37,4 +37,6 @@ work-item 상태를 두 tier로 세분한다:
 
 ## ADR-0012 D1과의 관계 (부분 supersede)
 
+> **부분 supersede (2026-07-22, wi_260722g7h)** — 이 ADR의 "handoff = 개인/gitignored tier, 불변" 분류 **한 줄만** **ADR-20260722-handoff-hidden-ref-baton**이 supersede한다(ADR-20260714-handoff-remote-committed-tier가 가졌던 좁은 supersede를 승계 — 그 ADR 자체는 전체 superseded). 핸드오프는 이제 개인 gitignored 파일이 아니라 숨은 ref `refs/ditto/handoffs`의 소멸성 바통이다. 이 ADR의 Record/Run 2-tier 분할·per-event 불변 로그·terminal-first-wins·하이브리드 모델은 전부 불변.
+
 이 ADR은 ADR-0012 **D1의 "work-items를 개인 tier로 전부 `.ditto/local/`에 둔다"는 부분만** supersede한다. ADR-0012의 나머지 — 3계층 격리 골격, D2(gitignore 3계층 집행), D3(`dist/plugin` 배포조립), 그리고 runs·sessions·cache·logs·worktrees·handoff가 개인 tier라는 분류 — 는 **전부 불변**이다. work-item만 Record(커밋)/Run(로컬)로 쪼개진다.

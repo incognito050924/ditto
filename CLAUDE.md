@@ -453,9 +453,10 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260713-directive-fidelity-banner-gate · accepted · 사용자향 배너이면서 동작 지시인 문자열의 리라이트는 operative-cue 충실도로 게이트한다 (가독성만으로는 불충분)
 - ADR-20260713-dogfood-not-purpose-user-project-value · accepted · ditto의 목적은 도그푸딩이 아니라 사용자 프로젝트에서 발현되는 가치다 — 도그푸딩은 검증 수단
 - ADR-20260714-autopilot-defect-class-drive-carveout · accepted · 발견된 실동작 버그(분류기-키드)만 no-auto-pick 예외로 same-run chain-drive — 비-결함은 materialize≠drive 불변 (ADR-20260627·ADR-20260710 클래스-한정 부분 supersede)
-- ADR-20260714-handoff-remote-committed-tier · accepted · 원격 핸드오프는 작업 브랜치에 커밋(git-tracked), 로컬 핸드오프는 gitignored 유지 — ADR-20260706 handoff-tier 분류만 좁게 supersede
+- ADR-20260714-handoff-remote-committed-tier · superseded · 원격 핸드오프는 작업 브랜치에 커밋(git-tracked), 로컬 핸드오프는 gitignored 유지 — ADR-20260706 handoff-tier 분류만 좁게 supersede
 - ADR-20260714-language-axis-followups-terminated · accepted · 언어 축(#29) 후속 종결 — (b) 미합의-용어 검출·all-CLI self-check "구현 안 함" + 철회조건; 배너 하드 승격 → #30 소관
 - ADR-20260715-worktree-land-to-origin · accepted · worktree 작업의 랜딩은 작업 브랜치 커밋을 origin/<default>로 직접 push — 공유 로컬 main 머지 경로 폐기 (ADR-0011·ADR-20260626 clarify — supersede 아님)
 - ADR-20260722-claude-code-only-host · accepted · Claude-Code-only 호스트 — dual-host(ADR-0016) supersede · codex host flag는 시끄러운 실패 · Codex 표면 제거는 추적 후속
+- ADR-20260722-handoff-hidden-ref-baton · accepted · 핸드오프 = 사용자-발의 1:1 소멸성 바통 — 단일 저장소 refs/ditto/handoffs 숨은 ref + first-consumer-wins CAS + refs/ditto/* 한정 push 상시허가
 
 <!-- ditto:knowledge:end -->

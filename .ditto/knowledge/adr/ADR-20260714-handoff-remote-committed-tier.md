@@ -1,6 +1,6 @@
 # ADR-20260714-handoff-remote-committed-tier: 원격 핸드오프는 작업 브랜치에 커밋(git-tracked), 로컬 핸드오프는 gitignored 유지 — ADR-20260706 handoff-tier 분류만 좁게 supersede
 
-- 상태: accepted
+- 상태: superseded by ADR-20260722-handoff-hidden-ref-baton
 - 결정 일자: 2026-07-14
 - 결정자: hskim, claude (claude-opus-4-8)
 - 관련: ADR-20260706-work-item-record-run-split (**"handoff = 개인/gitignored tier, 불변" 분류만 좁게 부분 supersede** — 그 Record/Run 분할·per-event 불변 로그·terminal-first-wins 결정은 전부 불변). ADR-0012 (3계층 격리 골격·D2 gitignore 집행 — 불변; 커밋 원격 핸드오프 경로는 개인 구획 `.ditto/local/` **밖**에 살아야 D2 집행과 모순 없이 git-tracked가 된다). 헌장 §4-8 (commit/push는 사용자-게이트 비가역 — 커밋된 원격 핸드오프 정리는 이 경계를 넘지 않는다). 코드(권위): `skills/handoff/SKILL.md`(현재 원격 핸드오프 = 루트 단일 HANDOFF.md 덮어쓰기 수동 절차), `src/core/handoff-store.ts`(로컬 store WI-키 라우팅·현재 원격 코드 0), `src/schemas/handoff.ts`(handoff 스키마 SoT). 촉발 WI: wi_260714xpw (handoff 재설계, ac-4).
