@@ -1,0 +1,42 @@
+# red proof — oracle run on unfixed scratch clone (real palimpsest untouched)
+# date-utc: 2026-07-22T15:54:51Z
+# clone: git clone --no-hardlinks <ABLATION_PALIMPSEST_SRC> <scratch>/palimpsest-clone && git remote remove origin
+# clone-head: 20435ccdbfe4a5a70e198aaeec5d608fa9f490da
+# clone-remotes: []
+# oracle sha256: d857c8f8b6a60193a4fb2a2646dd8c951c36c945a201fc89ae4218bd1767683f
+# injected as: tests/test_ablation_oracle.py (oracle/DEST)
+# command: ./.venv/bin/python -m pytest tests/test_ablation_oracle.py -v  (venv inside the clone, pip install -e .)
+
+============================= test session starts ==============================
+platform darwin -- Python 3.13.9, pytest-9.1.1, pluggy-1.6.0 -- /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/52ab06d8-8c29-4b40-8122-ec97744da29e/scratchpad/palimpsest-clone/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/52ab06d8-8c29-4b40-8122-ec97744da29e/scratchpad/palimpsest-clone
+configfile: pyproject.toml
+collecting ... collected 2 items
+
+tests/test_ablation_oracle.py::test_sanity_global_fetch_is_recognized PASSED [ 50%]
+tests/test_ablation_oracle.py::test_shadowed_fetch_is_not_an_apicall FAILED [100%]
+
+=================================== FAILURES ===================================
+____________________ test_shadowed_fetch_is_not_an_apicall _____________________
+
+tmp_path = PosixPath('/private/var/folders/p2/1g3xmv1j7jx0n7x3y1mtc2y80000gn/T/pytest-of-incognito/pytest-2/test_shadowed_fetch_is_not_an_0')
+
+    def test_shadowed_fetch_is_not_an_apicall(tmp_path):
+        # THE oracle assertion (red on the unfixed clone): the locally shadowed
+        # `fetch` is not the global fetch — no ApiCall may be emitted for it.
+        ir = _extract(tmp_path, {"queue.js": SHADOWED_FETCH_JS})
+>       assert "apicall:GET /jobs/backfill" not in _apicall_qns(ir), (
+            "false positive: locally shadowed `fetch` (const fetch = …) was "
+            "extracted as an outbound-HTTP ApiCall"
+        )
+E       AssertionError: false positive: locally shadowed `fetch` (const fetch = …) was extracted as an outbound-HTTP ApiCall
+E       assert 'apicall:GET /jobs/backfill' not in {'apicall:GET /jobs/backfill'}
+
+tests/test_ablation_oracle.py:75: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_ablation_oracle.py::test_shadowed_fetch_is_not_an_apicall
+========================= 1 failed, 1 passed in 0.09s ==========================
+
+# pytest exit code: 1  (1 = red on the AC assertion; 2/5 would be collection/usage error)
+# breakdown: test_sanity_global_fetch_is_recognized PASSED (pipeline valid) / test_shadowed_fetch_is_not_an_apicall FAILED (the shadow false-positive — the red)

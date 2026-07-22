@@ -1,0 +1,13 @@
+{
+  "schema": "ablation-arm-a-identity/1",
+  "executable_relpath": "arm-a/ditto",
+  "executable_sha256": "7120a7f44cb39e36b542c88166e6bbbd124153c87004ec1ab952eb89abebd160",
+  "anchor_commit": "4edee81c2006aef2107ffb937d4049157cc4455e",
+  "anchor_commit_subject": "chore(measure): bin/ditto landed-앵커 — arm A 실행물 정체 동결 선행 (structural)",
+  "ditto_src_stamp": "79d55cf0cd266cad72d60a04d4d742d5a66026211fa45b59971f56a26945b475",
+  "verification": {
+    "method": "git show <anchor_commit>:bin/ditto | shasum -a 256 == working-tree bin/ditto == bundle arm-a/ditto; embedded '//# ditto-src-stamp=' trailer in the executable matches ditto_src_stamp",
+    "verified_at_utc": "2026-07-23"
+  },
+  "note": "arm A = the OLD product (old src/ build), not the rebuild — frozen per intent wi_2607227xx review supplement; sessions bind the actually-executed digest via run-session.sh (session-meta.arm_a_bin_sha256)"
+}

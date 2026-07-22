@@ -1,0 +1,59 @@
+== ablation harness self-check ==
+scratch: /var/folders/p2/1g3xmv1j7jx0n7x3y1mtc2y80000gn/T/ablation-selfcheck.WthJQS
+ok   - S1 bash -n config.sh
+ok   - S1 bash -n provision-sandbox.sh
+ok   - S1 bash -n positive-controls.sh
+ok   - S1 bash -n run-session.sh
+ok   - S1 bash -n score.sh
+ok   - S1 bash -n self-check.sh
+ok   - S1 bun build ledger.ts + egress-proxy.ts
+ok   - S2 sandbox-exec allows loopback
+ok   - S2 sandbox-exec denies external remote-IP egress (rc=7)
+self-check.sh: line 80: 11554 Terminated: 15          bun -e "Bun.serve({port:$SRV_PORT,fetch(){return new Response(\"ok\")}});setTimeout(()=>process.exit(0),20000)"
+ok   - S3 proxy passes allowlisted loopback
+ok   - S3 proxy denies non-allowlisted host (403 -> curl 22) (rc=22)
+ok   - S3 allow decision logged
+ok   - S3 deny decision logged
+ok   - S4 next-id starts at 1
+self-check.sh: line 94: 11558 Terminated: 15          bun "$HERE/egress-proxy.ts" --port "$PPORT" --allow "127.0.0.1,localhost" --log "$PLOG" > "$SC_ROOT/proxy.out" 2>&1
+self-check.sh: line 94: 11559 Terminated: 15          bun -e "Bun.serve({port:$SRV2_PORT,fetch(){return new Response(\"ok\")}});setTimeout(()=>process.exit(0),20000)"
+ok   - S4 append session 1
+ok   - S4 non-monotonic re-append refused (rc=3)
+ok   - S4 append session 2
+ok   - S4 invalid adjudication without reason refused (rc=2)
+ok   - S4 invalid adjudication with reason
+ok   - S4 verify chain intact
+ok   - S4 next-id refused at cap (exit 3) (rc=3)
+ok   - S4 append refused at cap (exit 3) (rc=3)
+ok   - S4 tampered ledger fails verify (rc=1)
+ok   - S5 verify-chain (disk == manifest == committed blob)
+ok   - S5 verify-chain fails on tampered bundle (rc=1)
+ok   - S5 verify-chain recovers after restore
+ok   - S6 provision arm B0
+ok   - S6 origin removed
+ok   - S6 instruction file absent in B0 clone
+ok   - S6 instruction-derived remnants (*.ditto_bak, recipe.yaml) removed from B0 clone
+ok   - S6 --no-hardlinks effective (link count 1)
+ok   - S6 env whitelist strips poisoned vars
+ok   - S7 provision arm B1
+ok   - S7 injected CLAUDE.md == frozen charter digest
+ok   - S8 positive-controls all pass
+ok   - S9 residual engine signals detected (exit 4) (rc=4)
+ok   - S9 arm labels stripped from blind view
+ok   - S9 clean fixture passes blind scan
+ok   - S10 overrunning session truncated (runner exits 1) (rc=1)
+ok   - S10 TRUNCATED marker written
+ok   - S10 transcript persisted incrementally
+ok   - S11 quick session completes
+ok   - S11 COMPLETE marker written
+ok   - S11 session diff captured
+ok   - S11 session digest computed
+ok   - S11 ledger chain verifies (2 session events)
+ok   - S11 score.sh runs
+ok   - S11 red oracle mapped (pytest exit 1 -> red)
+ok   - S11 full pre-existing suite pass recorded
+ok   - S11 tamper check clean
+ok   - S11 predicate false while oracle red
+
+== summary: failures=0 scratch=/var/folders/p2/1g3xmv1j7jx0n7x3y1mtc2y80000gn/T/ablation-selfcheck.WthJQS ==
+self-check PASS (scratch removed)
