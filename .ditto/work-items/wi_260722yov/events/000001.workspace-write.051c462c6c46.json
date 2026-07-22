@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260722yov",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "051c462c6c46c0ee3756406bf671fd04398baa86158877cd0748cb71b06cb6b6",
+  "ts": "2026-07-22T11:53:25.592Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash /tmp/wi_checks/ac1.sh",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
