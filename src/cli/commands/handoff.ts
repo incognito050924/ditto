@@ -1,47 +1,60 @@
 import { randomBytes } from 'node:crypto';
-import { basename } from 'node:path';
 import { defineCommand } from 'citty';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
-  type ActiveHandoff,
-  HandoffStore,
-  type RemoteHandoff,
-  buildSessionHandoff,
-  scopeKey,
-} from '~/core/handoff-store';
+  HandoffRefStore,
+  type RefBaton,
+  type RefConsumeResult,
+  type RefWriteResult,
+} from '~/core/handoff-ref-store';
+import {
+  type RemoteVisibility,
+  type SyncOp,
+  type SyncResult,
+  fetchHandoffRef,
+  pendingUnpushed,
+  syncHandoffRef,
+} from '~/core/handoff-ref-sync';
+import { type Handoff, handoff as handoffSchema } from '~/schemas/handoff';
 import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson } from '../util';
 
 /**
- * `ditto handoff` (wi_260714xpw) — the user-facing handoff producer + EXPLICIT-PULL
- * discovery/consume surface. It is a thin shell over `HandoffStore`:
+ * `ditto handoff` (wi_260722g7h, g7h-impl-cli) — the BATON model over the hidden
+ * ref store. A handoff is a user-initiated pure context carry that lives as a
+ * commit on `refs/ditto/handoffs` (per-repo, shared by every linked worktree),
+ * NEVER as a working-tree file or a branch commit:
  *
- *  - `ditto handoff write` with NO work item writes a SESSION/author-scope handoff
- *    (`buildSessionHandoff` + the store's LOCAL `write`). The work_item producer stays
- *    `ditto work handoff <id>` (preserved) — this fills the no-WI gap (ac-2).
- *  - `ditto handoff write --remote` COMMITS the same handoff to the work branch via the
- *    store's `writeRemote` (git-tracked `.ditto/handoff/<stem>.md`, delivered on
- *    checkout, NEVER pushed) — the committed-remote tier's reachable producer (ac-4).
- *  - `ditto handoff list` discovers pending handoffs from BOTH tiers — local
- *    (`listActiveDetailed`) and committed-remote (`listRemote`) — plus any unparsable
- *    files from either (never a silent drop, ac-3).
- *  - `ditto handoff consume <id>` SOFT-consumes: it loads the body on-demand and records
- *    the per-recipient consumed-marker WITHOUT moving/deleting the file (ac-6, ac-7). It
- *    routes a remote id (looked up in `listRemote`) to `consumeRemote`, else `consumeFor`.
- *  - `ditto handoff show <id>` is a read-only view (no marker).
+ *  - `write` builds the baton from flags (required --intent/--from/--state/--next
+ *    plus the rich-field flags mapping onto the existing schema fields), commits
+ *    it onto the hidden ref via `HandoffRefStore.write`, then auto-syncs
+ *    (`syncHandoffRef`, fetch-first + push) with the module's class-preserved
+ *    warning surface. The sync visibility gate is FAIL-CLOSED: repo visibility is
+ *    resolved via `gh repo view` (absent/unresolvable → 'unknown', which the gate
+ *    refuses like public); `--push-public` is the explicit opt-in.
+ *  - `consume [id]` is first-consumer-wins: the store returns the body ONLY after
+ *    its update-ref CAS landed the deletion commit (a CAS loser re-reads and gets
+ *    the DISTINCT `already_consumed` refusal — different message and exit from
+ *    `not_found`/65). The deletion is then pushed (op 'consume': an offline push
+ *    failure warns that the remote baton still exists — re-consume window open,
+ *    at-most-duplicated never lost) BEFORE the body is emitted, so an online
+ *    consume is finalized against the remote. With no id: exactly one pending
+ *    baton auto-resolves; several → the pending set is printed and the caller
+ *    must name one (exit 65, never a prompt).
+ *  - `show [id]` is a read-only peek — no deletion, no marker, no push; same id
+ *    resolution as consume.
+ *  - Both consume and show run a fetch-only adopt (wi_2607220o1) BEFORE resolving
+ *    pending batons, so a fresh clone / another PC discovers origin's batons
+ *    instead of the local unborn-ref 0-state. Fetch is read-safe and is NOT
+ *    gated by --push-public (the visibility gate concerns push only); an
+ *    unreachable remote degrades to local-only resolution with the module's
+ *    loud class-preserved warning.
  *
- * Discovery + consumption are EXPLICIT PULL only: nothing here (and no hook) auto-injects
- * a body or emits a notification (ac-9 is a sibling's AC — this surface never auto-reads).
- *
- * The `<id>` a caller passes to `consume`/`show` is the handoff FILE STEM that `list`
- * prints (a work item's `<wi>`, or a session's `session__<sid>`). `getActive`/`consumeFor`
- * resolve `<stem>.md` uniformly, so ONE id shape drives both scopes through the public
- * store API — no routing logic is reimplemented here.
+ * There is NO `list` subcommand: the multiple-pending disambiguation output of
+ * consume/show is the discovery surface. The old two-tier file-store paths
+ * (soft-consume markers, local/remote list routing, `--remote`) are gone from
+ * this command. Every subcommand ends by re-surfacing the pending-unpushed
+ * warning (`pendingUnpushed`) so unsynced local baton state stays loud.
  */
-
-/** The file-stem identity `list` prints and `consume`/`show` accept (basename minus `.md`). */
-function stemOf(relPath: string): string {
-  return basename(relPath).replace(/\.md$/, '');
-}
 
 /** A safe generated session id when the caller does not pass `--session`. */
 function generateSessionId(): string {
@@ -49,17 +62,179 @@ function generateSessionId(): string {
   return `sess-${stamp}-${randomBytes(3).toString('hex')}`;
 }
 
-/** The shared `--*` args for the session producer (parent `run` and the `write` alias). */
+/** A flag value that cannot be turned into a valid baton — exit 65, not a stack. */
+class HandoffUsageError extends Error {}
+
+/** Normalize a repeatable flag (absent | single | repeated) into a string list. */
+function toList(value: unknown, flag: string): string[] {
+  const raw = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' || item.trim().length === 0) {
+      throw new HandoffUsageError(`${flag} expects a non-empty string value`);
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+/** Split a `left::right` pair flag; both sides required non-empty. */
+function splitPair(raw: string, flag: string): [string, string] {
+  const idx = raw.indexOf('::');
+  const left = idx === -1 ? '' : raw.slice(0, idx).trim();
+  const right = idx === -1 ? '' : raw.slice(idx + 2).trim();
+  if (left.length === 0 || right.length === 0) {
+    throw new HandoffUsageError(
+      `${flag} expects "<left>::<right>" with both sides non-empty (got: ${raw})`,
+    );
+  }
+  return [left, right];
+}
+
+/**
+ * Resolve the repo's actual visibility for the sync gate via `gh repo view`.
+ * Graceful degrade: gh absent / not a GitHub remote / unparsable → 'unknown',
+ * which the gate treats fail-closed (refuses auto-push unless --push-public).
+ */
+function resolveRepoVisibility(repoRoot: string): RemoteVisibility {
+  try {
+    const proc = Bun.spawnSync(['gh', 'repo', 'view', '--json', 'visibility'], {
+      cwd: repoRoot,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (proc.exitCode !== 0) return 'unknown';
+    const parsed = JSON.parse(proc.stdout?.toString() ?? '') as { visibility?: unknown };
+    const v = typeof parsed.visibility === 'string' ? parsed.visibility.toLowerCase() : '';
+    if (v === 'private') return 'private';
+    if (v === 'public') return 'public';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function hasOriginRemote(repoRoot: string): boolean {
+  try {
+    return (
+      Bun.spawnSync(['git', 'remote', 'get-url', 'origin'], {
+        cwd: repoRoot,
+        stdout: 'pipe',
+        stderr: 'pipe',
+      }).exitCode === 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Auto-sync the hidden ref with origin (fetch-first + push). Null when there is
+ * no origin remote — a purely local repo stays silent instead of warning forever.
+ * All warnings (offline/auth/scrub/visibility, class-preserved) go to stderr.
+ */
+function runAutoSync(repoRoot: string, op: SyncOp, allowPublicRemote: boolean): SyncResult | null {
+  if (!hasOriginRemote(repoRoot)) return null;
+  const visibility = resolveRepoVisibility(repoRoot);
+  const result = syncHandoffRef(repoRoot, 'origin', { visibility, allowPublicRemote, op });
+  for (const w of result.warnings) writeError(w);
+  if (result.status === 'public-remote-refused') {
+    writeError('handoff sync: pass --push-public to opt in for a public/unknown remote.');
+  }
+  return result;
+}
+
+/**
+ * Fetch-only adopt BEFORE pending-baton resolution (consume/show): without it, a
+ * fresh clone resolves against the local unborn ref and reports "no pending
+ * batons" even though origin holds some (the write path's sync fetches first —
+ * consume/show never did). Read-safe, so never gated by the push visibility
+ * gate; offline/unreachable degrades to local-only resolution with the module's
+ * loud class-preserved warning (the CLI keeps going — never a hard failure).
+ */
+function runPreResolutionFetch(repoRoot: string): void {
+  if (!hasOriginRemote(repoRoot)) return;
+  const res = fetchHandoffRef(repoRoot, 'origin');
+  for (const w of res.warnings) writeError(w);
+}
+
+/**
+ * The repeated pending-unpushed warning: every handoff command ends by checking
+ * whether local baton state has landed on origin, so a one-shot offline warning
+ * cannot silently scroll away.
+ */
+function warnPendingUnpushed(repoRoot: string): void {
+  if (!hasOriginRemote(repoRoot)) return;
+  const state = pendingUnpushed(repoRoot);
+  if (!state.pending) return;
+  writeError(
+    `handoff sync: WARNING — local handoff baton state (tip ${state.localTip}) has NOT been pushed to 'origin'. Another PC cannot see it yet; it will be re-synced on the next handoff command run while online.`,
+  );
+}
+
+/** Build the baton from the write flags; throws HandoffUsageError / ZodError on bad input. */
+function buildBatonFromFlags(args: Record<string, unknown>): Handoff {
+  const workItem = args['work-item'];
+  const scope =
+    typeof workItem === 'string' && workItem.trim().length > 0
+      ? { kind: 'work_item', work_item_id: workItem }
+      : {
+          kind: 'session',
+          session_id:
+            typeof args.session === 'string' && args.session.trim().length > 0
+              ? args.session
+              : generateSessionId(),
+        };
+  return handoffSchema.parse({
+    schema_version: '0.1.0',
+    scope,
+    ...(typeof args.autopilot === 'string' && args.autopilot.length > 0
+      ? { autopilot_id: args.autopilot }
+      : {}),
+    from_context: args.from,
+    original_intent: args.intent,
+    current_state: args.state,
+    decisions_made: toList(args.decision, '--decision'),
+    critical_decisions: toList(args.critical, '--critical').map((raw) => {
+      const [decision, rationale] = splitPair(raw, '--critical');
+      return { decision, rationale };
+    }),
+    irreversible_risks: toList(args.risk, '--risk').map((raw) => {
+      const [risk, why] = splitPair(raw, '--risk');
+      return { risk, why_irreversible: why };
+    }),
+    changed_files: toList(args.changed, '--changed'),
+    evidence_refs: toList(args.evidence, '--evidence').map((summary) => ({
+      kind: 'note',
+      summary,
+    })),
+    open_threads: toList(args.open, '--open'),
+    next_first_check: args.next,
+    forbidden_scope_creep: toList(args.forbid, '--forbid'),
+    created_at: new Date().toISOString(),
+  });
+}
+
+function scopeLabel(h: Handoff): string {
+  return h.scope.kind === 'work_item'
+    ? `work item ${h.scope.work_item_id}`
+    : `session (${h.scope.session_id})`;
+}
+
 const writeArgs = {
+  'work-item': {
+    type: 'string',
+    description: 'Scope the baton to a work item (else session scope with a generated id).',
+    required: false,
+  },
   session: {
     type: 'string',
-    description:
-      'Session id this handoff resumes (session/author scope). Omit to generate a safe one.',
+    description: 'Explicit session id for a session-scope baton. Omit to generate a safe one.',
     required: false,
   },
   intent: {
     type: 'string',
-    description: 'Original user intent (required — there is no work item to derive it from).',
+    description: 'Original user intent (required).',
     required: false,
   },
   from: {
@@ -82,10 +257,46 @@ const writeArgs = {
     description: 'The autopilot_id the next session resumes under, if this resumes a run.',
     required: false,
   },
-  remote: {
+  decision: {
+    type: 'string',
+    description: 'A decision made this session (repeatable → decisions_made).',
+    required: false,
+  },
+  critical: {
+    type: 'string',
+    description:
+      'A non-rederivable decision as "decision::rationale" (repeatable → critical_decisions).',
+    required: false,
+  },
+  risk: {
+    type: 'string',
+    description: 'An irreversible risk as "risk::why" (repeatable → irreversible_risks).',
+    required: false,
+  },
+  open: {
+    type: 'string',
+    description: 'An open thread the next session must know (repeatable → open_threads).',
+    required: false,
+  },
+  forbid: {
+    type: 'string',
+    description: 'A forbidden scope creep (repeatable → forbidden_scope_creep).',
+    required: false,
+  },
+  evidence: {
+    type: 'string',
+    description: 'An inline evidence note (repeatable → evidence_refs as kind "note").',
+    required: false,
+  },
+  changed: {
+    type: 'string',
+    description: 'A changed repo-relative file path (repeatable → changed_files).',
+    required: false,
+  },
+  'push-public': {
     type: 'boolean',
     description:
-      'Commit the handoff to the work branch (.ditto/handoff/, git-tracked, delivered to a fetch/checkout recipient) instead of the gitignored LOCAL store. Never pushes (push is a separate user-gated act).',
+      'Explicit opt-in to auto-push the baton ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published).',
     default: false,
   },
   output: {
@@ -95,12 +306,6 @@ const writeArgs = {
   },
 } as const;
 
-/**
- * Write a SESSION-scope handoff to the LOCAL store. Session scope has no work item, so
- * the original intent + context fields are supplied directly and are REQUIRED (the
- * schema mins them at 1). A missing required field is a usage error (exit 65), not a
- * raw zod stack.
- */
 async function runWrite({ args }: { args: Record<string, unknown> }): Promise<void> {
   let format: ReturnType<typeof parseOutputFormat>;
   try {
@@ -120,302 +325,282 @@ async function runWrite({ args }: { args: Record<string, unknown> }): Promise<vo
     .filter(([, v]) => typeof v !== 'string' || v.trim().length === 0)
     .map(([flag]) => flag);
   if (missing.length > 0) {
-    writeError(`ditto handoff: missing required ${missing.join(', ')} for a session handoff`);
+    writeError(`ditto handoff write: missing required ${missing.join(', ')}`);
     process.exit(USAGE_ERROR_EXIT);
     return;
   }
-  const sessionId =
-    typeof args.session === 'string' && args.session.trim().length > 0
-      ? args.session
-      : generateSessionId();
-  const repoRoot = await resolveRepoRootForCreate();
+  let baton: Handoff;
   try {
-    const handoff = buildSessionHandoff({
-      sessionId,
-      originalIntent: args.intent as string,
-      fromContext: args.from as string,
-      currentState: args.state as string,
-      nextFirstCheck: args.next as string,
-      ...(typeof args.autopilot === 'string' && args.autopilot.length > 0
-        ? { autopilotId: args.autopilot }
-        : {}),
-    });
-    const store = new HandoffStore(repoRoot);
-    if (args.remote === true) {
-      // Committed-remote tier: the store commits the per-scope file to the work branch
-      // (branch-target verified, body scrubbed, NO push). A refusal (wrong branch /
-      // detached / gitignored) throws HandoffRemoteWriteError → surfaced below.
-      const res = await store.writeRemote(handoff);
-      if (format === 'json') {
-        writeJson({
-          remote: true,
-          path: res.rel,
-          branch: res.branch,
-          commit: res.commit,
-          author: res.author,
-          stem: res.stem,
-          scope: handoff.scope,
-        });
-      } else {
-        writeHuman(`Committed remote handoff ${res.stem}`);
-        writeHuman(`  scope:   session (${sessionId})`);
-        writeHuman(`  branch:  ${res.branch}`);
-        writeHuman(`  path:    ${res.rel} (git-tracked, delivered on checkout — NOT pushed)`);
-        writeHuman(`  pick up: ditto handoff list  →  ditto handoff consume ${res.stem}`);
-      }
-      return;
-    }
-    const rel = await store.write(handoff);
-    if (format === 'json') {
-      writeJson({ path: rel, scope: handoff.scope, stem: stemOf(rel) });
-    } else {
-      writeHuman(`Wrote session handoff ${stemOf(rel)}`);
-      writeHuman(`  scope:   session (${sessionId})`);
-      writeHuman(`  path:    ${rel}`);
-      writeHuman(`  pick up: ditto handoff list  →  ditto handoff consume ${stemOf(rel)}`);
-    }
+    baton = buildBatonFromFlags(args);
   } catch (err) {
-    // buildSessionHandoff (zod) rejects an empty/invalid field or a malformed
-    // autopilot id — a usage error, not a runtime fault.
-    writeError(`ditto handoff write failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Bad flag shapes (zod / pair-split) are usage errors, not runtime faults.
+    writeError(`ditto handoff write: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(USAGE_ERROR_EXIT);
+    return;
   }
+  const repoRoot = await resolveRepoRootForCreate();
+  let res: RefWriteResult;
+  try {
+    res = new HandoffRefStore(repoRoot).write(baton);
+  } catch (err) {
+    writeError(`ditto handoff write failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+    return;
+  }
+  const sync = runAutoSync(repoRoot, 'write', args['push-public'] === true);
+  if (format === 'json') {
+    writeJson({
+      ref: res.ref,
+      commit: res.commit,
+      stem: res.stem,
+      scope: baton.scope,
+      sync: sync?.status ?? 'no-remote',
+    });
+  } else {
+    writeHuman(`Wrote handoff baton ${res.stem}`);
+    writeHuman(`  scope:   ${scopeLabel(baton)}`);
+    writeHuman(`  ref:     ${res.ref} (commit ${res.commit} — no worktree/branch change)`);
+    writeHuman(`  sync:    ${sync?.status ?? 'no origin remote — local only'}`);
+    writeHuman(`  pick up: ditto handoff consume ${res.stem}`);
+  }
+  warnPendingUnpushed(repoRoot);
 }
 
 const handoffWrite = defineCommand({
   meta: {
     name: 'write',
-    description: 'Write a session/author-scope handoff (no work item).',
+    description:
+      'Write a handoff baton onto the hidden ref (session scope, or --work-item), then auto-sync.',
   },
   args: writeArgs,
   run: runWrite,
 });
 
-/** JSON-friendly shape for a listed active handoff — the stem is the consume/show id. */
-function activeView(a: ActiveHandoff): Record<string, unknown> {
+/** One disambiguation line per pending baton — the replacement for the old `list`. */
+function batonLine(b: RefBaton): string {
+  return `  ${b.stem}\t[${b.handoff.scope.kind}]\t${b.handoff.created_at}\t${b.handoff.from_context}`;
+}
+
+function batonView(b: RefBaton): Record<string, unknown> {
   return {
-    id: stemOf(a.path),
-    kind: a.handoff.scope.kind,
-    scope_key: scopeKey(a.handoff.scope),
-    created_at: a.handoff.created_at,
-    from_context: a.handoff.from_context,
-    ...(a.handoff.autopilot_id ? { autopilot_id: a.handoff.autopilot_id } : {}),
-    path: a.path,
+    id: b.stem,
+    kind: b.handoff.scope.kind,
+    created_at: b.handoff.created_at,
+    from_context: b.handoff.from_context,
   };
 }
 
 /**
- * JSON-friendly shape for a committed-remote handoff. Its id is the filename STEM
- * (`consume`/`show` accept it); `tier: 'remote'` distinguishes it from the local set.
+ * No-id resolution shared by consume/show: exactly one pending baton → its stem;
+ * zero → null after a message (clean 0-state, exit 0 by the caller falling
+ * through); several → print the pending set + exit 65 (a disambiguation, never a
+ * prompt). Unparsable ref entries are surfaced, not dropped.
  */
-function remoteView(r: RemoteHandoff): Record<string, unknown> {
-  return {
-    id: r.stem,
-    tier: 'remote',
-    kind: r.handoff.scope.kind,
-    scope_key: scopeKey(r.handoff.scope),
-    created_at: r.handoff.created_at,
-    from_context: r.handoff.from_context,
-    ...(r.handoff.autopilot_id ? { autopilot_id: r.handoff.autopilot_id } : {}),
-    path: r.path,
-  };
+function resolvePendingStem(
+  store: HandoffRefStore,
+  format: 'human' | 'json',
+  command: string,
+): string | null {
+  const { batons, failures } = store.list();
+  for (const f of failures) {
+    writeError(`unparsable handoff baton entry ${f.name}: ${f.error}`);
+  }
+  if (batons.length === 0) {
+    if (format === 'json') writeJson({ pending: [] });
+    else writeHuman('No pending handoff batons.');
+    return null;
+  }
+  if (batons.length === 1) return batons[0]?.stem ?? null;
+  if (format === 'json') {
+    writeJson({ pending: batons.map(batonView) });
+  } else {
+    writeHuman(`Multiple pending handoff batons — name one (ditto handoff ${command} <id>):`);
+    for (const b of batons) writeHuman(batonLine(b));
+  }
+  process.exit(USAGE_ERROR_EXIT);
+  return null;
 }
 
-const handoffList = defineCommand({
-  meta: {
-    name: 'list',
-    description:
-      'Discover pending LOCAL handoffs (explicit pull). Shows the active set AND any files that failed to parse — never silently dropped.',
-  },
-  args: {
-    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
-  },
-  run: async ({ args }) => {
-    let format: ReturnType<typeof parseOutputFormat>;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
+async function runConsume({ args }: { args: Record<string, unknown> }): Promise<void> {
+  let format: ReturnType<typeof parseOutputFormat>;
+  try {
+    format = parseOutputFormat(args.output as string | undefined);
+  } catch (err) {
+    writeError(err instanceof Error ? err.message : String(err));
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const repoRoot = await resolveRepoRootForCreate();
+  // Adopt remote batons BEFORE resolution (cross-PC discovery); the post-CAS
+  // sync below still runs its own fetch as the deletion-push lease base.
+  runPreResolutionFetch(repoRoot);
+  const store = new HandoffRefStore(repoRoot);
+  let stem: string;
+  if (typeof args.id === 'string' && args.id.length > 0) {
+    stem = args.id;
+  } else {
+    const resolved = resolvePendingStem(store, format, 'consume');
+    if (resolved === null) {
+      warnPendingUnpushed(repoRoot);
       return;
     }
-    const repoRoot = await resolveRepoRootForCreate();
-    const store = new HandoffStore(repoRoot);
-    const { active, failures } = await store.listActiveDetailed();
-    // ALSO surface committed-remote handoffs so a resuming agent discovers the ones a
-    // fetch/checkout delivered — otherwise the remote tier is unreachable. Parse failures
-    // from BOTH tiers are surfaced (ac-3: never a silent drop).
-    const { handoffs: remote, failures: remoteFailures } = await store.listRemote();
-    const allFailures = [...failures, ...remoteFailures];
+    stem = resolved;
+  }
+  let res: RefConsumeResult;
+  try {
+    res = store.consume(stem);
+  } catch (err) {
+    writeError(`ditto handoff consume failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+    return;
+  }
+  if (res.status === 'not_found') {
+    writeError(`No handoff baton found for ${stem}.`);
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  if (res.status === 'already_consumed') {
+    // DISTINCT from not_found: the baton existed but another session/worktree won
+    // the CAS — an idempotent refusal, not an error.
     if (format === 'json') {
-      writeJson({
-        active: active.map(activeView),
-        remote: remote.map(remoteView),
-        failures: allFailures,
-      });
-      return;
+      writeJson({ id: stem, status: 'already_consumed' });
+    } else {
+      writeHuman(
+        `Handoff baton ${stem} was already consumed in another session/worktree — nothing left to deliver (first-consumer-wins).`,
+      );
     }
-    if (active.length === 0 && remote.length === 0) {
-      writeHuman('No pending handoffs.');
-    }
-    if (active.length > 0) {
-      writeHuman('Pending LOCAL handoffs (consume by id):');
-      for (const a of active) {
-        writeHuman(
-          `  ${stemOf(a.path)}\t[${a.handoff.scope.kind}]\t${a.handoff.created_at}\t${a.handoff.from_context}`,
-        );
-      }
-    }
-    if (remote.length > 0) {
-      writeHuman('Committed REMOTE handoffs (consume by id):');
-      for (const r of remote) {
-        writeHuman(
-          `  ${r.stem}\t[${r.handoff.scope.kind}]\t${r.handoff.created_at}\t${r.handoff.from_context}\t(remote)`,
-        );
-      }
-    }
-    if (allFailures.length > 0) {
-      writeHuman('Unparsable handoff files (surfaced, not dropped):');
-      for (const f of allFailures) {
-        writeHuman(`  ! ${f.path}\t(${f.scope})\t${f.error}`);
-      }
-    }
-  },
-});
+    warnPendingUnpushed(repoRoot);
+    return;
+  }
+  // 1:1 finalization: the local CAS already gated the body; push the deletion
+  // commit BEFORE emitting it so an online consume is finalized on the remote. An
+  // offline/auth failure degrades to local success — the op:'consume' warning
+  // states the remote baton still exists (re-consume window open).
+  const sync = runAutoSync(repoRoot, 'consume', args['push-public'] === true);
+  if (format === 'json') {
+    writeJson({
+      id: stem,
+      scope: res.handoff.scope,
+      deletion_commit: res.commit,
+      sync: sync?.status ?? 'no-remote',
+      body: res.body,
+    });
+  } else {
+    writeHuman(`Consumed handoff baton ${stem}`);
+    writeHuman(
+      `  deletion commit: ${res.commit} (gone for every worktree of this repo — first-consumer-wins)`,
+    );
+    writeHuman('');
+    writeHuman(res.body);
+  }
+  warnPendingUnpushed(repoRoot);
+}
 
 const handoffConsume = defineCommand({
   meta: {
     name: 'consume',
     description:
-      'Soft-consume a handoff by id: load the body on-demand + record a consumed-marker. Does NOT move/delete the file (age-sweep is the sole hard cleanup).',
+      'Consume a handoff baton: body is returned only after the deletion commit lands (first-consumer-wins). No id: auto-resolve a single pending baton, or list several (exit 65).',
   },
   args: {
     id: {
       type: 'positional',
-      description: 'Handoff id (the stem `list` prints: a work item `<wi>`, or `session__<sid>`).',
-      required: true,
+      description: 'Baton id (the stem the disambiguation output prints). Optional.',
+      required: false,
+    },
+    'push-public': {
+      type: 'boolean',
+      description:
+        'Explicit opt-in to push the deletion commit to a public/unknown-visibility remote.',
+      default: false,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
-  run: async ({ args }) => {
-    let format: ReturnType<typeof parseOutputFormat>;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
+  run: runConsume,
+});
+
+async function runShow({ args }: { args: Record<string, unknown> }): Promise<void> {
+  let format: ReturnType<typeof parseOutputFormat>;
+  try {
+    format = parseOutputFormat(args.output as string | undefined);
+  } catch (err) {
+    writeError(err instanceof Error ? err.message : String(err));
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const repoRoot = await resolveRepoRootForCreate();
+  // Adopt remote batons BEFORE resolution (cross-PC discovery); show still
+  // pushes nothing.
+  runPreResolutionFetch(repoRoot);
+  const store = new HandoffRefStore(repoRoot);
+  let baton: RefBaton | undefined;
+  if (typeof args.id === 'string' && args.id.length > 0) {
+    const { batons, failures } = store.list();
+    for (const f of failures) {
+      writeError(`unparsable handoff baton entry ${f.name}: ${f.error}`);
+    }
+    baton = batons.find((b) => b.stem === args.id);
+    if (baton === undefined) {
+      writeError(`No pending handoff baton ${args.id}.`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
-    const repoRoot = await resolveRepoRootForCreate();
-    try {
-      const store = new HandoffStore(repoRoot);
-      // Route by LOOKING UP the id, not by guessing its shape: a committed-remote handoff
-      // is identified by its filename stem in THIS recipient's pending remote set. Found →
-      // consume the remote tier (per-recipient LOCAL marker, no git delete/commit/push).
-      // Not found → the id is a LOCAL handoff, consumed through consumeFor. (An id already
-      // consumed remotely is absent from listRemote and falls through to the local path,
-      // which reports "no active handoff" — nothing to re-consume.)
-      const { handoffs: remote } = await store.listRemote();
-      const remoteMatch = remote.find((r) => r.stem === args.id);
-      if (remoteMatch) {
-        const consumed = await store.consumeRemote(remoteMatch);
-        if (format === 'json') {
-          writeJson({
-            id: consumed.stem,
-            tier: 'remote',
-            scope: consumed.handoff.scope,
-            path: consumed.path,
-            body: consumed.body,
-          });
-        } else {
-          writeHuman(`Handoff ${consumed.stem} (${consumed.path}, remote):\n`);
-          writeHuman(consumed.body);
-        }
-        return;
-      }
-      const consumed = await store.consumeFor(args.id);
-      if (!consumed) {
-        if (format === 'json') writeJson({ id: args.id, handoff: null });
-        else writeHuman(`No active handoff for ${args.id}.`);
-        return;
-      }
-      if (format === 'json') {
-        writeJson({
-          id: stemOf(consumed.path),
-          scope: consumed.handoff.scope,
-          path: consumed.path,
-          body: consumed.body,
-        });
-      } else {
-        writeHuman(`Handoff ${stemOf(consumed.path)} (${consumed.path}):\n`);
-        writeHuman(consumed.body);
-      }
-    } catch (err) {
-      writeError(
-        `ditto handoff consume failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      process.exit(USAGE_ERROR_EXIT);
+  } else {
+    const resolved = resolvePendingStem(store, format, 'show');
+    if (resolved === null) {
+      warnPendingUnpushed(repoRoot);
+      return;
     }
-  },
-});
+    baton = store.list().batons.find((b) => b.stem === resolved);
+    if (baton === undefined) {
+      writeError(`No pending handoff baton ${resolved}.`);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    }
+  }
+  if (format === 'json') {
+    writeJson({
+      id: baton.stem,
+      scope: baton.handoff.scope,
+      created_at: baton.handoff.created_at,
+      body: baton.body,
+    });
+  } else {
+    writeHuman(`Handoff baton ${baton.stem} (read-only — not consumed):`);
+    writeHuman('');
+    writeHuman(baton.body);
+  }
+  warnPendingUnpushed(repoRoot);
+}
 
 const handoffShow = defineCommand({
   meta: {
     name: 'show',
     description:
-      'Read-only view of an active handoff by id (no consumed-marker, does not consume).',
+      'Read-only peek at a pending handoff baton (fetch-first discovery; no deletion, no marker, no push).',
   },
   args: {
     id: {
       type: 'positional',
-      description: 'Handoff id (the stem `list` prints).',
-      required: true,
+      description: 'Baton id (the stem the disambiguation output prints). Optional.',
+      required: false,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
   },
-  run: async ({ args }) => {
-    let format: ReturnType<typeof parseOutputFormat>;
-    try {
-      format = parseOutputFormat(args.output);
-    } catch (err) {
-      writeError(err instanceof Error ? err.message : String(err));
-      process.exit(USAGE_ERROR_EXIT);
-      return;
-    }
-    const repoRoot = await resolveRepoRootForCreate();
-    const found = await new HandoffStore(repoRoot).getActive(args.id);
-    if (!found) {
-      if (format === 'json') writeJson({ id: args.id, handoff: null });
-      else writeHuman(`No active handoff for ${args.id}.`);
-      return;
-    }
-    if (format === 'json') {
-      writeJson({
-        id: stemOf(found.path),
-        scope: found.handoff.scope,
-        path: found.path,
-        body: found.body,
-      });
-    } else {
-      writeHuman(`Handoff ${stemOf(found.path)} (${found.path}):\n`);
-      writeHuman(found.body);
-    }
-  },
+  run: runShow,
 });
 
 export const handoffCommand = defineCommand({
   meta: {
     name: 'handoff',
     description:
-      'Write / discover / consume handoffs. `write` produces a session-scope handoff (no work item); `list` discovers pending ones (explicit pull); `consume <id>` loads a body on-demand; `show <id>` is read-only. `ditto work handoff <id>` remains the work-item producer.',
+      'Handoff batons on the hidden ref (refs/ditto/handoffs). `write` commits a baton and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek. Multiple pending batons are listed by consume/show for disambiguation.',
   },
   // A PURE group: no parent `run`. citty 0.1.6 would ALSO run a parent `run` after a
   // matched subcommand (double-dispatch) and misreads a leading flag value as a
-  // subcommand name — so the session producer is the explicit `write` subcommand, not a
-  // bare `ditto handoff <flags>`.
+  // subcommand name — so every action is an explicit subcommand.
   subCommands: {
     write: handoffWrite,
-    list: handoffList,
     consume: handoffConsume,
     show: handoffShow,
   },
