@@ -1,12 +1,18 @@
 import { defineCommand } from 'citty';
 import { executeHook } from '~/hooks/io';
-import { postToolUseHandler } from '~/hooks/post-tool-use';
-import { preCompactHandler } from '~/hooks/pre-compact';
-import { preToolUseHandler } from '~/hooks/pre-tool-use';
+import { postToolUseHandler as legacyPostToolUseHandler } from '~/hooks/post-tool-use';
+import { preCompactHandler as legacyPreCompactHandler } from '~/hooks/pre-compact';
+import { preToolUseHandler as legacyPreToolUseHandler } from '~/hooks/pre-tool-use';
+import { postToolUseHandler } from '~/hooks/rebuilt/post-tool-use';
+import { preCompactHandler } from '~/hooks/rebuilt/pre-compact';
+import { preToolUseHandler } from '~/hooks/rebuilt/pre-tool-use';
+import { sessionStartHandler } from '~/hooks/rebuilt/session-start';
+import { stopHandler } from '~/hooks/rebuilt/stop';
+import { userPromptSubmitHandler } from '~/hooks/rebuilt/user-prompt-submit';
 import type { HookHandler } from '~/hooks/runtime';
-import { sessionStartHandler } from '~/hooks/session-start';
-import { stopHandler } from '~/hooks/stop';
-import { userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
+import { sessionStartHandler as legacySessionStartHandler } from '~/hooks/session-start';
+import { stopHandler as legacyStopHandler } from '~/hooks/stop';
+import { userPromptSubmitHandler as legacyUserPromptSubmitHandler } from '~/hooks/user-prompt-submit';
 
 /**
  * `ditto hook <event>` — the self-contained hook entry (wi_2606068sy).
@@ -20,8 +26,12 @@ import { userPromptSubmitHandler } from '~/hooks/user-prompt-submit';
  * (including Windows), which is why hooks invoke it through `bun` rather than
  * executing the file directly. This replaces the old `bun run hooks/<event>.ts`
  * entries that depended on the source tree.
+ *
+ * Routing (rebuild increment 3): the REBUILT handlers under `src/hooks/rebuilt/`
+ * are the default; setting `DITTO_HOOKS_LEGACY=1` flips every event back to the
+ * dormant legacy handlers (the rollback path — legacy sources stay untouched).
  */
-const HANDLERS: Record<string, HookHandler> = {
+const REBUILT_HANDLERS: Record<string, HookHandler> = {
   'session-start': sessionStartHandler,
   'user-prompt-submit': userPromptSubmitHandler,
   'pre-tool-use': preToolUseHandler,
@@ -30,12 +40,38 @@ const HANDLERS: Record<string, HookHandler> = {
   stop: stopHandler,
 };
 
-export const HOOK_EVENTS = Object.keys(HANDLERS);
+const LEGACY_HANDLERS: Record<string, HookHandler> = {
+  'session-start': legacySessionStartHandler,
+  'user-prompt-submit': legacyUserPromptSubmitHandler,
+  'pre-tool-use': legacyPreToolUseHandler,
+  'post-tool-use': legacyPostToolUseHandler,
+  'pre-compact': legacyPreCompactHandler,
+  stop: legacyStopHandler,
+};
 
-function parseHookHost(value: unknown): 'claude-code' | 'codex' {
+/** The active handler set: rebuilt by default; DITTO_HOOKS_LEGACY=1 flips back. */
+export function resolveHookHandlers(
+  env: Record<string, string | undefined>,
+): Record<string, HookHandler> {
+  return env.DITTO_HOOKS_LEGACY === '1' ? LEGACY_HANDLERS : REBUILT_HANDLERS;
+}
+
+export const HOOK_EVENTS = Object.keys(REBUILT_HANDLERS);
+
+/**
+ * ditto is a Claude-Code-only host product (ADR-20260722-claude-code-only-host
+ * supersedes the dual-host decision). A `codex` host must FAIL LOUD instead of
+ * running gates that would vacuously pass (false-green is worse than refusal).
+ */
+export function parseHookHost(value: unknown): 'claude-code' {
   if (value === undefined || value === null || value === '') return 'claude-code';
-  if (value === 'claude-code' || value === 'codex') return value;
-  throw new Error(`invalid --host ${String(value)} (expected claude-code|codex)`);
+  if (value === 'claude-code') return value;
+  if (value === 'codex') {
+    throw new Error(
+      'the codex host is no longer supported: ditto is Claude-Code-only (ADR-20260722-claude-code-only-host supersedes the dual-host decision); run hooks without --host or with --host claude-code',
+    );
+  }
+  throw new Error(`invalid --host ${String(value)} (expected claude-code)`);
 }
 
 export const hookCommand = defineCommand({
@@ -53,18 +89,18 @@ export const hookCommand = defineCommand({
     host: {
       type: 'string',
       default: 'claude-code',
-      description: 'Host whose hook envelope feeds stdin/env: claude-code | codex.',
+      description: 'Host whose hook envelope feeds stdin/env: claude-code only.',
     },
   },
   run: async ({ args }) => {
-    const handler = HANDLERS[args.event];
+    const handler = resolveHookHandlers(process.env)[args.event];
     if (!handler) {
       process.stderr.write(
         `ditto hook: unknown event "${args.event}"; expected one of: ${HOOK_EVENTS.join(', ')}\n`,
       );
       process.exit(2);
     }
-    let host: 'claude-code' | 'codex';
+    let host: 'claude-code';
     try {
       host = parseHookHost(args.host);
     } catch (err) {
