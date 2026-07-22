@@ -19,12 +19,24 @@ import { relative } from 'node:path';
  * credential / token regex scrub runs (defense-in-depth).
  */
 
-/** Credential / token shapes scrubbed from any free-text fragment (defense-in-depth). */
-const TOKEN_PATTERNS: RegExp[] = [
+/**
+ * Credential / token shapes scrubbed from any free-text fragment (defense-in-depth).
+ * Exported (wi_260722g7h) so the handoff auto-push scrub gate DETECTS against the
+ * exact same blacklist it scrubs with — a free-text baton body cannot be
+ * allow-listed, so this coverage is the defense ceiling and is extended in the
+ * same increment that introduces auto-push (PEM keys, JWTs, URL-embedded creds).
+ */
+export const TOKEN_PATTERNS: RegExp[] = [
   /gh[pousr]_[A-Za-z0-9]{20,}/g, // GitHub PAT / OAuth / user-to-server / refresh / server token
   /github_pat_[A-Za-z0-9_]{20,}/g, // fine-grained PAT
   /\bAKIA[0-9A-Z]{16}\b/g, // AWS access-key id
   /\b[A-Za-z0-9_-]*(?:secret|token|api[_-]?key|password)[A-Za-z0-9_-]*\s*[:=]\s*\S+/gi,
+  // PEM private-key block (BEGIN marker alone is enough to flag an unterminated block).
+  /-----BEGIN[A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END[A-Z ]*PRIVATE KEY-----)?/g,
+  // JWT: three base64url segments, first starting with the {"alg"… header prefix eyJ.
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\b/g,
+  // URL-embedded credentials: scheme://user:password@host …
+  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/:@]+@/gi,
 ];
 
 /** Internal work-item identifiers — not emitted on a public issue body. */
