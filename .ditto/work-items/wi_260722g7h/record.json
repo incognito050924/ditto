@@ -1,0 +1,494 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260722g7h",
+  "title": "핸드오프 재설계 — 숨은 ref 단일 스토어(1:1 바통)",
+  "source_request": "핸드오프를 임시 1:1 바통으로 재정의: 로컬/원격 2계층 파일 스토어를 숨은 ref(refs/ditto/handoffs) 단일 스토어로 대체. consume=읽기+삭제 커밋(first-consumer-wins), list/archive/sweep/per-recipient 마커 제거, ditto-매개 ref push/fetch로 머신 간 전달(고빈도 cross-PC), 유한 보존. 생산자 강화(rich 필드 CLI 노출, pre-compact 조립, 덮어쓰기 merge)와 work handoff의 종결 판정 분리 검토 포함. ADR-20260714-handoff-remote-committed-tier 및 ADR-20260706 handoff-tier 분류 supersede 예정.",
+  "goal": "핸드오프가 숨은 ref(refs/ditto/handoffs) 단일 스토어의 사용자-개시 1:1 임시 바통으로 동작한다 — consume 즉시 정리되어 쌓이지 않고, 동시 세션·worktree 간 충돌·손실이 없으며, cross-PC 전달이 ditto-매개 자동 push/fetch로 동작한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto handoff write가 refs/ditto/handoffs에 바통 커밋을 만들고, 작업 트리·현재 브랜치 히스토리·git branch 목록에는 아무 변화가 없다. rich 필드가 CLI로 기록된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ditto handoff consume이 본문을 반환하고 삭제 커밋을 남긴다. 같은 바통은 재소비 불가하고, 같은 repo의 다른 worktree에서도 사라진 것으로 관측된다 (first-consumer-wins).",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "write/consume이 refs/ditto/* 만 origin과 자동 push/fetch한다. 원격 불가 시 로컬은 성공하고 경고가 출력되며 다음 명령에서 재시도된다. 코드 브랜치 push는 일어나지 않는다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/cli/commands/handoff.test.ts src/core/handoff-ref-sync.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-scrub",
+      "statement": "모든 ref push 전에 token-scrub 게이트가 실행되고, 스크럽 후 재파싱이 실패하면 push가 중단되며 오류가 표면화된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-retention-invariant",
+      "statement": "보존 창(7일과 50커밋 중 큰 쪽) 초과 히스토리 truncation은 ref tip tree를 바꾸지 않는다 — pending 바통은 truncation 중 동시 쓰기 상황을 포함해 항상 생존한다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-concurrent-push",
+      "statement": "원격 ref가 앞서 있어 push가 거부되면 fetch 후 재병합·재시도한다. 강제 push는 truncation 경로에 한정되며, 그 외 push 실패는 조용히 삼켜지지 않고 오류로 표면화된다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-split",
+      "statement": "ditto work handoff 명령이 제거되고, 채점·done/partial 전환은 work done 전용이며, 미완 마감이 핸드오프를 자동 발행하지 않고, PreCompact 훅이 핸드오프를 쓰지 않는다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-rewire",
+      "statement": "구 스토어 경로(handoff list·archive·sweep·consumed 마커)가 제거되고, 커밋된 잔여 핸드오프 파일이 정리되며, 스킬·훅·문서에 옛 명령 참조가 0건이다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-adr",
+      "statement": "ADR-20260714-handoff-remote-committed-tier와 ADR-20260706의 handoff-tier 분류를 supersede하는 ADR이 기록되고, refs/ditto/* 한정 push 상시 허가(①②③)가 durable하게 남는다.",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "artifact"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260722g7h/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "file"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/knowledge/adr/ADR-20260722-handoff-hidden-ref-baton.md",
+    ".ditto/knowledge/adr/ADR-20260714-handoff-remote-committed-tier.md",
+    ".ditto/knowledge/adr/ADR-20260706-work-item-record-run-split.md",
+    "CLAUDE.md",
+    "src/cli/commands/work.ts",
+    "src/core/work-item-handoff.ts",
+    "src/hooks/pre-compact.ts",
+    "src/hooks/rebuilt/pre-compact.ts",
+    "tests/hooks/pre-compact.test.ts",
+    "src/core/handoff-ref-store.ts",
+    "src/core/handoff-ref-store.test.ts",
+    "src/core/handoff-ref-sync.ts",
+    "src/core/handoff-ref-sync.test.ts",
+    "src/core/git.ts",
+    "src/core/github-redaction.ts",
+    "src/cli/commands/handoff.ts",
+    "src/cli/commands/handoff.test.ts",
+    "skills/handoff/SKILL.md",
+    "docs/features/handoff.md",
+    "docs/features/work.md",
+    "src/core/handoff-store.ts",
+    "src/core/handoff-store.test.ts",
+    "src/core/autopilot-loop.ts",
+    "src/core/intent-quality-doctor.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "src/hooks/rebuilt/user-prompt-submit.ts",
+    "src/core/session-pointer.ts",
+    ".ditto/handoff/session__sess-2026-07-19t17-35-06-602z-03acc1__t-t-test.md",
+    ".ditto/handoff/session__sess-2026-07-19t18-20-25-478z-d36539__t-t-test.md",
+    ".ditto/handoff/session__sess-2026-07-20t00-27-01-566z-3dba85__t-t-test.md",
+    ".ditto/handoff/session__sess-2026-07-20t05-06-40-845z-38310d__hskim-ecoletree-com.md",
+    ".ditto/handoff/session__sess-2026-07-22t12-00-09-542z-f5aace__hskim-ecoletree-com.md",
+    ".ditto/handoff/session__sess-2026-07-22t14-02-25-007z-d528e6__hskim-ecoletree-com.md"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260722g7h",
+    "fresh_evidence_needed": [
+      "land aborted — 77 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_2607130ld/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130ld/record.json, .ditto/work-items/wi_2607130oc/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607130oc/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607130oc/events/000002.workspace-write.3ed6a2cd8aca.json, .ditto/work-items/wi_2607130oc/events/000003.workspace-write.7388b14cbddc.json, .ditto/work-items/wi_2607130oc/events/000004.workspace-write.6034daaeaa33.json, .ditto/work-items/wi_2607130oc/events/000005.workspace-write.ec4ed759cc75.json, .ditto/work-items/wi_2607130oc/events/000006.workspace-write.69c47b255e09.json, .ditto/work-items/wi_2607130oc/record.json, .ditto/work-items/wi_26071389d/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_26071389d/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_26071389d/events/000002.workspace-write.745d477797fa.json, .ditto/work-items/wi_26071389d/events/000003.workspace-write.48cbc7f13879.json, .ditto/work-items/wi_26071389d/events/000004.workspace-write.71a59e762eef.json, .ditto/work-items/wi_26071389d/events/000005.workspace-write.c98e330c7d24.json, .ditto/work-items/wi_26071389d/events/000006.workspace-write.1d4a9e51bfd9.json, .ditto/work-items/wi_26071389d/record.json, .ditto/work-items/wi_2607138pr/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607138pr/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_2607138pr/events/000002.workspace-write.886a35a07b28.json, .ditto/work-items/wi_2607138pr/events/000003.workspace-write.952789b0dfa4.json, .ditto/work-items/wi_2607138pr/events/000004.workspace-write.9b80d1421a1d.json, .ditto/work-items/wi_2607138pr/events/000005.workspace-write.02d1bc21e71f.json, .ditto/work-items/wi_2607138pr/events/000006.workspace-write.92a85e525a94.json, .ditto/work-items/wi_2607138pr/events/000007.workspace-write.754980ac2685.json, .ditto/work-items/wi_2607138pr/record.json, .ditto/work-items/wi_260713be4/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713be4/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713be4/events/000002.workspace-write.67eaae88477f.json, .ditto/work-items/wi_260713be4/events/000003.workspace-write.f05f5a6b6ecc.json, .ditto/work-items/wi_260713be4/events/000004.workspace-write.abbb6a5075e1.json, .ditto/work-items/wi_260713be4/events/000005.workspace-write.ca8f709a3d72.json, .ditto/work-items/wi_260713be4/record.json, .ditto/work-items/wi_260713bo1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713bo1/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713bo1/events/000002.workspace-write.80d66f889ea4.json, .ditto/work-items/wi_260713bo1/events/000003.workspace-write.bd0ab762e187.json, .ditto/work-items/wi_260713bo1/events/000004.workspace-write.ae52d2961e0a.json, .ditto/work-items/wi_260713bo1/events/000005.workspace-write.ce0c15d2eab5.json, .ditto/work-items/wi_260713bo1/events/000006.workspace-write.0b8dddd3a42f.json, .ditto/work-items/wi_260713bo1/events/000007.workspace-write.ac4f70291432.json, .ditto/work-items/wi_260713bo1/record.json, .ditto/work-items/wi_260713kyb/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713kyb/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713kyb/events/000002.workspace-write.90cf1b24a3d9.json, .ditto/work-items/wi_260713kyb/record.json, .ditto/work-items/wi_260713tsw/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713tsw/events/000001.workspace-write.b6e05c4e419f.json, .ditto/work-items/wi_260713tsw/record.json, .ditto/work-items/wi_260713w0g/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260713w0g/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260713w0g/events/000002.workspace-write.a608710a213e.json, .ditto/work-items/wi_260713w0g/events/000003.workspace-write.40a853809739.json, .ditto/work-items/wi_260713w0g/events/000004.workspace-write.9571c04e1eb2.json, .ditto/work-items/wi_260713w0g/events/000005.workspace-write.cba10747e468.json, .ditto/work-items/wi_260713w0g/record.json, .ditto/work-items/wi_2607220o1/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_2607220o1/events/000001.workspace-write.6b0cb055fa97.json, .ditto/work-items/wi_2607220o1/events/000002.workspace-write.d985998c8a9e.json, .ditto/work-items/wi_2607220o1/events/000003.workspace-write.bce6ef74c9f7.json, .ditto/work-items/wi_2607220o1/events/000004.workspace-write.042fa316ba65.json, .ditto/work-items/wi_2607220o1/events/000005.workspace-write.999a7ff89587.json, .ditto/work-items/wi_2607220o1/record.json, .ditto/work-items/wi_260722g7h/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260722g7h/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260722g7h/events/000002.workspace-write.c1a27212f6d8.json, .ditto/work-items/wi_260722g7h/events/000003.workspace-write.837c29fbbb46.json, .ditto/work-items/wi_260722g7h/events/000004.workspace-write.3f97b9a94e5e.json, .ditto/work-items/wi_260722g7h/events/000005.workspace-write.867d52105711.json, .ditto/work-items/wi_260722g7h/events/000006.workspace-write.886cbcb8bdc7.json, .ditto/work-items/wi_260722g7h/events/000007.workspace-write.fcc78c287b8d.json, .ditto/work-items/wi_260722g7h/events/000008.workspace-write.969ac1c509fe.json, .ditto/work-items/wi_260722g7h/events/000009.workspace-write.013fa86e228e.json, .ditto/work-items/wi_260722g7h/events/000010.workspace-write.15d87f8d869d.json, .ditto/work-items/wi_260722g7h/events/000011.workspace-write.315fc896f554.json, .ditto/work-items/wi_260722g7h/record.json. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "5f94ffea720423f63a1ce007246c30d426602714",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_260722g7h/"
+  ],
+  "created_at": "2026-07-22T15:22:46.700Z",
+  "updated_at": "2026-07-22T19:04:55.915Z",
+  "closed_at": "2026-07-22T19:04:55.914Z"
+}
