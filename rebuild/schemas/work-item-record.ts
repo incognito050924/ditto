@@ -50,6 +50,8 @@ export const declaredRisk = z
   .object({
     statement: z.string().min(1),
     severity: riskSeverity.optional(),
+    /** Completion-gate disposition; absent means open (undisposed). */
+    disposition: z.enum(['open', 'accepted', 'mitigated']).optional(),
   })
   .strict();
 export type DeclaredRisk = z.infer<typeof declaredRisk>;
