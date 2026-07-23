@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723bx4",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "be07c53a197d97a620ef5e195fe98c0471b8c2ce492115fa33f27d0573f78cd5",
+  "ts": "2026-07-23T06:42:11.554Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c S=$(awk \"/^### 9\\./{f=1;next} /^### 10\\./{f=0} f\" docs/redesign/ditto-presentation/script.md); test \"$(printf %s \"$S\" | grep -c prism)\" -ge 2 && test \"$(printf %s \"$S\" | grep -c deep-interview)\" -ge 2",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

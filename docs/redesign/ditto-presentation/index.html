@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DITTO — 신뢰할 수 있는 코딩 에이전트 작업 조율</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="vendor/reveal/reset.css" />
+  <link rel="stylesheet" href="vendor/reveal/reveal.css" />
+  <link rel="stylesheet" href="assets/css/theme.css" />
+</head>
+<body>
+  <div class="deck-chrome">
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="jumpPanel">목차</button>
+    <div class="nav-status" aria-live="polite"></div>
+  </div>
+
+  <nav id="jumpPanel" class="jump-panel" aria-label="장표 바로 이동" hidden>
+    <div class="jump-panel__head">
+      <strong>DITTO 발표 목차</strong>
+      <button class="jump-panel__close" type="button">닫기</button>
+    </div>
+    <div class="jump-panel__list"></div>
+  </nav>
+
+  <div class="reveal">
+    <div class="slides">
+      <section data-title="표지" data-section="Intro">
+        <div class="cover">
+          <div class="cover__rail"></div>
+          <div class="cover__kicker">Agentic Software Engineering</div>
+          <h1>DITTO</h1>
+          <p class="cover__claim">코딩 에이전트를 실제 프로젝트에서 신뢰할 수 있는 작업 수행자로 만드는 작업 조율 계층</p>
+          <div class="cover__foot">의도 · 증거 · 위임 · 기억</div>
+        </div>
+      </section>
+
+      <section data-title="목차" data-section="Intro">
+        <div class="slide slide--toc">
+          <div class="slide__label">목차</div>
+          <div class="slide__inner">
+            <h2>오늘의 흐름</h2>
+            <div class="toc-list">
+              <button type="button" data-jump="2"><span>01</span> 빠른 실험의 힘</button>
+              <button type="button" data-jump="3"><span>02</span> 제품 코드의 기준</button>
+              <button type="button" data-jump="4"><span>03</span> 권위의 문제</button>
+              <button type="button" data-jump="5"><span>04</span> 문서의 수명</button>
+              <button type="button" data-jump="6"><span>05</span> 좋은 코드베이스</button>
+              <button type="button" data-jump="7"><span>06</span> 반복 실행의 경계</button>
+              <button type="button" data-jump="8"><span>07</span> 의도 파악의 기술</button>
+              <button type="button" data-jump="9"><span>08</span> 실패를 먼저 보기</button>
+              <button type="button" data-jump="10"><span>09</span> DITTO로의 번역</button>
+              <button type="button" data-jump="11"><span>10</span> 에이전트의 빈틈</button>
+              <button type="button" data-jump="12"><span>11</span> DITTO의 원칙</button>
+              <button type="button" data-jump="13"><span>12</span> 맞는 일과 과한 일</button>
+              <button type="button" data-jump="14"><span>13</span> 작업 흐름</button>
+              <button type="button" data-jump="15"><span>14</span> 사용자 표면</button>
+              <button type="button" data-jump="16"><span>15</span> 두 작업 경로</button>
+              <button type="button" data-jump="17"><span>16</span> 가치 보장 장치</button>
+              <button type="button" data-jump="18"><span>17</span> 실행 구조</button>
+              <button type="button" data-jump="19"><span>18</span> Hook의 위치</button>
+              <button type="button" data-jump="20"><span>19</span> Hook의 종류</button>
+              <button type="button" data-jump="21"><span>20</span> DITTO Hook</button>
+              <button type="button" data-jump="22"><span>21</span> 도입 전후</button>
+              <button type="button" data-jump="23"><span>22</span> 적용 조건</button>
+              <button type="button" data-jump="24"><span>23</span> 방향 제시</button>
+              <button type="button" data-jump="25"><span>24</span> 현재 상태 평가</button>
+              <button type="button" data-jump="26"><span>25</span> 환경과 방법 제시</button>
+              <button type="button" data-jump="27"><span>26</span> 정리</button>
+            </div>
+            <p class="bottom-line">오른쪽 위 `목차` 버튼으로 발표 중 언제든 원하는 장표로 바로 이동할 수 있습니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="빠른 실험의 힘" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">배경</div>
+          <div class="slide__inner">
+            <h2>바이브 코딩은 빠른 출발점</h2>
+            <div class="fit-grid">
+              <div class="fit-grid__good">
+                <h3>강한 곳</h3>
+                <p>아이디어를 바로 만져보고, 낮은 위험의 도구나 프로토타입을 빠르게 만든다.</p>
+              </div>
+              <div class="fit-grid__bad">
+                <h3>약한 곳</h3>
+                <p>오래 유지될 제품 코드에서는 품질, 보안, 결정의 이유, 변경 범위가 남아야 한다.</p>
+              </div>
+            </div>
+            <p class="bottom-line">빠르게 만드는 능력과 오래 유지하는 능력은 같은 문제가 아닙니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="제품 코드의 기준" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">배경</div>
+          <div class="slide__inner">
+            <h2>제품 코드는 계속 살아남아야 한다</h2>
+            <div class="standards">
+              <div><b>오늘 동작</b><span>사용자가 기대한 결과를 낸다.</span></div>
+              <div><b>내일 변경</b><span>다음 요구사항을 받아들일 수 있다.</span></div>
+              <div><b>이유 보존</b><span>왜 이렇게 만들었는지 남아 있다.</span></div>
+              <div><b>품질 유지</b><span>보안, 성능, 구조가 무너지지 않는다.</span></div>
+            </div>
+            <p class="bottom-line">에이전틱 코딩의 기준은 “만들었는가”에서 “계속 다룰 수 있는가”로 올라가야 합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="권위의 문제" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">권위</div>
+          <div class="slide__inner">
+            <h2>무엇을 믿고 다음 변경을 할 것인가</h2>
+            <div class="authority-flow">
+              <div><b>실행되는 코드</b><span>최종 동작의 기준</span></div>
+              <div><b>테스트와 설정</b><span>동작과 환경의 기준</span></div>
+              <div><b>결정의 이유</b><span>코드만으로 복원하기 어려운 맥락</span></div>
+              <div><b>낡은 문서</b><span>검증 없이 믿으면 위험한 기억</span></div>
+            </div>
+            <p class="bottom-line">문서가 문제가 아니라, 낡은 문서가 권위처럼 쓰이는 상황이 문제입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="문서의 수명" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">문서</div>
+          <div class="slide__inner">
+            <h2>문서는 셋 중 하나여야 한다</h2>
+            <div class="doc-life">
+              <div><em>1</em><b>살아있는 기록</b><span>코드 변화와 함께 갱신된다.</span></div>
+              <div><em>2</em><b>결정의 이유</b><span>왜 이 선택을 했는지 남긴다.</span></div>
+              <div><em>3</em><b>임시 산출물</b><span>소비한 뒤 정리하거나 폐기한다.</span></div>
+            </div>
+            <p class="bottom-line">이 구분이 없으면 에이전트는 낡은 맥락을 근거로 그럴듯하지만 틀린 결정을 내립니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="좋은 코드베이스" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">품질</div>
+          <div class="slide__inner">
+            <h2>에이전트가 잘 일하는 코드베이스</h2>
+            <div class="sustain-grid">
+              <div><b>이해 가능</b><span>사람도 에이전트도 구조를 빠르게 잡는다.</span></div>
+              <div><b>적절한 추상화</b><span>복잡도를 줄이고 변경 지점을 좁힌다.</span></div>
+              <div><b>명확한 규칙</b><span>우연한 스타일과 즉흥 변경을 줄인다.</span></div>
+              <div><b>남는 결정</b><span>코드 뒤의 이유가 다음 작업으로 이어진다.</span></div>
+            </div>
+            <p class="bottom-line">좋은 코드베이스는 한 번 만드는 산출물이 아니라 계속 가꾸는 상태입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="반복 실행의 경계" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">루프</div>
+          <div class="slide__inner">
+            <h2>반복은 출구를 강하게 만들지만, 과정 전체를 보장하지는 않는다</h2>
+            <div class="loop-grid">
+              <div class="loop-grid__ok">
+                <h3>잘 맞는 반복</h3>
+                <p>성공 기준이 분명하고, 자동으로 확인할 수 있고, 기존 코드와 충돌이 적은 작업.</p>
+              </div>
+              <div class="loop-grid__risk">
+                <h3>부족한 반복</h3>
+                <p>제품 판단, 설계 품질, 보안, 장기 유지보수처럼 통과/실패만으로 닫기 어려운 작업.</p>
+              </div>
+            </div>
+            <p class="bottom-line">반복 실행에는 의도 확인, 범위 제한, 결정 기록, 독립된 검증이 붙어야 합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="의도 파악의 기술" data-section="Background">
+        <div class="slide">
+          <div class="slide__label">의도</div>
+          <div class="slide__inner">
+            <h2>요구사항을 받아 적기 전에 의미를 고정한다</h2>
+            <div class="intent-grid">
+              <div><b>목적</b><span>사용자가 정말 얻고 싶은 결과와 피하고 싶은 상태를 분리한다.</span></div>
+              <div><b>제약</b><span>바뀌면 안 되는 구조, 일정, 운영 조건, 사용자의 우선순위를 확인한다.</span></div>
+              <div><b>질문 지도</b><span>모호한 표현을 질문으로 바꾸고, 답이 필요한 지점을 드러낸다.</span></div>
+              <div><b>반대 관점</b><span>그럴듯하지만 틀릴 수 있는 해석을 먼저 세워보고 깨뜨린다.</span></div>
+            </div>
+            <p class="bottom-line">DITTO의 의도 인터뷰와 관점 점검은 “무엇을 만들까”보다 “성공이 무엇인가”를 먼저 묻습니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="실패를 먼저 보기" data-section="Background">
+        <div class="slide slide--compact">
+          <div class="slide__label">위험</div>
+          <div class="slide__inner">
+            <h2>완료 기준은 잠재 실패를 먼저 볼 때 높아진다</h2>
+            <div class="failure-map">
+              <div><b>가장 그럴듯한 실패</b><span>이 변경이 틀어진다면 무엇 때문인지 먼저 적는다.</span></div>
+              <div><b>먼 영향</b><span>보안, 성능, 데이터, 배포, 운영 흐름까지 영향을 넓혀 본다.</span></div>
+              <div><b>숨은 기대</b><span>사용자가 말하지 않았지만 깨지면 안 되는 흐름을 찾는다.</span></div>
+              <div><b>판단 분리</b><span>자동 검증, 사람 판단, 후속 과제로 남길 일을 나눈다.</span></div>
+              <div><b>성공 기준 보강</b><span>위험을 확인 가능한 완료 조건으로 바꾼다.</span></div>
+              <div><b>미확인 항목 표시</b><span>확인하지 못한 것은 통과로 처리하지 않고 남긴다.</span></div>
+            </div>
+            <p class="bottom-line">사전 실패 점검은 불안을 늘리는 절차가 아니라, “완료”라는 말의 기준을 올리는 절차입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="DITTO로의 번역" data-section="Background">
+        <div class="slide slide--compact">
+          <div class="slide__label">연결</div>
+          <div class="slide__inner">
+            <h2>문제의식이 실제 표면으로 이어진다</h2>
+            <div class="translation-map">
+              <div><b>의도가 흐림</b><span>모호한 요청을 질문 지도와 확정된 목표로 바꾼다.</span><em>ditto:prism · ditto:deep-interview</em></div>
+              <div><b>작업이 흩어짐</b><span>요청을 작업 항목으로 만들고 상태, 범위, 후속 항목을 추적한다.</span><em>ditto work</em></div>
+              <div><b>완료가 모호함</b><span>실행한 명령과 브라우저 흐름을 완료 조건의 증거로 남긴다.</span><em>ditto verify · ditto e2e</em></div>
+              <div><b>세션이 끊김</b><span>다음 세션이 같은 의도와 상태에서 이어받게 한다.</span><em>ditto handoff</em></div>
+              <div><b>결정이 사라짐</b><span>용어, 결정, 코드 관계를 다음 작업에서 다시 찾을 수 있게 한다.</span><em>ditto knowledge · ditto memory</em></div>
+              <div><b>운영 경계가 위험함</b><span>설치 상태, 분리 작업 공간, 원격 반영 경계를 점검한다.</span><em>ditto doctor · ditto worktree · ditto push-gate</em></div>
+            </div>
+            <p class="bottom-line">DITTO 설명은 추상 가치가 아니라 사용자가 실제로 만나는 표면에서 출발해야 합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="에이전트의 빈틈" data-section="Why">
+        <div class="slide">
+          <div class="slide__label">문제</div>
+          <div class="slide__inner">
+            <h2>그럴듯함이 옳음을 이기는 순간</h2>
+            <div class="problem-layout">
+              <div class="problem-main">
+                <b>DITTO가 막는 실패</b>
+                <p>의도 왜곡, 증거 없는 완료, 긴 대화로 인한 판단 흐림, 변경 흩어짐, 지식 휘발.</p>
+              </div>
+              <div class="problem-points">
+                <span>요청을 조용히 줄이지 않는다.</span>
+                <span>검증하지 않은 완료를 통과시키지 않는다.</span>
+                <span>자기 맥락에서 자기 작업을 채점하지 않는다.</span>
+                <span>세션이 끝나도 결정과 용어를 남긴다.</span>
+              </div>
+            </div>
+            <p class="bottom-line">DITTO는 모델의 실패 양식을 구조로 다루는 제품입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="DITTO의 원칙" data-section="Why">
+        <div class="slide slide--dark">
+          <div class="slide__label">사상</div>
+          <div class="slide__inner">
+            <h2>의도, 범위, 증거, 기억</h2>
+            <div class="principles">
+              <div><b>의도를 잠근다</b><span>명령보다 결과를 먼저 확인한다.</span></div>
+              <div><b>작게 바꾼다</b><span>요청 밖 변경과 얕은 추상화를 줄인다.</span></div>
+              <div><b>증거로 말한다</b><span>완료는 테스트, 빌드, 로그, 재현 결과로만 인정한다.</span></div>
+              <div><b>기억을 남긴다</b><span>결정, 용어, 근거를 코드 곁에 축적한다.</span></div>
+            </div>
+            <p class="bottom-line">빠르게 코드를 뱉는 에이전트를 의도에 충실하고 증거로 말하는 협업자로 바꿉니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="맞는 일과 과한 일" data-section="Use">
+        <div class="slide">
+          <div class="slide__label">대상</div>
+          <div class="slide__inner">
+            <h2>길고, 흔적이 필요하고, 실패 비용이 있는 일</h2>
+            <div class="fit-grid">
+              <div class="fit-grid__good">
+                <h3>잘 맞는 경우</h3>
+                <p>기능 단위 위임, 장기 리팩터링, 여러 세션에 걸친 프로젝트 관리, 팀 단위 에이전트 도입.</p>
+              </div>
+              <div class="fit-grid__bad">
+                <h3>과할 수 있는 경우</h3>
+                <p>5분짜리 일회성 코드 생성, 버릴 프로토타입, 성공 기준을 따질 필요가 없는 실험.</p>
+              </div>
+            </div>
+            <p class="bottom-line">DITTO는 모든 프롬프트에 붙이는 장식이 아니라, 책임 있는 작업 단위에 붙이는 실행 규율입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="사용 흐름" data-section="Use">
+        <div class="slide">
+          <div class="slide__label">사용법</div>
+          <div class="slide__inner">
+            <h2>사용자는 표면을 따라 작업을 닫는다</h2>
+            <div class="lifecycle">
+              <div><em>1</em><b><code>ditto work</code></b><span>요청을 작업 항목으로 만들고 상태, 목표, 후속 항목을 추적한다.</span></div>
+              <div><em>2</em><b><code>ditto:prism</code></b><span>모호한 요청은 질문 지도와 설계 문서로 정리한다.</span></div>
+              <div><em>3</em><b><code>ditto verify</code></b><span>테스트, 빌드, 실행 명령을 완료 조건의 증거로 기록한다.</span></div>
+              <div><em>4</em><b><code>ditto work done</code></b><span>증거, 미확인 항목, 남은 위험을 묶어 종료한다.</span></div>
+            </div>
+            <p class="bottom-line">복잡한 작업은 중간에 의도 인터뷰, 자동 실행, 브라우저 흐름 검증, 인계 표면이 추가됩니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="사용자 표면" data-section="Features">
+        <div class="slide slide--compact">
+          <div class="slide__label">기능</div>
+          <div class="slide__inner">
+            <h2>사용자가 실제로 만나는 DITTO</h2>
+            <div class="value-map">
+              <div><b><code>install / setup</code></b><span>설치와 프로젝트 연결</span><p>플러그인, CLI, 프로젝트의 `.ditto/` 상태를 준비한다.</p></div>
+              <div><b><code>work</code></b><span>작업 항목 생명주기</span><p>시작, 기준 설정, 상태 확인, 완료, 포기, 재개, 후속 항목을 다룬다.</p></div>
+              <div><b><code>prism</code></b><span>모호한 요청 정리</span><p>열린 쟁점을 사용자 언어로 보여주고, 승인된 설계를 작업 항목으로 나눈다.</p></div>
+              <div><b><code>deep-interview</code></b><span>착수 전 의도 확정</span><p>성공 기준을 쓰기 어려운 요청에서 질문과 사전 실패 점검을 거친다.</p></div>
+              <div><b><code>verify / e2e</code></b><span>증거 기록</span><p>명령 실행 결과와 실제 브라우저 사용자 흐름을 완료 근거로 남긴다.</p></div>
+              <div><b><code>handoff / knowledge</code></b><span>이어받기와 기억</span><p>세션 경계의 맥락, 합의한 용어, 중요한 결정을 남긴다.</p></div>
+            </div>
+            <p class="bottom-line">DITTO는 하나의 버튼이 아니라 작업 전후를 감싸는 여러 사용자 표면의 묶음입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="두 작업 경로" data-section="Use">
+        <div class="slide">
+          <div class="slide__label">경로</div>
+          <div class="slide__inner">
+            <h2>신중한 경로와 빠른 경로</h2>
+            <div class="contract-layout">
+              <div class="route-box">
+                <h3>신중한 경로</h3>
+                <p><code>work</code> → <code>prism</code> 또는 <code>deep-interview</code> → 자동 실행 → <code>work done</code></p>
+                <span>모호함, 되돌리기 어려운 위험, 여러 화면이나 모듈에 걸친 장시간 작업</span>
+              </div>
+              <div class="route-box route-box--light">
+                <h3>빠른 경로</h3>
+                <p><code>work start</code> → <code>work set-criteria</code> → <code>verify</code> → <code>work done</code></p>
+                <span>작고 되돌릴 수 있으며 완료 기준이 명확한 작업</span>
+              </div>
+              <div class="completion-box">
+                <h3>완료 계약</h3>
+                <p>성공 기준별 판정, 변경 파일, 검증 명령, 확인 못 한 항목, 남은 위험, 이어받기 정보.</p>
+              </div>
+            </div>
+            <p class="bottom-line">전체 완료는 모든 성공 기준이 검증 기록과 함께 통과했을 때만 인정됩니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="가치 보장 장치" data-section="Features">
+        <div class="slide slide--compact">
+          <div class="slide__label">사용법</div>
+          <div class="slide__inner">
+            <h2>표면별로 무엇을 보장하는가</h2>
+            <table class="usage-table value-usage">
+              <tr><th>표면</th><th>사용자가 하는 일</th><th>DITTO가 붙이는 보장</th></tr>
+              <tr><td><code>ditto work</code></td><td>작업을 만들고, 상태를 보고, 완료하거나 재개한다.</td><td>요청, 완료 조건, 후속 항목, 종료 상태를 한 작업 항목 안에 묶는다.</td></tr>
+              <tr><td><code>ditto:prism</code></td><td>애매한 요청을 설계 문서와 작은 작업으로 정리한다.</td><td>남은 쟁점을 사용자 언어로 보여주고, 명시 승인 전에는 쪼개거나 확정하지 않는다.</td></tr>
+              <tr><td><code>ditto:deep-interview</code></td><td>착수 전 질문에 답해 의도를 확정한다.</td><td>성공 기준, 제약, 잠재 실패를 통과 가능한 작업 기준으로 만든다.</td></tr>
+              <tr><td><code>ditto verify</code></td><td>테스트나 빌드 명령을 실행해 기록한다.</td><td>완료 주장을 방금 실행한 명령의 결과에 묶고, 빈 검증 명령은 거부한다.</td></tr>
+              <tr><td><code>ditto e2e</code></td><td>사용자 여정을 브라우저 테스트로 만들고 실행한다.</td><td>화면 흐름 변경이 실제 사용자 흐름을 깨뜨리는지 따로 확인한다.</td></tr>
+              <tr><td><code>handoff / memory</code></td><td>이어받기 문서와 검색 가능한 맥락을 남긴다.</td><td>세션이 바뀌어도 원 의도와 결정 근거를 다시 추측하지 않게 한다.</td></tr>
+            </table>
+            <p class="bottom-line">가치는 기능명 뒤에 붙는 설명이고, 설명의 기준점은 사용자가 실제로 만지는 표면입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="실행 구조" data-section="Architecture">
+        <div class="slide slide--dark">
+          <div class="slide__label">동작</div>
+          <div class="slide__inner">
+            <h2>규칙 엔진, 판단 연결부, 실행 환경</h2>
+            <div class="architecture">
+              <div><b>규칙 엔진</b><span>데이터 형식, 점검 규칙, 상태, 완료 계약</span></div>
+              <div><b>판단 연결부</b><span>모델에게 물을 지점과 답을 받는 형식</span></div>
+              <div><b>실행 환경</b><span>Codex, Claude Code 같은 실제 작업 공간</span></div>
+              <div><b>변경 통제</b><span>변경 계약, 기록된 결정과의 충돌, 원격 반영 경계</span></div>
+            </div>
+            <p class="bottom-line">실행 환경이 바뀌어도 지켜야 할 것은 규율과 데이터 형식입니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="Hook의 위치" data-section="Architecture">
+        <div class="slide slide--compact">
+          <div class="slide__label">Hook</div>
+          <div class="slide__inner">
+            <h2>Claude Code Hook은 실행 흐름의 특정 지점에 걸린다</h2>
+            <div class="hook-flow">
+              <div><b>세션 시작</b><span>SessionStart · InstructionsLoaded</span></div>
+              <div><b>사용자 입력</b><span>UserPromptSubmit · UserPromptExpansion</span></div>
+              <div><b>도구 사용 전</b><span>PreToolUse · PermissionRequest · PermissionDenied</span></div>
+              <div><b>도구 사용 후</b><span>PostToolUse · PostToolUseFailure · PostToolBatch</span></div>
+              <div><b>서브 작업</b><span>SubagentStart · SubagentStop · TaskStart · TaskStop</span></div>
+              <div><b>종료와 압축</b><span>Stop · StopFailure · PreCompact · PostCompact · SessionEnd</span></div>
+            </div>
+            <p class="bottom-line">Hook은 대화 바깥의 실행 지점이다. 어떤 Hook은 컨텍스트를 더하고, 어떤 Hook은 실행을 막거나 기록만 남긴다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="Hook의 종류" data-section="Architecture">
+        <div class="slide slide--compact">
+          <div class="slide__label">Hook</div>
+          <div class="slide__inner">
+            <h2>Claude Code가 제공하는 Hook 표면</h2>
+            <div class="hook-surface">
+              <div><b>세션</b><span>SessionStart, SessionEnd, InstructionsLoaded, CwdChanged</span></div>
+              <div><b>프롬프트</b><span>UserPromptSubmit, UserPromptExpansion</span></div>
+              <div><b>도구</b><span>PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, PermissionRequest, PermissionDenied</span></div>
+              <div><b>표시·알림</b><span>MessageDisplay, Notification</span></div>
+              <div><b>서브에이전트·작업</b><span>SubagentStart, SubagentStop, TaskStart, TaskStop</span></div>
+              <div><b>파일·설정·MCP</b><span>FileChanged, SettingsChange, MCPServerStart, MCPServerStop</span></div>
+              <div><b>정지·압축</b><span>Stop, StopFailure, PreCompact, PostCompact</span></div>
+            </div>
+            <p class="bottom-line">DITTO는 이 전체 표면을 다 쓰지 않고, 작업 조율에 필요한 지점만 골라 쓴다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="DITTO Hook" data-section="Architecture">
+        <div class="slide slide--compact">
+          <div class="slide__label">Hook</div>
+          <div class="slide__inner">
+            <h2>DITTO가 실제로 쓰는 Hook과 적용되는 문맥</h2>
+            <table class="usage-table hook-table">
+              <tr><th>Hook</th><th>시점</th><th>적용되는 문맥</th></tr>
+              <tr><td><code>SessionStart</code></td><td>세션 시작</td><td>DITTO 모드 배너, worktree 안 세션의 작업 항목 자동 연결 안내.</td></tr>
+              <tr><td><code>UserPromptSubmit</code></td><td>사용자 입력 직후</td><td>활성 작업 항목, 재개/생성 안내, 의도 인터뷰 필요 신호, 먼저 확인할 수 있는 질문 안내.</td></tr>
+              <tr><td><code>PreToolUse</code></td><td>도구 실행 전</td><td>비밀 파일, 저장소 밖 쓰기, 파괴적 명령, 변경 범위 위반, 진행 중 작업 범위 밖 편집 차단.</td></tr>
+              <tr><td><code>PostToolUse</code></td><td>도구 실행 후</td><td>실행 명령과 편집 파일을 작업 항목의 증거 기록으로 남김.</td></tr>
+              <tr><td><code>PreCompact</code></td><td>컨텍스트 압축 전</td><td>활성 작업의 의도, 상태, 다음 확인 지점을 handoff 문서로 저장.</td></tr>
+              <tr><td><code>Stop</code></td><td>모델이 멈추려 할 때</td><td>남은 작업, 검증 누락, 의도 drift, 고위험 미해결 항목을 보고 계속 진행시킴.</td></tr>
+            </table>
+            <p class="bottom-line">DITTO는 prompt hook을 쓰기보다 command hook으로 추가 컨텍스트와 차단 피드백을 모델에게 돌려준다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="도입 전후" data-section="Value">
+        <div class="slide">
+          <div class="slide__label">전후</div>
+          <div class="slide__inner">
+            <h2>완료의 의미 변화</h2>
+            <table class="compare">
+              <tr><th>그냥 에이전트</th><th>DITTO가 붙은 에이전트</th></tr>
+              <tr><td>“수정했습니다”</td><td>성공 기준별 통과 여부와 검증 기록을 제시</td></tr>
+              <tr><td>긴 대화가 곧 맥락</td><td>목표, 범위, 관련 파일, 검증 기록을 묶어 의도를 운반</td></tr>
+              <tr><td>문제 발견 시 즉흥 확장</td><td>후속 과제를 기록하는 일과 지금 처리하는 일을 분리</td></tr>
+              <tr><td>세션이 끝나면 결정이 휘발</td><td>공유 용어, 중요한 결정, 코드 관계로 축적</td></tr>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="적용 조건" data-section="Risk">
+        <div class="slide">
+          <div class="slide__label">한계</div>
+          <div class="slide__inner">
+            <h2>잘 맞는 문제, 덜 맞는 문제</h2>
+            <div class="limits">
+              <div><b>판정 기준이 약한 문제</b><span>제품 판단과 설계 미학은 통과/실패로 닫기 어렵다.</span></div>
+              <div><b>작은 일회성 작업</b><span>게이트 비용이 이득보다 클 수 있다.</span></div>
+              <div><b>도구 부재</b><span>브라우저나 정적분석 엔진이 없으면 할 수 있는 검증 수준을 낮춰서 표시한다.</span></div>
+              <div><b>불명확한 목표</b><span>무엇을 성공으로 볼지 합의되지 않으면 게이트도 약해진다.</span></div>
+            </div>
+            <p class="bottom-line">잠재 사용자에게는 어디에 쓰면 좋은가만큼 어디에는 과한가도 같이 말해야 합니다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="방향 제시" data-section="Close">
+        <div class="slide">
+          <div class="slide__label">사람</div>
+          <div class="slide__inner">
+            <h2>방향을 제시한다</h2>
+            <div class="human-role">
+              <p>코드를 일일이 쓰는 사람에서, 방향을 정하는 사람으로</p>
+              <p>프로젝트와 제품은 어떤 형태여야 하는가</p>
+              <p>무엇을 만들고 싶은가 · 왜 만들고 싶은가 · 어떤 모습에 가까워져야 하는가</p>
+            </div>
+            <p class="bottom-line">코드는 에이전트가 많이 만들 수 있다. 방향은 사람이 말해야 한다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="현재 상태 평가" data-section="Close">
+        <div class="slide">
+          <div class="slide__label">평가</div>
+          <div class="slide__inner">
+            <h2>현재 상태를 평가한다</h2>
+            <div class="human-role">
+              <p>돌아간다 ≠ 원하는 제품에 가까워졌다</p>
+              <p>지금의 제품 · 프로젝트 · 코드베이스는 내가 그리는 그림과 맞는가</p>
+              <p>목표와 현재 상태 사이의 차이를 발견하고 줄이는 일</p>
+            </div>
+            <p class="bottom-line">기능 동작 여부보다, 목표와의 거리감을 보는 일이 중요해진다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="환경과 방법 제시" data-section="Close">
+        <div class="slide">
+          <div class="slide__label">환경</div>
+          <div class="slide__inner">
+            <h2>환경과 방법을 제시한다</h2>
+            <div class="human-role">
+              <p>에이전트가 더 나은 결과를 만들 수 있는 환경</p>
+              <p>명확한 목표 · 검증 가능한 완료 기준 · 읽히는 코드베이스</p>
+              <p>살아있는 문서 · 안전한 실행 경계 · 좋은 결과가 나올 수 있는 방법</p>
+            </div>
+            <p class="bottom-line">DITTO는 이 조건을 의도, 실행, 검증, 기억으로 잡아 보려는 시도다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section data-title="정리" data-section="Close">
+        <div class="slide slide--closing">
+          <div class="slide__label">정리</div>
+          <div class="slide__inner">
+            <h2>의도, 증거, 컨텍스트, 기억</h2>
+            <div class="closing-grid">
+              <div>의도를 잃지 말 것</div>
+              <div>증거로만 완료할 것</div>
+              <div>컨텍스트를 격리할 것</div>
+              <div>결정을 코드 곁에 남길 것</div>
+            </div>
+            <p class="final-line">DITTO가 지키는 것은 이 네 가지 규율입니다.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="vendor/reveal/reveal.js"></script>
+  <script src="assets/js/deck.js"></script>
+</body>
+</html>

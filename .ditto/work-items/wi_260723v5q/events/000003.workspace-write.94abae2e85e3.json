@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723v5q",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "94abae2e85e3ddf2c47ba499be2711b1d1a8ba067e749b34464a08e2340a7919",
+  "ts": "2026-07-23T06:20:25.116Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(grep -c \"src/\" docs/redesign/ditto-presentation/script.md)\" -ge 10",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

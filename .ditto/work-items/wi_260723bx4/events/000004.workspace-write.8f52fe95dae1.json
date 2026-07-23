@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723bx4",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "8f52fe95dae1fa1b9ec3241cc9defa5312826b5f04ae163b4b7f46e651e5e5e5",
+  "ts": "2026-07-23T06:42:30.950Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(grep -c \"에이전틱 변경 거버넌스\" docs/redesign/ditto-presentation/script.md)\" -ge 3 && test \"$(grep -c \"ACG\" docs/redesign/ditto-presentation/script.md)\" -eq 0",
+        "summary": "exit 1"
+      },
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(grep -o \"에이전틱 변경 거버넌스\" docs/redesign/ditto-presentation/script.md | wc -l)\" -ge 3 && test \"$(grep -c \"ACG\" docs/redesign/ditto-presentation/script.md)\" -eq 0",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723bx4",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "9b90264b085727367514f5d5db03f94bd8a8235a91a85a4bd2d41e1fd0df5d64",
+  "ts": "2026-07-23T06:42:13.029Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(awk \"/^### 10\\./{f=1;next} /^### 11\\./{f=0} f\" docs/redesign/ditto-presentation/script.md | grep -c pre-mortem)\" -ge 3",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

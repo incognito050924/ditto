@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607232rl",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "c0769a7fc755ab0fcee0f6f26b525c206645190fb33066226e4c0227c09793f5",
+  "ts": "2026-07-23T06:45:47.207Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(grep -c \"기각됐\" docs/redesign/ditto-presentation/script.md)\" -eq 0 && test \"$(grep -c \"채택돼\" docs/redesign/ditto-presentation/script.md)\" -eq 0",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723v5q",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "a45f6db32ce003ef12f091692535908b52858160d9228c475e74e67d894c038a",
+  "ts": "2026-07-23T06:20:20.729Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(grep -cE \"안녕하세요|감사합니다|말씀드리|질문 받기|연출 메모\" docs/redesign/ditto-presentation/script.md)\" -eq 0",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

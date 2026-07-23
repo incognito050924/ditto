@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723v5q",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "ecd73e18b6d64866613fb3b407550de627f1aee558670fa3a93f60d805949d88",
+  "ts": "2026-07-23T06:20:29.418Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/96b3eab6-759b-4dfd-91e7-db93097d2e58/scratchpad/check-titles.sh",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

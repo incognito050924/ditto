@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607232rl",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "f45aacc0bfa2fa384c062b42d65f960fca2da419e8fd91aa52f54de93def02b5",
+  "ts": "2026-07-23T06:45:45.928Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "sh -c test \"$(grep -c \"src/\" docs/redesign/ditto-presentation/script.md)\" -eq 0 && test \"$(grep -c \"SKILL.md\" docs/redesign/ditto-presentation/script.md)\" -eq 0 && test \"$(grep -c \"intent.json\" docs/redesign/ditto-presentation/script.md)\" -eq 0",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
