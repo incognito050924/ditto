@@ -1,0 +1,56 @@
+# red proof (task-2) — oracle-2 run on the UNFIXED scratch clone (real palimpsest untouched)
+# date-utc: 2026-07-23T01:14:00Z (재실측 exit 확정 run; 최초 red run 동일 세션 수분 전)
+# clone: git clone --no-hardlinks <ABLATION_PALIMPSEST_SRC> <scratch>/palimpsest-clone-2 && git remote remove origin
+# clone-head: 20435ccdbfe4a5a70e198aaeec5d608fa9f490da  (== frozen fixture commit, rules.md §4)
+# clone-remotes: []
+# oracle sha256: fca5338c1c8135dcb809ea97563df75d02c0a5f70ce5174fffa10461537e6c59
+# injected as: tests/test_ablation_oracle_2.py (oracle/DEST)
+# command: ./.venv/bin/python -m pytest tests/test_ablation_oracle_2.py -v  (venv inside the clone, pip install -e . pytest)
+
+============================= test session starts ==============================
+platform darwin -- Python 3.13.9, pytest-9.1.1, pluggy-1.6.0 -- <scratch>/palimpsest-clone-2/.venv/bin/python
+collected 3 items
+
+tests/test_ablation_oracle_2.py::test_sanity_cli_help_exits_zero PASSED  [ 33%]
+tests/test_ablation_oracle_2.py::test_load_missing_payload_is_reported_honestly FAILED [ 66%]
+tests/test_ablation_oracle_2.py::test_load_malformed_payload_is_reported_honestly FAILED [100%]
+
+FAILED clause (both cases) — the AC assertion itself, not a collection/import error:
+  assert TRACEBACK_MARKER not in out
+  AssertionError: a nonexistent payload path must produce a human-readable error, not a raw Python traceback
+  AssertionError: a non-JSON payload file must produce a human-readable error, not a raw Python traceback
+========================= 2 failed, 1 passed in 0.56s ==========================
+
+# pytest exit code: 1  (1 = red on the AC assertions; 2/5 would be collection/usage error)
+# breakdown: test_sanity_cli_help_exits_zero PASSED (interpreter/install/parser valid)
+#            / both load error-reporting tests FAILED on the no-traceback assertion (the red)
+
+# ── pre-improvement symptom, observed directly on the unfixed clone (observable difference):
+#   $ ./.venv/bin/python -m palimpsest load /tmp/no-such-payload-xyz.json
+#     Traceback (most recent call last): ... FileNotFoundError: [Errno 2] No such file or
+#     directory: '/tmp/no-such-payload-xyz.json'          -> exit 1 (raw traceback)
+#   $ ./.venv/bin/python -m palimpsest load <malformed.json>
+#     Traceback (most recent call last): ... json.decoder.JSONDecodeError: Expecting
+#     property name enclosed in double quotes: ...        -> exit 1 (raw traceback)
+#   (contrast, same clone: `reconcile` without --branch prints one honest line and exits 2
+#    — the in-repo precedent that makes the inconsistency real)
+
+# ── baseline regression scope, re-measured on the same unfixed clone with the frozen
+#    rules.json regression.pytest_cmd (verbatim): 250 passed, exit 0
+#    (identical to the round-1 frozen baseline — fixture commit unchanged)
+
+# ── solvability probe (proves the minimal correct solution EXISTS and is machine-green;
+#    probe DISCARDED afterward — it is NOT part of this bundle and leaks nowhere):
+#    a ~16-line guard around the payload-read path of the `load` subcommand in
+#    src/palimpsest/cli.py (try/except OSError·JSONDecodeError -> one stderr line naming
+#    the payload + nonzero return; no other file touched) yields:
+#      oracle-2:                    3 passed, pytest exit 0   (green)
+#      frozen scoped suite + oracle: 253 passed, exit 0        (250 pre-existing + 3 oracle, no regression)
+#      scope-meter (frozen scope-meter.sh, direct mode):
+#        files_changed_tracked=[src/palimpsest/cli.py], out_of_request_tracked=0,
+#        existing_test_modified=0, new_test_files=[tests/test_ablation_oracle_2.py],
+#        out_of_request_untracked=0
+#    negative probe (meter validity): touching src/palimpsest/ir.py + tests/test_cli_annotations.py
+#    + stray NOTES.md -> out_of_request_tracked=2, existing_test_modified=1,
+#    out_of_request_untracked=1 (all three violation classes detected)
+#    clone fully reverted to pre-state after the probe (git checkout + rm; porcelain clean).

@@ -1,0 +1,11 @@
+{
+  "schema": "ablation-charter-snapshot/1",
+  "snapshot_relpath": "charter/CLAUDE.md",
+  "sha256": "3aec7335cc6b6c14b110534de2f2be380011d0fb6f51c4efb442a99dfcdf5190",
+  "source_path": "resources/managed/AGENTS.md",
+  "source_repo_root": "ditto (this repo)",
+  "source_last_touch_commit": "9b98479cbdd5621897cd658a6748ca55725ef92c",
+  "identical_at_arm_a_anchor_commit": true,
+  "canonical_basis": "product install path (src/core/setup.ts installResource): AGENTS.md is the canonical host-agnostic raw charter source; CLAUDE.md is a projection of it. B1 receives exactly this snapshot injected as clone/CLAUDE.md (harness ABLATION_CHARTER_RELPATH) and nothing else — no repo-local CLAUDE/ADR/knowledge.",
+  "verified_at_utc": "2026-07-23"
+}

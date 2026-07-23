@@ -1,0 +1,33 @@
+# 동결 전 셀프 게이트 (task-2 bundle) — 실측 결과, date-utc: 2026-07-23
+
+G1  prompt-2.md blind-scanner 누출: score.sh 10패턴(ditto/autopilot/PreToolUse/
+    PostToolUse/work[-_ ]?item/deep-interview/charter/CLAUDE\.md/AGENTS\.md/DITTO_)
+    grep -Eic 전수 스캔 -> 매칭 0. PASS
+G1b answers/answers.md(피더 문안 — arm A 세션에 닿을 수 있는 유일한 추가 텍스트)
+    동일 10패턴 스캔 -> 매칭 0. PASS
+G2  oracle-2 진단정보 비누출(구조 증명): 세션에 주입되는 번들 파일은 prompt와
+    flags뿐이다(run-session.sh pre-flight: injected-prompt.md / injected-claude-
+    flags.txt만 복사). oracle-2는 채점 시점(세션 종료 후) score.sh가 digest 검증
+    후 재주입한다 — 세션 표면에 oracle 내용이 닿는 경로 없음. 또한 oracle-2의
+    모든 단언은 prompt-2의 관찰 가능 완료 기준에서 도출된다:
+      returncode != 0        <- "종료 코드는 0이 아니어야"
+      no Traceback marker    <- "파이썬 traceback이 아니라 ... 오류 메시지"
+      offending name in out  <- "어떤 입력이 문제였는지 드러나며"
+      --help exit 0          <- "정상 입력의 기존 동작은 그대로" (sanity)
+    exit code 값·메시지 문구·stderr/stdout·수정 위치는 단언하지 않는다(해석-중립).
+    PASS
+G3  A·B1 대칭: 두 arm 모두 같은 prompt-2.md·같은 claude-flags.txt를 받는다
+    (provision/run-session은 arm에 따라 프롬프트·플래그를 바꾸지 않음). 처치
+    정체성 사본 digest == 1차 동결값 전부 일치:
+      claude-flags.txt   a64312bc070f054337780508c01dde2c235be834886bcd5964b61b37c4b90bb8
+      charter/CLAUDE.md  3aec7335cc6b6c14b110534de2f2be380011d0fb6f51c4efb442a99dfcdf5190
+      charter/manifest.json db8c6232bd6515832bc0d88f1127f8f499512c962456c172d112222092f90ff2
+      arm-a/ditto        7120a7f44cb39e36b542c88166e6bbbd124153c87004ec1ab952eb89abebd160
+      arm-a.json         ced01b68df5883f842587d73ca9f2c8ab78f08c14eebca14aecfd37a8bd5a783
+    PASS
+G4  manifest 정본/alias 동일성 + sha 체인: manifest-2.sha256 == manifest.sha256
+    (byte-identical, cmp) ∧ score.sh verify-chain(ABLATION_BUNDLE_DIR=bundle-2)
+    leg-1 disk==manifest OK. 동결 커밋 후 --frozen-commit leg-2 재검증 결과는
+    커밋 메시지가 아니라 채점 기록에 남긴다(commit sha는 커밋 자신에 못 넣음).
+    PASS (실행 로그는 소유 노드 결과 보고에 축자 보존)
+G5  harness/self-check.sh 재실행 -> failures=0. PASS (결과 보고에 축자 보존)
