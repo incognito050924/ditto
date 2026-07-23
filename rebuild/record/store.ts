@@ -14,6 +14,7 @@ import {
 } from '../schemas/work-item-record';
 import { readJson, writeJson } from '../util/fs';
 import { committedWorkItemDir } from '../util/paths';
+import { checkIntentLock } from '../state/intent-lock';
 import {
   appendEvent,
   createEvent,
@@ -256,6 +257,13 @@ export interface CriterionInput {
  * from the first verdict on, criteria dropped from the proposal are KEPT and
  * marked `superseded` — never erased — and only additions land as new rows.
  */
+export class IntentLockViolationError extends Error {
+  constructor(id: string, reason: string) {
+    super(`work item ${id}: ${reason}`);
+    this.name = 'IntentLockViolationError';
+  }
+}
+
 export async function setCriteria(
   repoRoot: string,
   id: string,
@@ -265,12 +273,34 @@ export async function setCriteria(
   const hasVerdict = events.some((e) => e.kind === 'verdict');
   const proposedIds = new Set(proposed.map((c) => c.id));
 
-  const fresh = (c: CriterionInput) => ({
-    id: c.id,
-    statement: c.statement,
-    verdict: 'unverified' as const,
-    evidence: [],
-  });
+  // A locked intent freezes the AC id-set from the lock moment (not first
+  // verdict): dropping a frozen id is inadmissible, additions are fine.
+  if (record.intent_lock !== undefined) {
+    const check = checkIntentLock(
+      record.intent_lock,
+      proposed.map((c) => c.id),
+    );
+    if (!check.admissible) {
+      throw new IntentLockViolationError(id, check.reason ?? 'intent-lock violation');
+    }
+  }
+
+  const oracleById = new Map(
+    record.acceptance_criteria
+      .filter((c) => c.oracle !== undefined)
+      .map((c) => [c.id, c.oracle]),
+  );
+  const fresh = (c: CriterionInput) => {
+    const oracle = oracleById.get(c.id);
+    return {
+      id: c.id,
+      statement: c.statement,
+      verdict: 'unverified' as const,
+      evidence: [],
+      // AC↔oracle 수렴 유지: 잠긴/기존 기준을 다시 세워도 oracle은 보존된다
+      ...(oracle !== undefined ? { oracle } : {}),
+    };
+  };
 
   const nextCriteria = hasVerdict
     ? [
