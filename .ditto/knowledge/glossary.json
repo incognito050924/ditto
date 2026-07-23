@@ -244,13 +244,21 @@
     },
     {
       "term": "handoff",
-      "aliases": [],
-      "definition": "work item을 다른 세션/PC/agent로 이어주기 위한 사람이 읽는 문서. 무엇이 끝났나, 무엇이 남았나, 어디서 이어받나, 어떤 fresh evidence가 필요한가, 무엇을 건드리지 않아야 하는가를 담는다.",
-      "examples": [],
-      "not_to_be_confused_with": [],
+      "aliases": [
+        "baton",
+        "바통"
+      ],
+      "definition": "같은 작업을 잇는 다음 세션/PC/agent에게 원 의도·내려진 결정·현재 상태·첫 확인 지점을 운반하는 사용자-발의 1:1 소멸성 바통. `ditto handoff write`로만 발행되며(자동 발행 없음) 숨은 ref refs/ditto/handoffs의 커밋으로 저장된다(작업 트리 파일·브랜치 커밋 없음, origin 자동 동기화). `ditto handoff consume`의 소비는 파괴적: 본문은 정확히 한 번 반환되고 바통은 삭제된다(first-consumer-wins). 완료 판정과 직교 — 채점·상태 전이는 ditto work done의 소관이며 바통은 verdict를 싣지 않는다.",
+      "examples": [
+        "ditto handoff write --intent … --from … --state … --next …",
+        "ditto handoff consume [id] (재개 세션 시작 시)"
+      ],
+      "not_to_be_confused_with": [
+        "completion contract (완료 판정 산출물 — 핸드오프는 완료와 직교)"
+      ],
       "status": "agreed",
       "forbidden_abbreviations": [],
-      "agreed_at": "2026-05-24T12:00:00+09:00"
+      "agreed_at": "2026-07-22T00:00:00+09:00"
     },
     {
       "term": "host adapter",

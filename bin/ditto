@@ -48966,6 +48966,78 @@ ${push.stdout}`.trim();
   }
   return { status, warnings, pushedStems, scrubFindings: [] };
 }
+function purgeHandoffHistory(cwd, remote, opts) {
+  const warnings = [];
+  const timeoutMs = opts.timeoutMs ?? SYNC_TIMEOUT_MS;
+  try {
+    if (opts.visibility !== "private" && opts.allowPublicRemote !== true) {
+      appendSyncLog(cwd, {
+        event: "public-remote-refused",
+        remote,
+        visibility: opts.visibility,
+        op: "purge"
+      });
+      return {
+        status: "public-remote-refused",
+        warnings,
+        detail: `remote visibility is '${opts.visibility}' \u2014 purge push refused (fail-closed)`
+      };
+    }
+    const fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+    if (!fetched.ok) {
+      appendSyncLog(cwd, { event: "purge-failed", remote, detail: fetched.out });
+      return { status: "failed", warnings, detail: `purge requires the remote: ${fetched.out}` };
+    }
+    const remoteSha = fetched.sha;
+    let localTip = revParseQuiet(cwd, HANDOFF_REF);
+    if (remoteSha !== null)
+      localTip = applyReconcile(cwd, remoteSha);
+    if (localTip === null)
+      return { status: "nothing-to-purge", warnings, detail: "ref is unborn" };
+    const newRoot = commitTree(cwd, treeOf(cwd, localTip), null, "ditto handoff baton: purge history (secret recall)");
+    const scan = scrubScan(cwd, newRoot, null);
+    if (!scan.ok || scan.findings.length > 0) {
+      const entries = [...new Set(scan.findings.map((f4) => f4.entry))];
+      appendSyncLog(cwd, {
+        event: "scrub-refused",
+        remote,
+        scan_ok: scan.ok,
+        entries,
+        phase: "purge"
+      });
+      return {
+        status: "scrub-refused",
+        warnings,
+        detail: `tip tree still carries secret-shaped content (${entries.join(", ")}) \u2014 consume/rewrite the offending baton first`
+      };
+    }
+    let push;
+    if (remoteSha === null) {
+      const refspec = `${newRoot}:${HANDOFF_REF}`;
+      assertDittoPushRefspec(refspec);
+      push = runGitBounded(cwd, ["push", remote, "--", refspec], timeoutMs);
+    } else {
+      push = forcePushTruncated(cwd, remote, newRoot, remoteSha, timeoutMs);
+    }
+    if (!push.ok) {
+      const out = `${push.stderr}
+${push.stdout}`.trim();
+      appendSyncLog(cwd, { event: "purge-failed", remote, detail: out });
+      return { status: "failed", warnings, detail: out };
+    }
+    const cas = gitLocal(cwd, ["update-ref", HANDOFF_REF, newRoot, localTip]);
+    if (cas.exitCode !== 0) {
+      appendSyncLog(cwd, { event: "purge-local-cas-lost", remote, detail: cas.stderr.trim() });
+    }
+    recordPushed(cwd, newRoot);
+    appendSyncLog(cwd, { event: "purged", remote, tip: newRoot });
+    return { status: "purged", warnings, detail: `history rewritten to single root ${newRoot}` };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    appendSyncLog(cwd, { event: "purge-failed", remote, detail });
+    return { status: "failed", warnings, detail };
+  }
+}
 
 // src/cli/commands/handoff.ts
 function generateSessionId() {
@@ -49418,15 +49490,81 @@ var handoffShow = defineCommand({
   },
   run: runShow
 });
+async function runPurge({ args }) {
+  let format;
+  try {
+    format = parseOutputFormat(args.output);
+  } catch (err) {
+    writeError(err instanceof Error ? err.message : String(err));
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const repoRoot = await resolveRepoRootForCreate();
+  if (!hasOriginRemote(repoRoot)) {
+    writeError("handoff purge requires an origin remote");
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const result2 = purgeHandoffHistory(repoRoot, "origin", {
+    visibility: resolveRepoVisibility(repoRoot),
+    allowPublicRemote: args["push-public"] === true,
+    op: "command"
+  });
+  for (const w2 of result2.warnings)
+    writeError(w2);
+  switch (result2.status) {
+    case "purged":
+    case "nothing-to-purge": {
+      if (format === "json") {
+        writeJson2({ status: result2.status, detail: result2.detail, warnings: result2.warnings });
+      } else if (result2.status === "purged") {
+        writeHuman(`Purged handoff baton ref history: ${result2.detail}`);
+      } else {
+        writeHuman(`Nothing to purge \u2014 ${result2.detail} (idempotent no-op).`);
+      }
+      warnPendingUnpushed(repoRoot);
+      return;
+    }
+    case "public-remote-refused":
+      writeError(result2.detail);
+      writeError("handoff purge: pass --push-public to opt in for a public/unknown remote.");
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    case "scrub-refused":
+      writeError(result2.detail);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    case "failed":
+      writeError(result2.detail);
+      process.exit(1);
+      return;
+  }
+}
+var handoffPurge = defineCommand({
+  meta: {
+    name: "purge",
+    description: "Secret recall: rewrite the local baton ref history to a single root (current tip tree preserved) and lease-push it, cutting a leaked blob out of remote history. Requires an origin remote."
+  },
+  args: {
+    "push-public": {
+      type: "boolean",
+      description: "Explicit opt-in to push the purged (rewritten) ref history to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published).",
+      default: false
+    },
+    output: { type: "string", description: "Output format: human|json", default: "human" }
+  },
+  run: runPurge
+});
 var handoffCommand = defineCommand({
   meta: {
     name: "handoff",
-    description: "Handoff batons on the hidden ref (refs/ditto/handoffs). `write` commits a baton and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek. Multiple pending batons are listed by consume/show for disambiguation."
+    description: "Handoff batons on the hidden ref (refs/ditto/handoffs). `write` commits a baton and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek; `purge` rewrites the ref history to a single root and lease-pushes it (secret recall). Multiple pending batons are listed by consume/show for disambiguation."
   },
   subCommands: {
     write: handoffWrite,
     consume: handoffConsume,
-    show: handoffShow
+    show: handoffShow,
+    purge: handoffPurge
   }
 });
 
@@ -60792,4 +60930,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=7ebe623ccad7c22cdb517b440f953a4863b4ef862199e982366879e273b61444
+//# ditto-src-stamp=78a39473fd2c8520ce329acf87ab00be5b539d257e4ce19c8bd23e5d2ef1f1c6
