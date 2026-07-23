@@ -458,5 +458,6 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260715-worktree-land-to-origin · accepted · worktree 작업의 랜딩은 작업 브랜치 커밋을 origin/<default>로 직접 push — 공유 로컬 main 머지 경로 폐기 (ADR-0011·ADR-20260626 clarify — supersede 아님)
 - ADR-20260722-claude-code-only-host · accepted · Claude-Code-only 호스트 — dual-host(ADR-0016) supersede · codex host flag는 시끄러운 실패 · Codex 표면 제거는 추적 후속
 - ADR-20260722-handoff-hidden-ref-baton · accepted · 핸드오프 = 사용자-발의 1:1 소멸성 바통 — 단일 저장소 refs/ditto/handoffs 숨은 ref + first-consumer-wins CAS + refs/ditto/* 한정 push 상시허가
+- ADR-20260723-handoff-publication-object-gate · accepted · 핸드오프 push의 "공개" 판정 = 신규-객체 전송 기준 — 삭제-전용 push 무동의 예외(신원 마스킹 재발행·fail-closed) + 프로젝트당 1회 write-push 동의 (ADR-20260722-handoff-hidden-ref-baton refine — supersede 아님)
 
 <!-- ditto:knowledge:end -->
