@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723r0y",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "9d840b10782fe08bc7b9d910b76a36712abe43f0c1b271a8b5c25be7514fe3a7",
+  "ts": "2026-07-23T12:32:02.112Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c rg -q \"re-consume window open.*loud duplication window, public included\" src/core/handoff-ref-sync.test.ts && bun test src/core/handoff-ref-sync.test.ts -t '(k)'",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

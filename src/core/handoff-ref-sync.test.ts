@@ -856,6 +856,43 @@ describe('deletion-only visibility exemption (public remote, no opt-in)', () => 
     expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
   });
 
+  test('(k) offline × public: a consume sync degrades to local-only BEFORE the exemption (no push), with the loud re-consume-window warning', async () => {
+    // wi_260723r0y (reviewer unverified 2·3): the offline degrade and the public
+    // visibility gate compose — a fetch failure exits before the push loop, so
+    // the exemption is never evaluated and nothing is pushed; the offline
+    // consume warning must carry the re-consume window NOTE also under public
+    // visibility. Recovery: once reachable again, the SAME public no-opt-in sync
+    // propagates the deletion via the exemption.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const { store, stemX, stemY } = await seededPair(repo);
+    expect(store.consume(stemX).status).toBe('consumed');
+    const remoteTipBefore = git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim();
+    expect(
+      git(repo, ['remote', 'set-url', 'origin', join(origin, 'no-such-remote.git')]).exitCode,
+    ).toBe(0);
+
+    const out = syncHandoffRef(
+      repo,
+      'origin',
+      opts({ visibility: 'public', op: 'consume', offlineBackoffMs: 1 }),
+    );
+    expect(out.status).toBe('local-only-offline'); // degraded, NOT public-remote-refused
+    const warning = out.warnings.join('\n');
+    expect(warning).toContain('could not reach');
+    expect(warning).toContain('re-consume window open'); // loud duplication window, public included
+    // The real origin never saw a push of any kind: tip unchanged, X still there.
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(remoteTipBefore);
+    expect(treeNames(origin, HANDOFF_REF)).toContain(`${stemX}.md`);
+
+    // Back online: the same public, no-opt-in sync now lands the deletion via the
+    // exemption (identity-masked), closing the re-consume window.
+    expect(git(repo, ['remote', 'set-url', 'origin', origin]).exitCode).toBe(0);
+    const retry = syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' }));
+    expect(retry.status).toBe('pushed');
+    expect(treeNames(origin, HANDOFF_REF)).toEqual([`${stemY}.md`]);
+  });
+
   test('(d) an unborn/unobserved remote base is fail-closed refused (no published base to delete against)', async () => {
     // fail-closed: a first push to an unborn public remote would publish EVERYTHING,
     // so a consume against it can never be a deletion-only exemption.
