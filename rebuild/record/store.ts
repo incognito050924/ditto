@@ -5,6 +5,7 @@ import type { Evidence } from '../schemas/evidence';
 import type { Verdict } from '../schemas/verdict';
 import {
   REBUILD_RECORD_SCHEMA_VERSION,
+  RE_ENTRY_STATUSES,
   isTerminalStatus,
   workItemRecord,
   type ReEntry,
@@ -56,6 +57,16 @@ export class NotTerminalError extends Error {
   constructor(id: string, status: WorkItemStatus) {
     super(`work item ${id} is not terminal (${status}) — nothing to reopen`);
     this.name = 'NotTerminalError';
+  }
+}
+
+export class ParkingRequiresFinalizeError extends Error {
+  constructor(id: string, status: WorkItemStatus) {
+    super(
+      `work item ${id} cannot transition to "${status}" directly — parking ` +
+        'statuses require the finalize path, which enforces the re_entry contract',
+    );
+    this.name = 'ParkingRequiresFinalizeError';
   }
 }
 
@@ -171,6 +182,11 @@ export async function transitionWorkItem(
   const { events, view } = await loadWorkItem(repoRoot, id);
   if (isTerminalStatus(view.status)) {
     throw new TerminalStatusError(id, view.status);
+  }
+  if ((RE_ENTRY_STATUSES as readonly string[]).includes(input.to)) {
+    // park 계약 우회 차단: partial/unverified/blocked는 re_entry를 강제하는
+    // finalize 경로로만 진입한다 (이벤트-only 전이로는 재진입 계약이 안 남는다)
+    throw new ParkingRequiresFinalizeError(id, input.to);
   }
   const now = new Date().toISOString();
   const event = createEvent({

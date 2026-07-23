@@ -80,6 +80,16 @@ describe('record store — boundary transitions are recorded immediately as even
     expect(reopened.view.closed_at).toBeNull();
   });
 
+  test('parking statuses are refused on the transition path — re_entry lives on finalize only', async () => {
+    const root = await freshRepo();
+    await createWorkItem(root, { id: 'wi_park', title: 'p' });
+    for (const to of ['partial', 'unverified', 'blocked'] as const) {
+      await expect(
+        transitionWorkItem(root, 'wi_park', { to, actor: 'me' }),
+      ).rejects.toThrow(/finalize/i);
+    }
+  });
+
   test('reopen refuses a non-terminal item', async () => {
     const root = await freshRepo();
     await createWorkItem(root, { id: 'wi_r', title: 'r' });
