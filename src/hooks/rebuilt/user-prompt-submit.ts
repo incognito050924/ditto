@@ -27,7 +27,7 @@ import {
  * (no-auto-pick), the deep-interview directive (placeholder-AC or risk signal ∧
  * execution intent), the self-answer hint, the classification log line, and the
  * session-pointer stale-GC tick. The handoff stale-sweep that used to run here
- * was removed without replacement (wi_260722g7h): ref-baton consume deletes
+ * was removed without replacement (wi_260722g7h): hidden-ref handoff consume deletes
  * immediately, so there is no stale-active handoff set to sweep; only the
  * transitional legacy-leftover 1-line warning remains.
  */
@@ -92,7 +92,7 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
 
   // Handoff bodies are not auto-injected; the once-per-prompt tick only runs
   // the session-pointer stale GC (the handoff sweep is gone — consume on the
-  // baton ref deletes immediately; no network call may enter this path).
+  // handoff ref deletes immediately; no network call may enter this path).
   // Fail-open: a GC error must not break the prompt hook.
   try {
     await new SessionPointerStore(input.repoRoot).sweepStale();

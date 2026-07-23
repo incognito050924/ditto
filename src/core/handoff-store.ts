@@ -11,17 +11,17 @@ import { HANDOFF_REF } from './handoff-ref-store';
 type EvidenceRef = z.infer<typeof evidenceRef>;
 
 /**
- * Handoff baton FORMAT module (wi_260722g7h ac-rewire).
+ * Handoff handoff FORMAT module (wi_260722g7h ac-rewire).
  *
  * The two-tier FILE store that used to live here (local gitignored actives under
  * `.ditto/local/handoff/` + committed remote files under `.ditto/handoff/`, with
  * soft consumed-markers, archive moves and an mtime age-sweep) was REMOVED:
- * handoff batons now live solely as tree entries on the hidden per-repo ref
+ * handoffs now live solely as tree entries on the hidden per-repo ref
  * `refs/ditto/handoffs`, written/consumed via `HandoffRefStore`
  * (`handoff-ref-store.ts`). Consume lands a deletion commit, so no sweep /
  * archive / consumed-marker machinery exists anymore.
  *
- * What remains here is the baton FORMAT + BUILD surface the ref store (and its
+ * What remains here is the handoff FORMAT + BUILD surface the ref store (and its
  * tests) consume:
  *  - build: `buildHandoff` / `buildSessionHandoff` (+ the blocked-handoff guard),
  *  - render/parse: 1-line JSON frontmatter (machine round-trip) + human markdown
@@ -29,7 +29,7 @@ type EvidenceRef = z.infer<typeof evidenceRef>;
  *  - commit hardening: `scrubHandoffForCommit` (fail-closed token scrub reusing
  *    `github-redaction`'s scrubTokens — no second token-pattern list),
  *  - routing keys: `scopeKey` / `slugifyAuthor` / `gitAuthorSlug`,
- *  - metrics: `countHandoffBatonRounds` (persistent per-WI round count off the
+ *  - metrics: `countHandoffRounds` (persistent per-WI round count off the
  *    ref history).
  */
 export interface HandoffBuildInput {
@@ -177,7 +177,7 @@ export function scopeKey(scope: HandoffScope): string {
 /**
  * A filesystem/git-safe author slug: lowercased, non-`[a-z0-9]` runs collapsed to a
  * single `-`, leading/trailing `-` trimmed. Derived from a git identity so two
- * concurrent authors on the SAME scope land in separate baton entries (ac-1). Pure.
+ * concurrent authors on the SAME scope land in separate handoff entries (ac-1). Pure.
  */
 export function slugifyAuthor(raw: string): string {
   return raw
@@ -324,18 +324,18 @@ export function scrubHandoffForCommit(h: Handoff): Handoff {
  * doctor row).
  *
  * Reads the `refs/ditto/handoffs` HISTORY, not the pending tip: under the
- * ref-baton model consume lands an immediate deletion commit, so a
- * "currently pending" source structurally converges to 0 the moment a baton is
+ * hidden-ref handoff model consume lands an immediate deletion commit, so a
+ * "currently pending" source structurally converges to 0 the moment a handoff is
  * picked up and the continuation-churn metric would silently die. A round =
- * one baton ISSUED for this work item = a ref commit that ADDED a
+ * one handoff ISSUED for this work item = a ref commit that ADDED a
  * `<wi>__<author>.md` tree entry (`--diff-filter=A`; an overwrite of a
- * still-pending same-stem baton is a Modify and does not inflate the count,
+ * still-pending same-stem handoff is a Modify and does not inflate the count,
  * matching the old single-file-overwrite semantics). LOCAL ref lookup only —
  * never fetch/push. Fail-open: unborn ref, non-repo dir or a missing git
  * binary all count 0, never throw (metrics reader, parity with the other
  * post_cost sources).
  */
-export function countHandoffBatonRounds(repoRoot: string, workItemId: string): number {
+export function countHandoffRounds(repoRoot: string, workItemId: string): number {
   try {
     const r = Bun.spawnSync(
       [

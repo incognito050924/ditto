@@ -42,8 +42,8 @@ import { type SessionHandoffBuildInput, buildSessionHandoff } from './handoff-st
  *    would transmit; ≥1 match (or scan failure) REFUSES the push (0 egress —
  *    asserted positively against the bare origin's ref state).
  *  - ac-retention-invariant: truncation keeps max(7 days, 50 commits), NEVER
- *    changes the ref tip tree, and absorbs remote-ahead pending batons
- *    (fetch-first) — including a baton pushed between snapshot and lease push.
+ *    changes the ref tip tree, and absorbs remote-ahead pending handoffs
+ *    (fetch-first) — including a handoff pushed between snapshot and lease push.
  *  - ac-concurrent-push: remote-ahead → fetch + tree-level re-merge + bounded
  *    retry; deletions converge to the remote CAS winner; force stays confined
  *    to the truncation path (--force-with-lease only; a grep test pins it).
@@ -104,10 +104,10 @@ function makeHandoff(
 ): ReturnType<typeof buildSessionHandoff> {
   return buildSessionHandoff({
     sessionId,
-    originalIntent: 'sync the hidden-ref baton to the remote',
+    originalIntent: 'sync the hidden-ref handoff to the remote',
     fromContext: 'unit-test session',
     currentState: 'mid-flight',
-    nextFirstCheck: 'read the baton ref',
+    nextFirstCheck: 'read the handoff ref',
     now: new Date('2026-01-02T03:04:05.000Z'),
     ...overrides,
   });
@@ -131,7 +131,7 @@ function treeNames(dir: string, ref: string): string[] {
 }
 
 /**
- * Second-PC helper: adopt the current remote ref state, write a baton on top,
+ * Second-PC helper: adopt the current remote ref state, write a handoff on top,
  * plain-push (fast-forward). Test-side plumbing only — the module under test is
  * NOT involved, so this deterministically simulates "another PC pushed first".
  */
@@ -248,16 +248,16 @@ describe('sync failure classification', () => {
 
   test('auth warning tells the user to check credentials; consume op adds the re-consume window', () => {
     // ac-3 + consume carve-out: a failed consume-deletion push must SAY the
-    // remote baton still exists (another PC may re-consume — at-most-duplicated).
+    // remote handoff still exists (another PC may re-consume — at-most-duplicated).
     const authWrite = buildSyncWarning('auth', 'write', 'origin', 'HTTP 403');
     expect(authWrite.toLowerCase()).toContain('credential');
     const authConsume = buildSyncWarning('auth', 'consume', 'origin', 'HTTP 403');
     expect(authConsume.toLowerCase()).toContain('credential');
-    expect(authConsume).toContain('remote baton still exists');
+    expect(authConsume).toContain('remote handoff still exists');
     const offlineConsume = buildSyncWarning('offline', 'consume', 'origin', 'no route');
-    expect(offlineConsume).toContain('remote baton still exists');
+    expect(offlineConsume).toContain('remote handoff still exists');
     const offlineWrite = buildSyncWarning('offline', 'write', 'origin', 'no route');
-    expect(offlineWrite).not.toContain('remote baton still exists');
+    expect(offlineWrite).not.toContain('remote handoff still exists');
     expect(offlineWrite.toLowerCase()).toContain('next');
   });
 });
@@ -292,7 +292,7 @@ describe('detectSecretMatches', () => {
 // ─── ac-3: push/fetch refs/ditto/* only; offline degrade; visibility gate ─────
 
 describe('syncHandoffRef (ac-3)', () => {
-  test('pushes the baton ref to the bare origin; code branches NEVER move', async () => {
+  test('pushes the handoff ref to the bare origin; code branches NEVER move', async () => {
     const origin = await makeBareOrigin();
     const repo = await makeRepo(origin);
     const res = new HandoffRefStore(repo).write(makeHandoff('sess-1'), { author: 'alice' });
@@ -301,7 +301,7 @@ describe('syncHandoffRef (ac-3)', () => {
 
     expect(out.status).toBe('pushed');
     expect(out.pushedStems).toContain(res.stem);
-    // origin's baton ref equals the local tip…
+    // origin's handoff ref equals the local tip…
     expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(refTip(repo) ?? 'MISSING');
     // …and NO code branch was pushed (ac-3: never touches refs/heads/*).
     expect(git(origin, ['for-each-ref', 'refs/heads']).stdout.trim()).toBe('');
@@ -309,7 +309,7 @@ describe('syncHandoffRef (ac-3)', () => {
     expect(pendingUnpushed(repo).pending).toBe(false);
   });
 
-  test('fetch side: a second repo with nothing local adopts the remote baton', async () => {
+  test('fetch side: a second repo with nothing local adopts the remote handoff', async () => {
     const origin = await makeBareOrigin();
     const a = await makeRepo(origin);
     const b = await makeRepo(origin);
@@ -318,7 +318,7 @@ describe('syncHandoffRef (ac-3)', () => {
 
     const out = syncHandoffRef(b, 'origin', opts());
     expect(out.status).toBe('nothing-to-push');
-    expect(new HandoffRefStore(b).list().batons.map((x) => x.stem)).toEqual([res.stem]);
+    expect(new HandoffRefStore(b).list().handoffs.map((x) => x.stem)).toEqual([res.stem]);
   });
 
   test('offline: local success + loud warning + jsonl log + pending state; retried on the next command', async () => {
@@ -334,10 +334,10 @@ describe('syncHandoffRef (ac-3)', () => {
     expect(out.status).toBe('local-only-offline');
     expect(out.warnings.length).toBeGreaterThan(0);
     // local state intact (local operations always succeed)…
-    expect(new HandoffRefStore(repo).list().batons.map((x) => x.stem)).toEqual([res.stem]);
+    expect(new HandoffRefStore(repo).list().handoffs.map((x) => x.stem)).toEqual([res.stem]);
     // …failure is persisted to the jsonl channel (not just a console line)…
     expect(syncLogLines(repo).some((l) => l.includes('offline'))).toBe(true);
-    // …and the unpushed baton is queryable so later commands can warn repeatedly.
+    // …and the unpushed handoff is queryable so later commands can warn repeatedly.
     expect(pendingUnpushed(repo).pending).toBe(true);
 
     // "retried on the next handoff command": restore the remote, sync again → pushed.
@@ -385,7 +385,7 @@ describe('scrub gate (ac-scrub)', () => {
 
     const out = syncHandoffRef(repo, 'origin', opts());
     expect(out.status).toBe('scrub-refused');
-    // the refusal points at the offending baton entry so the user can fix it…
+    // the refusal points at the offending handoff entry so the user can fix it…
     expect(out.scrubFindings.some((f) => f.entry === 'evil__mallory.md')).toBe(true);
     expect(out.warnings.join('\n')).toContain('evil__mallory.md');
     // …the failure is persisted…
@@ -396,7 +396,7 @@ describe('scrub gate (ac-scrub)', () => {
     expect(originAfter.stdout).toBe(originBefore.stdout);
   });
 
-  test('purge path: after consuming the offending baton, purge rewrites history and the secret blob never reaches the remote', async () => {
+  test('purge path: after consuming the offending handoff, purge rewrites history and the secret blob never reaches the remote', async () => {
     // Sweep constraint (undetected-token recall path, chosen design): the leaked
     // entry is consumed/rewritten first, then purgeHandoffHistory cuts the local
     // history to a single root (same tip tree) and lease-pushes — the secret blob
@@ -427,7 +427,7 @@ describe('scrub gate (ac-scrub)', () => {
 // ─── ac-concurrent-push: remote-ahead → fetch + tree re-merge + bounded retry ─
 
 describe('remote-ahead recovery (ac-concurrent-push)', () => {
-  test('a rejected push fetches, re-merges batons per-file and retries to success', async () => {
+  test('a rejected push fetches, re-merges handoffs per-file and retries to success', async () => {
     const origin = await makeBareOrigin();
     const a = await makeRepo(origin);
     const b = await makeRepo(origin);
@@ -439,7 +439,7 @@ describe('remote-ahead recovery (ac-concurrent-push)', () => {
 
     const out = syncHandoffRef(a, 'origin', opts());
     expect(out.status).toBe('pushed');
-    // per-file union: all three batons survive on the remote tip tree.
+    // per-file union: all three handoffs survive on the remote tip tree.
     expect(treeNames(origin, HANDOFF_REF)).toEqual(
       [`${stemA1}.md`, `${stemA2}.md`, `${stemB1}.md`].sort(),
     );
@@ -453,7 +453,7 @@ describe('remote-ahead recovery (ac-concurrent-push)', () => {
     const stemA1 = new HandoffRefStore(a).write(makeHandoff('sess-d1'), { author: 'alice' }).stem;
     expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
     const stemB1 = otherPcPush(b, 'sess-d2');
-    // A consumes its baton locally (deletion commit), remote is ahead with B's.
+    // A consumes its handoff locally (deletion commit), remote is ahead with B's.
     expect(new HandoffRefStore(a).consume(stemA1).status).toBe('consumed');
 
     const out = syncHandoffRef(a, 'origin', opts({ op: 'consume' }));
@@ -467,11 +467,11 @@ describe('remote-ahead recovery (ac-concurrent-push)', () => {
     const b = await makeRepo(origin);
     const stemA1 = new HandoffRefStore(a).write(makeHandoff('sess-r1'), { author: 'alice' }).stem;
     expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
-    // the OTHER PC consumes A's baton and lands the deletion on the remote.
+    // the OTHER PC consumes A's handoff and lands the deletion on the remote.
     expect(git(b, ['fetch', 'origin', `+${HANDOFF_REF}:${HANDOFF_REF}`]).exitCode).toBe(0);
     expect(new HandoffRefStore(b).consume(stemA1).status).toBe('consumed');
     expect(git(b, ['push', 'origin', HANDOFF_PUSH_REFSPEC]).exitCode).toBe(0);
-    // A diverges with a NEW baton; its stale copy of the consumed one must NOT resurrect.
+    // A diverges with a NEW handoff; its stale copy of the consumed one must NOT resurrect.
     const stemA2 = new HandoffRefStore(a).write(makeHandoff('sess-r2'), { author: 'alice' }).stem;
 
     const out = syncHandoffRef(a, 'origin', opts());
@@ -505,9 +505,9 @@ describe('remote-ahead recovery (ac-concurrent-push)', () => {
     expect(out.status).toBe('sync-retry-exhausted');
     expect(n).toBe(2); // attempt 0 + exactly maxRetries=1 recovery — bounded.
     expect(out.warnings.length).toBeGreaterThan(0);
-    // local success: the unpushed baton is intact and still queryable as pending.
+    // local success: the unpushed handoff is intact and still queryable as pending.
     expect(
-      new HandoffRefStore(a).list().batons.some((x) => x.stem === 'session__sess-x1__alice'),
+      new HandoffRefStore(a).list().handoffs.some((x) => x.stem === 'session__sess-x1__alice'),
     ).toBe(true);
     expect(pendingUnpushed(a).pending).toBe(true);
     expect(SYNC_MAX_RETRIES).toBe(3); // the default cap is a named constant contract
@@ -519,7 +519,7 @@ describe('remote-ahead recovery (ac-concurrent-push)', () => {
 describe('retention truncation (ac-retention-invariant)', () => {
   const DAY = 24 * 60 * 60 * 1000;
 
-  async function repoWithManyBatons(
+  async function repoWithManyHandoffs(
     origin: string,
     count: number,
   ): Promise<{ repo: string; store: HandoffRefStore }> {
@@ -531,9 +531,9 @@ describe('retention truncation (ac-retention-invariant)', () => {
     return { repo, store };
   }
 
-  test('history beyond max(7 days, 50 commits) is cut at push time; the tip TREE is unchanged and all batons survive', async () => {
+  test('history beyond max(7 days, 50 commits) is cut at push time; the tip TREE is unchanged and all handoffs survive', async () => {
     const origin = await makeBareOrigin();
-    const { repo } = await repoWithManyBatons(origin, 60);
+    const { repo } = await repoWithManyHandoffs(origin, 60);
     const treeBefore = git(repo, ['rev-parse', `${HANDOFF_REF}^{tree}`]).stdout.trim();
     const tipDateBefore = git(repo, ['log', '-1', '--format=%cI', HANDOFF_REF]).stdout.trim();
 
@@ -541,7 +541,7 @@ describe('retention truncation (ac-retention-invariant)', () => {
     const out = syncHandoffRef(repo, 'origin', opts({ now: new Date(Date.now() + 8 * DAY) }));
     expect(out.status).toBe('pushed');
 
-    // invariant: truncation NEVER changes the ref tip tree (pending batons survive).
+    // invariant: truncation NEVER changes the ref tip tree (pending handoffs survive).
     expect(git(repo, ['rev-parse', `${HANDOFF_REF}^{tree}`]).stdout.trim()).toBe(treeBefore);
     expect(treeNames(repo, HANDOFF_REF)).toHaveLength(60);
     // history is cut to the retention window, locally and on the remote.
@@ -554,39 +554,39 @@ describe('retention truncation (ac-retention-invariant)', () => {
 
   test('recent history within the 7-day window is NOT truncated even beyond 50 commits', async () => {
     const origin = await makeBareOrigin();
-    const { repo } = await repoWithManyBatons(origin, 55);
+    const { repo } = await repoWithManyHandoffs(origin, 55);
     // real now: all 55 commits are minutes old → inside the 7-day window → keep all.
     const out = syncHandoffRef(repo, 'origin', opts());
     expect(out.status).toBe('pushed');
     expect(Number(git(repo, ['rev-list', '--count', HANDOFF_REF]).stdout.trim())).toBe(55);
   }, 120_000);
 
-  test('stale local + remote-only pending baton: truncation fetches FIRST and the remote baton survives', async () => {
+  test('stale local + remote-only pending handoff: truncation fetches FIRST and the remote handoff survives', async () => {
     // Sweep constraint: truncation cannot rely on a push rejection (force is not
-    // rejected) — it must fetch + re-merge BEFORE rebuilding, absorbing batons
+    // rejected) — it must fetch + re-merge BEFORE rebuilding, absorbing handoffs
     // that exist only on the remote.
     const origin = await makeBareOrigin();
-    const { repo } = await repoWithManyBatons(origin, 60);
+    const { repo } = await repoWithManyHandoffs(origin, 60);
     expect(syncHandoffRef(repo, 'origin', opts()).status).toBe('pushed');
     const b = await makeRepo(origin);
-    const stemZ = otherPcPush(b, 'sess-zzz'); // remote-only pending baton; local is stale
+    const stemZ = otherPcPush(b, 'sess-zzz'); // remote-only pending handoff; local is stale
 
     const out = syncHandoffRef(repo, 'origin', opts({ now: new Date(Date.now() + 8 * DAY) }));
     expect(out.status).toBe('nothing-to-push'); // nothing new locally — retention still ran
     expect(treeNames(origin, HANDOFF_REF)).toContain(`${stemZ}.md`);
     expect(Number(git(origin, ['rev-list', '--count', HANDOFF_REF]).stdout.trim())).toBe(50);
-    // the remote baton's entry is reachable in the truncated history, not just the tree.
+    // the remote handoff's entry is reachable in the truncated history, not just the tree.
     expect(
       git(repo, ['log', HANDOFF_REF, '--format=%H', '--', `${stemZ}.md`]).stdout.trim().length,
     ).toBeGreaterThan(0);
   }, 120_000);
 
-  test('concurrent write during truncation: lease failure → re-fetch → recompute → the racing baton survives', async () => {
-    // ac-retention-invariant (concurrent-write case): a baton pushed by a second
+  test('concurrent write during truncation: lease failure → re-fetch → recompute → the racing handoff survives', async () => {
+    // ac-retention-invariant (concurrent-write case): a handoff pushed by a second
     // fixture clone BETWEEN snapshot and force-with-lease causes a lease failure;
-    // the truncation recomputes and the racing baton is reachable in new history.
+    // the truncation recomputes and the racing handoff is reachable in new history.
     const origin = await makeBareOrigin();
-    const { repo } = await repoWithManyBatons(origin, 60);
+    const { repo } = await repoWithManyHandoffs(origin, 60);
     const b = await makeRepo(origin);
     let raceStem = '';
     let fired = 0;
@@ -607,7 +607,7 @@ describe('retention truncation (ac-retention-invariant)', () => {
     );
     expect(out.status).toBe('pushed');
     expect(fired).toBe(1);
-    // the racing baton is on the truncated remote tip tree AND reachable in history.
+    // the racing handoff is on the truncated remote tip tree AND reachable in history.
     expect(treeNames(origin, HANDOFF_REF)).toContain(`${raceStem}.md`);
     expect(
       git(repo, ['log', HANDOFF_REF, '--format=%H', '--', `${raceStem}.md`]).stdout.trim().length,
@@ -615,12 +615,12 @@ describe('retention truncation (ac-retention-invariant)', () => {
     expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(refTip(repo) ?? 'MISSING');
   }, 120_000);
 
-  test('post-truncation stale PC: unpushed baton is tree-replayed onto the new root, old history NOT reintroduced', async () => {
+  test('post-truncation stale PC: unpushed handoff is tree-replayed onto the new root, old history NOT reintroduced', async () => {
     // Sweep constraint: after a truncation force-push, a PC still on the OLD tip
-    // must not wedge on non-FF, must not be reset (losing its unpushed baton),
+    // must not wedge on non-FF, must not be reset (losing its unpushed handoff),
     // and must not merge the cut history back in — tree-level replay only.
     const origin = await makeBareOrigin();
-    const { repo: a } = await repoWithManyBatons(origin, 60);
+    const { repo: a } = await repoWithManyHandoffs(origin, 60);
     expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
     const b = await makeRepo(origin);
     expect(git(b, ['fetch', 'origin', `+${HANDOFF_REF}:${HANDOFF_REF}`]).exitCode).toBe(0);
@@ -632,13 +632,13 @@ describe('retention truncation (ac-retention-invariant)', () => {
     );
     expect(Number(git(origin, ['rev-list', '--count', HANDOFF_REF]).stdout.trim())).toBe(50);
 
-    // B (old tip) writes an unpushed baton, then syncs against the truncated remote.
+    // B (old tip) writes an unpushed handoff, then syncs against the truncated remote.
     const stemW = new HandoffRefStore(b).write(makeHandoff('sess-www'), { author: 'bob' }).stem;
     const out = syncHandoffRef(b, 'origin', opts());
     expect(out.status).toBe('pushed');
-    // the unpushed baton SURVIVES on the remote…
+    // the unpushed handoff SURVIVES on the remote…
     expect(treeNames(origin, HANDOFF_REF)).toContain(`${stemW}.md`);
-    // …and every pre-truncation baton is still present in the tip tree (union).
+    // …and every pre-truncation handoff is still present in the tip tree (union).
     expect(treeNames(origin, HANDOFF_REF)).toHaveLength(61);
     // the old (cut) history was NOT reintroduced: old root unreachable from the new tip.
     expect(git(b, ['merge-base', '--is-ancestor', oldRoot, refTip(b) ?? '']).exitCode).not.toBe(0);
@@ -665,7 +665,7 @@ describe('syncHandoffRef with knownRemoteSha (fetch elision)', () => {
 
     const stemB1 = new HandoffRefStore(b).write(makeHandoff('sess-k2'), { author: 'bob' }).stem;
     const out = syncHandoffRef(b, 'origin', opts({ knownRemoteSha: fetched.sha }));
-    // Same outcome as the fetch-first path: pushed, both batons on the remote tip.
+    // Same outcome as the fetch-first path: pushed, both handoffs on the remote tip.
     expect(out.status).toBe('pushed');
     expect(out.pushedStems.sort()).toEqual([stemA1, stemB1].sort());
     expect(treeNames(origin, HANDOFF_REF)).toEqual([`${stemA1}.md`, `${stemB1}.md`].sort());
@@ -673,7 +673,7 @@ describe('syncHandoffRef with knownRemoteSha (fetch elision)', () => {
     expect(pendingUnpushed(b).pending).toBe(false);
   });
 
-  test('the initial fetch is actually skipped: a remote-only baton is NOT adopted when knownRemoteSha equals the local tip', async () => {
+  test('the initial fetch is actually skipped: a remote-only handoff is NOT adopted when knownRemoteSha equals the local tip', async () => {
     const origin = await makeBareOrigin();
     const a = await makeRepo(origin);
     const b = await makeRepo(origin);
@@ -686,21 +686,21 @@ describe('syncHandoffRef with knownRemoteSha (fetch elision)', () => {
 
     const out = syncHandoffRef(a, 'origin', opts({ knownRemoteSha: observed }));
     // local tip === observed sha → nothing to push, and — because the initial
-    // fetch was elided — the remote-only baton was NOT adopted locally.
+    // fetch was elided — the remote-only handoff was NOT adopted locally.
     expect(out.status).toBe('nothing-to-push');
-    expect(new HandoffRefStore(a).list().batons.map((x) => x.stem)).toEqual([stemA1]);
+    expect(new HandoffRefStore(a).list().handoffs.map((x) => x.stem)).toEqual([stemA1]);
 
     // sanity: the fetch-first path (knownRemoteSha undefined) DOES adopt it.
     expect(syncHandoffRef(a, 'origin', opts()).status).toBe('nothing-to-push');
     expect(
       new HandoffRefStore(a)
         .list()
-        .batons.map((x) => x.stem)
+        .handoffs.map((x) => x.stem)
         .sort(),
     ).toEqual([stemA1, stemB1].sort());
   });
 
-  test('stale observed sha (remote advanced in between): the non-FF loop re-fetches, re-merges and no baton is lost', async () => {
+  test('stale observed sha (remote advanced in between): the non-FF loop re-fetches, re-merges and no handoff is lost', async () => {
     const origin = await makeBareOrigin();
     const a = await makeRepo(origin);
     const b = await makeRepo(origin);
@@ -713,7 +713,7 @@ describe('syncHandoffRef with knownRemoteSha (fetch elision)', () => {
 
     const out = syncHandoffRef(a, 'origin', opts({ knownRemoteSha: staleObserved }));
     // first push attempt is non-FF (stale lease base) → re-fetch + tree re-merge
-    // + re-push converge; every baton survives on the remote tip tree.
+    // + re-push converge; every handoff survives on the remote tip tree.
     expect(out.status).toBe('pushed');
     expect(treeNames(origin, HANDOFF_REF)).toEqual(
       [`${stemA1}.md`, `${stemA2}.md`, `${stemB1}.md`].sort(),
@@ -772,7 +772,7 @@ describe('deletion-only visibility exemption (public remote, no opt-in)', () => 
 
   test('(g) the exempt commit has a MASKED author/committer identity', async () => {
     // C3: the deletion commit the exemption newly publishes must not leak WHO
-    // consumed the baton — its author/committer identity is masked (built fresh,
+    // consumed the handoff — its author/committer identity is masked (built fresh,
     // NOT the identity-preserving truncation/purge path).
     const origin = await makeBareOrigin();
     const repo = await makeRepo(origin);
@@ -800,9 +800,9 @@ describe('deletion-only visibility exemption (public remote, no opt-in)', () => 
     for (const d of dates) expect(d.endsWith('+0000')).toBe(true);
   });
 
-  test('(b) a consume carrying an unpushed WRITE baton has new objects → refused (fail-closed)', async () => {
+  test('(b) a consume carrying an unpushed WRITE handoff has new objects → refused (fail-closed)', async () => {
     // C1: op==='consume' is NOT the signal — computeReconcileTarget re-applies the
-    // unpushed write baton, so the transmit set gains a NEW blob + NEW stem name.
+    // unpushed write handoff, so the transmit set gains a NEW blob + NEW stem name.
     // The exemption must refuse, protecting the un-published body.
     const origin = await makeBareOrigin();
     const repo = await makeRepo(origin);
@@ -883,10 +883,10 @@ describe('deletion-only visibility exemption (public remote, no opt-in)', () => 
     expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
   });
 
-  test('(e) exemption is RE-EVALUATED per attempt: a re-merge that re-adds a local baton flips exempt → refused', async () => {
+  test('(e) exemption is RE-EVALUATED per attempt: a re-merge that re-adds a local handoff flips exempt → refused', async () => {
     // C1: the decision is per push attempt against the CURRENT remoteSha. Attempt 0
     // is deletion-only (exempt); a hook then moves the remote (non-FF) AND writes a
-    // fresh local baton, so the re-merge re-introduces a local-only body → attempt 1
+    // fresh local handoff, so the re-merge re-introduces a local-only body → attempt 1
     // is no longer deletion-only → refused (the late write NEVER leaks).
     const origin = await makeBareOrigin();
     const a = await makeRepo(origin);
@@ -953,7 +953,7 @@ describe('deletion-only visibility exemption (public remote, no opt-in)', () => 
     expect(syncHandoffRef(repo, 'origin', opts()).status).toBe('pushed'); // private base, recent → no truncation
     const baseCount = Number(git(origin, ['rev-list', '--count', HANDOFF_REF]).stdout.trim());
     expect(baseCount).toBe(60);
-    const victim = store.list().batons[0]?.stem;
+    const victim = store.list().handoffs[0]?.stem;
     expect(victim).toBeDefined();
     expect(store.consume(victim as string).status).toBe('consumed');
 
@@ -964,7 +964,7 @@ describe('deletion-only visibility exemption (public remote, no opt-in)', () => 
       opts({ visibility: 'public', op: 'consume', now: new Date(Date.now() + 8 * DAY) }),
     );
     expect(out.status).toBe('pushed');
-    // the deletion landed (one fewer baton) …
+    // the deletion landed (one fewer handoff) …
     expect(treeNames(origin, HANDOFF_REF)).toHaveLength(59);
     // … but retention did NOT run: history was not cut to 50 (skip proven).
     expect(Number(git(origin, ['rev-list', '--count', HANDOFF_REF]).stdout.trim())).toBeGreaterThan(

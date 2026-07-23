@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607237ig",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "4c9bec2085b47f23efdc2a084e68baf1a4bd9e5faec022827118e797d6a9ae3c",
+  "ts": "2026-07-23T12:25:37.439Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c python3 -c \"\nimport json\ne=[x for x in json.load(open('.ditto/knowledge/glossary.json'))['entries'] if x['term']=='handoff'][0]\nassert set(e['forbidden_abbreviations'])=={'바통','배턴','baton'}, e['forbidden_abbreviations']\nprint('forbidden ok')\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

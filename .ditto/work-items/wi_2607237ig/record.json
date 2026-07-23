@@ -1,0 +1,128 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607237ig",
+  "title": "용어 정리: '바통/배턴' 계주 비유를 사용자 표면에서 제거 — 핸드오프 단일 용어화",
+  "source_request": "용어 정리: '바통/배턴' 계주 비유를 사용자 표면에서 제거 — 핸드오프 단일 용어화\n\n사용자 피드백(2026-07-23): \"핸드오프 기능에 굳이 외부의 계주 같은 불필요한 비유를 끌어들여야 해?\" — 도메인 이름(핸드오프)이 이미 의미를 담으므로 비유 한 겹은 가독성만 해침.\n\n범위: .ditto/knowledge/glossary.json(handoff 별칭 baton·바통 제거 + 정의 재서술), skills/handoff/SKILL.md, CLI 사용자 문구(src/cli/commands/handoff.ts 경고·설명), docs. 필요 속성은 직접 서술: '1회 소비되면 삭제되는 임시 인수인계'.\n\n불변: 과거 ADR 기록(ADR-20260722-handoff-hidden-ref-baton 파일명·본문)은 기록물이므로 유지. 코드 식별자(HandoffRefStore 등)는 이미 baton 비유가 아님 — 내부 변수·주석의 baton은 발견 시 함께 정리.\n\n발생 맥락: wi_2607239vu deep-interview finalize, follow_up_candidates에도 기록됨.",
+  "goal": "용어 정리: '바통/배턴' 계주 비유를 사용자 표면에서 제거 — 핸드오프 단일 용어화",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "rg -i '바통|배턴|baton'이 사용자 표면(glossary·skills/handoff/SKILL.md·docs/features)과 src/에서 0건을 반환한다 — 예외는 과거 ADR 파일명 인용, CLAUDE.md ADR 인덱스 라인, glossary 금지어 목록 자체뿐",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c ! rg -q -i '바통|배턴|baton' src/ && rg -l -i '바통|배턴|baton' skills/ docs/ .ditto/knowledge/glossary.json | sort && echo SURFACES-ONLY-EXPECTED-FILES",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "bun test 전체가 exit 0(전 suite pass)이고 bunx tsc --noEmit과 bunx biome check src/가 각각 exit 0",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun test >/dev/null 2>&1 && bunx tsc --noEmit && bunx biome check src/ >/dev/null",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "빌드 후 dist/plugin/skills/handoff/SKILL.md의 rg -i baton 매치가 ADR 파일명 인용 2건뿐이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c [ \"$(rg -c -i baton dist/plugin/skills/handoff/SKILL.md)\" = \"2\" ] && rg -n -i baton dist/plugin/skills/handoff/SKILL.md | rg -q 'ADR-20260722-handoff-hidden-ref-baton' && ! rg -n -i baton dist/plugin/skills/handoff/SKILL.md | rg -qv 'ADR-20260722-handoff-hidden-ref-baton'",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "glossary.json의 handoff 항목 forbidden_abbreviations 배열에 바통·배턴·baton 3개가 존재한다(jq 확인)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c python3 -c \"\nimport json\ne=[x for x in json.load(open('.ditto/knowledge/glossary.json'))['entries'] if x['term']=='handoff'][0]\nassert set(e['forbidden_abbreviations'])=={'바통','배턴','baton'}, e['forbidden_abbreviations']\nprint('forbidden ok')\"",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/work-items/wi_2607239vu/events/000000.workspace-write.89120a853494.json",
+    ".ditto/work-items/wi_2607239vu/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607239vu/events/000002.workspace-write.3e642c91c99e.json",
+    ".ditto/work-items/wi_2607239vu/events/000003.workspace-write.e72af8e3c371.json",
+    ".ditto/work-items/wi_2607239vu/events/000004.workspace-write.fca5c729c4a5.json",
+    ".ditto/work-items/wi_2607239vu/events/000005.workspace-write.7b7f1a1e5349.json",
+    ".ditto/work-items/wi_2607239vu/events/000006.workspace-write.0788e5a4646c.json",
+    ".ditto/work-items/wi_2607239vu/events/000007.workspace-write.7ab25b58784e.json",
+    ".ditto/work-items/wi_2607239vu/events/000008.workspace-write.8c5aa5774957.json",
+    ".ditto/work-items/wi_2607239vu/events/000009.workspace-write.87e0c6876f7b.json",
+    ".ditto/work-items/wi_2607239vu/record.json",
+    "CLAUDE.md",
+    "bin/ditto",
+    "src/cli/commands/handoff.test.ts",
+    "src/cli/commands/handoff.ts",
+    "src/core/ditto-config.ts",
+    "src/core/handoff-ref-sync.test.ts",
+    "src/core/handoff-ref-sync.ts",
+    "src/core/handoff-ref-store.ts",
+    "src/core/handoff-ref-store.test.ts",
+    "src/core/handoff-store.ts",
+    "src/core/handoff-store.test.ts",
+    "src/hooks/user-prompt-submit.ts",
+    "src/hooks/rebuilt/user-prompt-submit.ts",
+    "src/core/intent-quality-doctor.ts",
+    "src/core/autopilot-loop.ts",
+    "src/core/github-redaction.ts",
+    ".ditto/knowledge/glossary.json",
+    "skills/handoff/SKILL.md",
+    "docs/features/handoff.md",
+    "docs/features/work.md",
+    "docs/features/memory.md"
+  ],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 76,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgz00mE"
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "e18ec675a47913e9b9312add1b6df8b458513791",
+  "started_untracked_baseline": [
+    ".ditto/knowledge/adr/ADR-20260723-handoff-publication-object-gate.md",
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/memory/events/memevt_retro_e5eae7f9bbed248f.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_2607237ig/",
+    ".ditto/work-items/wi_2607239ax/",
+    ".ditto/work-items/wi_2607239vu/",
+    ".ditto/work-items/wi_260723tck/",
+    ".ditto/work-items/wi_260723urq/",
+    ".ditto/work-items/wi_260723xh7/",
+    "src/core/ditto-config.test.ts"
+  ],
+  "created_at": "2026-07-23T12:10:49.195Z",
+  "updated_at": "2026-07-23T12:25:47.561Z",
+  "closed_at": "2026-07-23T12:25:47.560Z"
+}

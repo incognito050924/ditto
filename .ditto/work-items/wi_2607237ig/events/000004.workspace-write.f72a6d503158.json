@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607237ig",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "f72a6d503158f4c26c01324536bba95fc7fa4524c22fc4f820c449177bec8391",
+  "ts": "2026-07-23T12:25:30.603Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test >/dev/null 2>&1 && bunx tsc --noEmit && bunx biome check src/ >/dev/null",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

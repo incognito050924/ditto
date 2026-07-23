@@ -24714,7 +24714,7 @@ function classifyUpdateRefFailure(stderr2) {
     return "lock_contention";
   return "error";
 }
-function serializeBaton(h2) {
+function serializeHandoff(h2) {
   return `---
 ${JSON.stringify(h2)}
 ---
@@ -24737,13 +24737,13 @@ class HandoffRefStore {
     assertSafeRefTreeName(key, h2.scope.kind === "work_item" ? "work_item_id" : "session_id");
     const stem = h2.scope.kind === "work_item" ? `${key}__${author}` : `session__${key}__${author}`;
     const name = `${stem}.md`;
-    const content = serializeBaton(scrubHandoffForCommit(h2));
+    const content = serializeHandoff(scrubHandoffForCommit(h2));
     for (let attempt = 0;attempt < MAX_CAS_ATTEMPTS; attempt++) {
       const tip = this.tip();
       const kept = tip === null ? [] : this.treeEntries(tip).filter((e2) => e2.name !== name);
       const blob = this.hashObject(content);
       const tree = this.mktree([...kept, { mode: "100644", type: "blob", sha: blob, name }]);
-      const commit = this.commitTree(tree, tip, `ditto handoff baton: write ${stem}`);
+      const commit = this.commitTree(tree, tip, `ditto handoff: write ${stem}`);
       this.hooks.beforeUpdateRef?.("write");
       const res = this.updateRefWithLockRetry(commit, tip);
       if (res.ok)
@@ -24769,7 +24769,7 @@ class HandoffRefStore {
       const parsed = parseHandoffFile(this.catBlob(entry.sha));
       const handoff2 = handoff.parse(parsed.handoff);
       const tree = this.mktree(entries.filter((e2) => e2.name !== name));
-      const commit = this.commitTree(tree, tip, `ditto handoff baton: consume ${stem}`);
+      const commit = this.commitTree(tree, tip, `ditto handoff: consume ${stem}`);
       this.hooks.beforeUpdateRef?.("consume");
       const res = this.updateRefWithLockRetry(commit, tip);
       if (res.ok)
@@ -24783,15 +24783,15 @@ class HandoffRefStore {
   list() {
     const tip = this.tip();
     if (tip === null)
-      return { batons: [], failures: [] };
-    const batons = [];
+      return { handoffs: [], failures: [] };
+    const handoffs = [];
     const failures = [];
     for (const entry of this.treeEntries(tip)) {
       if (entry.type !== "blob" || !entry.name.endsWith(".md"))
         continue;
       try {
         const parsed = parseHandoffFile(this.catBlob(entry.sha));
-        batons.push({
+        handoffs.push({
           stem: entry.name.replace(/\.md$/, ""),
           handoff: parsed.handoff,
           body: parsed.body
@@ -24803,8 +24803,8 @@ class HandoffRefStore {
         });
       }
     }
-    batons.sort((a2, b2) => a2.handoff.created_at.localeCompare(b2.handoff.created_at));
-    return { batons, failures };
+    handoffs.sort((a2, b2) => a2.handoff.created_at.localeCompare(b2.handoff.created_at));
+    return { handoffs, failures };
   }
   git(args, stdin2) {
     const proc = Bun.spawnSync(["git", ...args], {
@@ -25012,7 +25012,7 @@ function scrubHandoffForCommit(h2) {
     ...scrubDeep(rest)
   });
 }
-function countHandoffBatonRounds(repoRoot, workItemId2) {
+function countHandoffRounds(repoRoot, workItemId2) {
   try {
     const r3 = Bun.spawnSync([
       "git",
@@ -27416,7 +27416,7 @@ async function computePostCost(repoRoot, workItemId2, graph) {
   try {
     driftEvents = (await new WorkItemStore(repoRoot).readMetrics(workItemId2)).length;
   } catch {}
-  handoffRounds = countHandoffBatonRounds(repoRoot, workItemId2);
+  handoffRounds = countHandoffRounds(repoRoot, workItemId2);
   return driftEvents + reworkAttempts + retrySwitch + handoffRounds;
 }
 async function readContextPressure(repoRoot, workItemId2, graph) {
@@ -42392,7 +42392,7 @@ function defaultIntentQualityDeps(repoRoot) {
     readInterview: async (id) => await interviews.exists(id) ? interviews.get(id) : null,
     readAutopilot: async (id) => await autopilots.exists(id) ? autopilots.get(id) : null,
     readDecisions: (id) => autopilots.readDecisions(id),
-    countHandoffRounds: async (id) => countHandoffBatonRounds(repoRoot, id),
+    countHandoffRounds: async (id) => countHandoffRounds(repoRoot, id),
     readMetrics: (id) => workItems.readMetrics(id),
     readQuestionRounds: (id) => workItems.readQuestionRounds(id)
   };
@@ -48457,7 +48457,7 @@ var SYNC_LOG_FILE = "handoff-sync.jsonl";
 var ZERO_SHA2 = "0".repeat(40);
 var MAX_LOCAL_CAS = 3;
 var HISTORY_SCAN_CAP = 200;
-var HANDOFF_DELETION_COMMIT_MSG = "ditto handoff baton: consume (deletion-only, identity-masked)";
+var HANDOFF_DELETION_COMMIT_MSG = "ditto handoff: consume (deletion-only, identity-masked)";
 var MASK_IDENTITY_ENV = {
   GIT_AUTHOR_NAME: "ditto handoff",
   GIT_AUTHOR_EMAIL: "handoff@ditto.invalid",
@@ -48511,7 +48511,7 @@ function classifySyncFailure(output) {
 function buildSyncWarning(kind, op, remote, detail) {
   const first = (detail.split(`
 `).find((l2) => l2.trim().length > 0) ?? "").trim();
-  const consumeNote = op === "consume" ? " NOTE: the consume deletion was NOT pushed \u2014 the remote baton still exists, so another PC may still consume it (re-consume window open; at-most-duplicated, never lost)." : "";
+  const consumeNote = op === "consume" ? " NOTE: the consume deletion was NOT pushed \u2014 the remote handoff still exists, so another PC may still consume it (re-consume window open; at-most-duplicated, never lost)." : "";
   switch (kind) {
     case "auth":
       return `handoff sync: PERSISTENT AUTH FAILURE against '${remote}' \u2014 check your git credentials (permission denied / HTTP 403). Local handoff state is intact.${consumeNote} [${first}]`;
@@ -48662,7 +48662,7 @@ function computeReconcileTarget(cwd, localTip, remoteTip) {
   const tree = mktree(cwd, merged);
   if (tree === treeOf(cwd, remoteTip))
     return remoteTip;
-  return commitTree(cwd, tree, remoteTip, "ditto handoff baton: reconcile (tree-level re-merge)");
+  return commitTree(cwd, tree, remoteTip, "ditto handoff: reconcile (tree-level re-merge)");
 }
 function applyReconcile(cwd, remoteTip) {
   for (let attempt = 0;attempt < MAX_LOCAL_CAS; attempt++) {
@@ -48822,8 +48822,8 @@ function rebuildTruncatedChain(cwd, keptOldestFirst) {
     ]);
     const parts = meta.split("\x00");
     const [an, ae, ad, cn, ce2, cd] = parts;
-    const message = (parts.slice(6).join("\x00") || "ditto handoff baton").replace(/\n+$/, "");
-    parent = commitTree(cwd, treeOf(cwd, sha), parent, message || "ditto handoff baton", {
+    const message = (parts.slice(6).join("\x00") || "ditto handoff").replace(/\n+$/, "");
+    parent = commitTree(cwd, treeOf(cwd, sha), parent, message || "ditto handoff", {
       GIT_AUTHOR_NAME: an ?? "ditto",
       GIT_AUTHOR_EMAIL: ae ?? "ditto@local.invalid",
       GIT_AUTHOR_DATE: ad ?? "",
@@ -48974,7 +48974,7 @@ function failureResult(cwd, remote, op, cls, phase, detail, warnings) {
 function scrubRefusal(cwd, remote, scan, warnings) {
   const entries = [...new Set(scan.findings.map((f4) => f4.entry))];
   const reason = scan.ok ? `secret-shaped content detected in: ${entries.join(", ")}` : `scrub scan failed (${scan.error ?? "unknown"})`;
-  warnings.push(`handoff sync: PUSH REFUSED (fail-closed) \u2014 ${reason}. Nothing was sent. Fix the baton body (rewrite or consume the offending baton) and retry; if the secret is already in local ref history, run the purge path to rewrite it out before pushing.`);
+  warnings.push(`handoff sync: PUSH REFUSED (fail-closed) \u2014 ${reason}. Nothing was sent. Fix the handoff body (rewrite or consume the offending handoff) and retry; if the secret is already in local ref history, run the purge path to rewrite it out before pushing.`);
   appendSyncLog(cwd, {
     event: "scrub-refused",
     remote,
@@ -49140,7 +49140,7 @@ function purgeHandoffHistory(cwd, remote, opts) {
       localTip = applyReconcile(cwd, remoteSha);
     if (localTip === null)
       return { status: "nothing-to-purge", warnings, detail: "ref is unborn" };
-    const newRoot = commitTree(cwd, treeOf(cwd, localTip), null, "ditto handoff baton: purge history (secret recall)");
+    const newRoot = commitTree(cwd, treeOf(cwd, localTip), null, "ditto handoff: purge history (secret recall)");
     const scan = scrubScan(cwd, newRoot, null);
     if (!scan.ok || scan.findings.length > 0) {
       const entries = [...new Set(scan.findings.map((f4) => f4.entry))];
@@ -49154,7 +49154,7 @@ function purgeHandoffHistory(cwd, remote, opts) {
       return {
         status: "scrub-refused",
         warnings,
-        detail: `tip tree still carries secret-shaped content (${entries.join(", ")}) \u2014 consume/rewrite the offending baton first`
+        detail: `tip tree still carries secret-shaped content (${entries.join(", ")}) \u2014 consume/rewrite the offending handoff first`
       };
     }
     let push;
@@ -49313,9 +49313,9 @@ function warnPendingUnpushed(repoRoot) {
   const state = pendingUnpushed(repoRoot);
   if (!state.pending)
     return;
-  writeError(`handoff sync: WARNING \u2014 local handoff baton state (tip ${state.localTip}) has NOT been pushed to 'origin'. Another PC cannot see it yet; it will be re-synced on the next handoff command run while online.`);
+  writeError(`handoff sync: WARNING \u2014 local handoff state (tip ${state.localTip}) has NOT been pushed to 'origin'. Another PC cannot see it yet; it will be re-synced on the next handoff command run while online.`);
 }
-function buildBatonFromFlags(args) {
+function buildHandoffFromFlags(args) {
   const workItem2 = args["work-item"];
   const scope = typeof workItem2 === "string" && workItem2.trim().length > 0 ? { kind: "work_item", work_item_id: workItem2 } : {
     kind: "session",
@@ -49354,12 +49354,12 @@ function scopeLabel(h3) {
 var writeArgs = {
   "work-item": {
     type: "string",
-    description: "Scope the baton to a work item (else session scope with a generated id).",
+    description: "Scope the handoff to a work item (else session scope with a generated id).",
     required: false
   },
   session: {
     type: "string",
-    description: "Explicit session id for a session-scope baton. Omit to generate a safe one.",
+    description: "Explicit session id for a session-scope handoff. Omit to generate a safe one.",
     required: false
   },
   intent: {
@@ -49424,7 +49424,7 @@ var writeArgs = {
   },
   "push-public": {
     type: "boolean",
-    description: "One-shot explicit opt-in to auto-push the baton ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published). For a standing per-project grant use --consent-push-remote.",
+    description: "One-shot explicit opt-in to auto-push the handoff ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published). For a standing per-project grant use --consent-push-remote.",
     default: false
   },
   "consent-push-remote": {
@@ -49459,9 +49459,9 @@ async function runWrite({ args }) {
     process.exit(USAGE_ERROR_EXIT);
     return;
   }
-  let baton;
+  let handoff2;
   try {
-    baton = buildBatonFromFlags(args);
+    handoff2 = buildHandoffFromFlags(args);
   } catch (err) {
     writeError(`ditto handoff write: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(USAGE_ERROR_EXIT);
@@ -49470,7 +49470,7 @@ async function runWrite({ args }) {
   const repoRoot = await resolveRepoRootForCreate();
   let res;
   try {
-    res = new HandoffRefStore(repoRoot).write(baton);
+    res = new HandoffRefStore(repoRoot).write(handoff2);
   } catch (err) {
     writeError(`ditto handoff write failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
@@ -49508,12 +49508,12 @@ async function runWrite({ args }) {
       ref: res.ref,
       commit: res.commit,
       stem: res.stem,
-      scope: baton.scope,
+      scope: handoff2.scope,
       sync: sync?.status ?? "no-remote"
     });
   } else {
-    writeHuman(`Wrote handoff baton ${res.stem}`);
-    writeHuman(`  scope:   ${scopeLabel(baton)}`);
+    writeHuman(`Wrote handoff ${res.stem}`);
+    writeHuman(`  scope:   ${scopeLabel(handoff2)}`);
     writeHuman(`  ref:     ${res.ref} (commit ${res.commit} \u2014 no worktree/branch change)`);
     writeHuman(`  sync:    ${sync?.status ?? "no origin remote \u2014 local only"}`);
     writeHuman(`  pick up: ditto handoff consume ${res.stem}`);
@@ -49523,15 +49523,15 @@ async function runWrite({ args }) {
 var handoffWrite = defineCommand({
   meta: {
     name: "write",
-    description: "Write a handoff baton onto the hidden ref (session scope, or --work-item), then auto-sync."
+    description: "Write a handoff onto the hidden ref (session scope, or --work-item), then auto-sync."
   },
   args: writeArgs,
   run: runWrite
 });
-function batonLine(b3) {
+function pendingLine(b3) {
   return `  ${b3.stem}	[${b3.handoff.scope.kind}]	${b3.handoff.created_at}	${b3.handoff.from_context}`;
 }
-function batonView(b3) {
+function pendingView(b3) {
   return {
     id: b3.stem,
     kind: b3.handoff.scope.kind,
@@ -49540,25 +49540,25 @@ function batonView(b3) {
   };
 }
 function resolvePendingStem(store, format, command) {
-  const { batons, failures } = store.list();
+  const { handoffs, failures } = store.list();
   for (const f4 of failures) {
-    writeError(`unparsable handoff baton entry ${f4.name}: ${f4.error}`);
+    writeError(`unparsable handoff entry ${f4.name}: ${f4.error}`);
   }
-  if (batons.length === 0) {
+  if (handoffs.length === 0) {
     if (format === "json")
       writeJson2({ pending: [] });
     else
-      writeHuman("No pending handoff batons.");
+      writeHuman("No pending handoffs.");
     return null;
   }
-  if (batons.length === 1)
-    return batons[0]?.stem ?? null;
+  if (handoffs.length === 1)
+    return handoffs[0]?.stem ?? null;
   if (format === "json") {
-    writeJson2({ pending: batons.map(batonView) });
+    writeJson2({ pending: handoffs.map(pendingView) });
   } else {
-    writeHuman(`Multiple pending handoff batons \u2014 name one (ditto handoff ${command} <id>):`);
-    for (const b3 of batons)
-      writeHuman(batonLine(b3));
+    writeHuman(`Multiple pending handoffs \u2014 name one (ditto handoff ${command} <id>):`);
+    for (const b3 of handoffs)
+      writeHuman(pendingLine(b3));
   }
   process.exit(USAGE_ERROR_EXIT);
   return null;
@@ -49595,7 +49595,7 @@ async function runConsume({ args }) {
     return;
   }
   if (res.status === "not_found") {
-    writeError(`No handoff baton found for ${stem}.`);
+    writeError(`No handoff found for ${stem}.`);
     process.exit(USAGE_ERROR_EXIT);
     return;
   }
@@ -49603,7 +49603,7 @@ async function runConsume({ args }) {
     if (format === "json") {
       writeJson2({ id: stem, status: "already_consumed" });
     } else {
-      writeHuman(`Handoff baton ${stem} was already consumed in another session/worktree \u2014 nothing left to deliver (first-consumer-wins).`);
+      writeHuman(`Handoff handoff ${stem} was already consumed in another session/worktree \u2014 nothing left to deliver (first-consumer-wins).`);
     }
     warnPendingUnpushed(repoRoot);
     return;
@@ -49620,7 +49620,7 @@ async function runConsume({ args }) {
       body: res.body
     });
   } else {
-    writeHuman(`Consumed handoff baton ${stem}`);
+    writeHuman(`Consumed handoff ${stem}`);
     writeHuman(`  deletion commit: ${res.commit} (gone for every worktree of this repo \u2014 first-consumer-wins)`);
     writeHuman("");
     writeHuman(res.body);
@@ -49630,12 +49630,12 @@ async function runConsume({ args }) {
 var handoffConsume = defineCommand({
   meta: {
     name: "consume",
-    description: "Consume a handoff baton: body is returned only after the deletion commit lands (first-consumer-wins). No id: auto-resolve a single pending baton, or list several (exit 65)."
+    description: "Consume a handoff: body is returned only after the deletion commit lands (first-consumer-wins). No id: auto-resolve a single pending handoff, or list several (exit 65)."
   },
   args: {
     id: {
       type: "positional",
-      description: "Baton id (the stem the disambiguation output prints). Optional.",
+      description: "Handoff id (the stem the disambiguation output prints). Optional.",
       required: false
     },
     "push-public": {
@@ -49659,15 +49659,15 @@ async function runShow({ args }) {
   const repoRoot = await resolveRepoRootForCreate();
   runPreResolutionFetch(repoRoot);
   const store = new HandoffRefStore(repoRoot);
-  let baton;
+  let handoff2;
   if (typeof args.id === "string" && args.id.length > 0) {
-    const { batons, failures } = store.list();
+    const { handoffs, failures } = store.list();
     for (const f4 of failures) {
-      writeError(`unparsable handoff baton entry ${f4.name}: ${f4.error}`);
+      writeError(`unparsable handoff entry ${f4.name}: ${f4.error}`);
     }
-    baton = batons.find((b3) => b3.stem === args.id);
-    if (baton === undefined) {
-      writeError(`No pending handoff baton ${args.id}.`);
+    handoff2 = handoffs.find((b3) => b3.stem === args.id);
+    if (handoff2 === undefined) {
+      writeError(`No pending handoff ${args.id}.`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
@@ -49677,36 +49677,36 @@ async function runShow({ args }) {
       warnPendingUnpushed(repoRoot);
       return;
     }
-    baton = store.list().batons.find((b3) => b3.stem === resolved);
-    if (baton === undefined) {
-      writeError(`No pending handoff baton ${resolved}.`);
+    handoff2 = store.list().handoffs.find((b3) => b3.stem === resolved);
+    if (handoff2 === undefined) {
+      writeError(`No pending handoff ${resolved}.`);
       process.exit(USAGE_ERROR_EXIT);
       return;
     }
   }
   if (format === "json") {
     writeJson2({
-      id: baton.stem,
-      scope: baton.handoff.scope,
-      created_at: baton.handoff.created_at,
-      body: baton.body
+      id: handoff2.stem,
+      scope: handoff2.handoff.scope,
+      created_at: handoff2.handoff.created_at,
+      body: handoff2.body
     });
   } else {
-    writeHuman(`Handoff baton ${baton.stem} (read-only \u2014 not consumed):`);
+    writeHuman(`Handoff handoff ${handoff2.stem} (read-only \u2014 not consumed):`);
     writeHuman("");
-    writeHuman(baton.body);
+    writeHuman(handoff2.body);
   }
   warnPendingUnpushed(repoRoot);
 }
 var handoffShow = defineCommand({
   meta: {
     name: "show",
-    description: "Read-only peek at a pending handoff baton (fetch-first discovery; no deletion, no marker, no push)."
+    description: "Read-only peek at a pending handoff (fetch-first discovery; no deletion, no marker, no push)."
   },
   args: {
     id: {
       type: "positional",
-      description: "Baton id (the stem the disambiguation output prints). Optional.",
+      description: "Handoff id (the stem the disambiguation output prints). Optional.",
       required: false
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
@@ -49741,7 +49741,7 @@ async function runPurge({ args }) {
       if (format === "json") {
         writeJson2({ status: result2.status, detail: result2.detail, warnings: result2.warnings });
       } else if (result2.status === "purged") {
-        writeHuman(`Purged handoff baton ref history: ${result2.detail}`);
+        writeHuman(`Purged handoff ref history: ${result2.detail}`);
       } else {
         writeHuman(`Nothing to purge \u2014 ${result2.detail} (idempotent no-op).`);
       }
@@ -49766,7 +49766,7 @@ async function runPurge({ args }) {
 var handoffPurge = defineCommand({
   meta: {
     name: "purge",
-    description: "Secret recall: rewrite the local baton ref history to a single root (current tip tree preserved) and lease-push it, cutting a leaked blob out of remote history. Requires an origin remote."
+    description: "Secret recall: rewrite the local handoff ref history to a single root (current tip tree preserved) and lease-push it, cutting a leaked blob out of remote history. Requires an origin remote."
   },
   args: {
     "push-public": {
@@ -49781,7 +49781,7 @@ var handoffPurge = defineCommand({
 var handoffCommand = defineCommand({
   meta: {
     name: "handoff",
-    description: "Handoff batons on the hidden ref (refs/ditto/handoffs). `write` commits a baton and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek; `purge` rewrites the ref history to a single root and lease-pushes it (secret recall). Multiple pending batons are listed by consume/show for disambiguation."
+    description: "Handoff handoffs on the hidden ref (refs/ditto/handoffs). `write` commits a handoff and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek; `purge` rewrites the ref history to a single root and lease-pushes it (secret recall). Multiple pending handoffs are listed by consume/show for disambiguation."
   },
   subCommands: {
     write: handoffWrite,
@@ -52727,7 +52727,7 @@ async function legacyHandoffLeftoverWarning(repoRoot) {
   const n3 = await countMd(join75(repoRoot, ".ditto", "handoff")) + await countMd(localDir(repoRoot, "handoff"));
   if (n3 === 0)
     return;
-  return `WARNING: ${n3} legacy file-tier handoff file(s) remain under .ditto/handoff/ or .ditto/local/handoff/ \u2014 the ref-baton store (\`ditto handoff\`) does not read them; migrate (ditto handoff write) or read them manually, then delete.`;
+  return `WARNING: ${n3} legacy file-tier handoff file(s) remain under .ditto/handoff/ or .ditto/local/handoff/ \u2014 the hidden-ref handoff store (\`ditto handoff\`) does not read them; migrate (ditto handoff write) or read them manually, then delete.`;
 }
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
@@ -61153,4 +61153,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=745aa531a22d62d63801897a8c52e39dbd81d00e19ebdb2a54387ebb1d428aeb
+//# ditto-src-stamp=b5c257c869096d6bb8b464495eddc3b764a688e0644dfd670aab8a7069979ba5

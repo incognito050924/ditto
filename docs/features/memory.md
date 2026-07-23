@@ -232,7 +232,7 @@ ditto는 provider를 직접 호출하지 않는다. `build --semantic`은 chunk 
 ### 동시성·정합성·drift 위험
 
 - **knowledge↔memory drift(위 §6)**: 가장 실질적인 정합성 위험. 이벤트 본문 supersede 자동화가 없으면 ADR 본문 수정이 memory에 반영 안 됨. autopilot이 warm-start로 stale한 결정 gist를 주입할 수 있음(단 freshness가 stale/drift면 억제되므로 일부 완화).
-- **bootstrap 세탁 경로(R6)**: repo에 파일 쓰고 `ditto memory bootstrap` 실행하면 propose→approve를 우회해 approved 이벤트를 만들 수 있음. 현재는 `approved_by='bootstrap'` 감사 라벨 + 수동 CLI로만 완화. (과거 이 경로의 최약점이던 handoff archive 인제스트는 핸드오프가 소멸성 바통 — refs/ditto/handoffs 숨은 ref 커밋, 소비 시 삭제 — 으로 재설계되면서 대상 자체가 제거됨. `memory-bootstrap.ts`의 archive 인제스트 코드는 대상 디렉터리가 없어 no-op으로 남아 있음.)
+- **bootstrap 세탁 경로(R6)**: repo에 파일 쓰고 `ditto memory bootstrap` 실행하면 propose→approve를 우회해 approved 이벤트를 만들 수 있음. 현재는 `approved_by='bootstrap'` 감사 라벨 + 수동 CLI로만 완화. (과거 이 경로의 최약점이던 handoff archive 인제스트는 핸드오프가 소멸성 인수인계 기록 — refs/ditto/handoffs 숨은 ref 커밋, 소비 시 삭제 — 으로 재설계되면서 대상 자체가 제거됨. `memory-bootstrap.ts`의 archive 인제스트 코드는 대상 디렉터리가 없어 no-op으로 남아 있음.)
 - **동시 쓰기**: 이벤트는 `'wx'` 플래그로 TOCTOU 차단(같은 id 동시 write는 하나가 EEXIST). 다만 projection은 whole-file 교체라 두 세션이 동시에 project하면 마지막 쓰기 승리(락 없음) — 파생물이라 재생성 가능하니 손실은 아니나, 매니페스트 setHash가 순간적으로 불일치할 수 있음.
 - **멀티 repo workspace 쓰기 미지원**: 현 v0는 workspace-루트 `.ditto/memory/`에 대해 read/scan/projection 전용. 서브repo에 대한 scan-write/propose/approve/build가 필요해지면 ADR-0011 session-rooting scope-out 재개 대상(`ADR-0013-memory-subsystem-design.md:75`).
 

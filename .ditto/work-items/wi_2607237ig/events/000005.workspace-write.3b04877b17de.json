@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607237ig",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "3b04877b17ded43b8c473a1a257ae61c12f138014a139d22a494f18f54ef2899",
+  "ts": "2026-07-23T12:25:37.320Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c [ \"$(rg -c -i baton dist/plugin/skills/handoff/SKILL.md)\" = \"2\" ] && rg -n -i baton dist/plugin/skills/handoff/SKILL.md | rg -q 'ADR-20260722-handoff-hidden-ref-baton' && ! rg -n -i baton dist/plugin/skills/handoff/SKILL.md | rg -qv 'ADR-20260722-handoff-hidden-ref-baton'",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

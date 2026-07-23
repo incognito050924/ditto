@@ -9,12 +9,12 @@ import {
 } from './handoff-store';
 
 /**
- * Hidden-ref baton store (wi_260722g7h): handoff batons live as file entries in a
+ * Hidden-ref handoff store (wi_260722g7h): handoffs live as file entries in a
  * tree committed onto `refs/ditto/handoffs` — a per-repo ref OUTSIDE refs/heads.
  * Everything is done with git plumbing (hash-object / mktree / commit-tree /
  * update-ref), so a write touches NO working-tree file, lands NO commit on the
  * current branch and shows up NOWHERE in `git branch`; and because loose/packed
- * refs are per-repo (shared by every linked worktree), a consumed baton disappears
+ * refs are per-repo (shared by every linked worktree), a consumed handoff disappears
  * for all worktrees at once.
  *
  * Concurrency: every mutation is a compare-and-swap — read tip, build the new
@@ -28,13 +28,13 @@ import {
  * touches any remote. 0-state contract: an unborn ref and an emptied tip tree are
  * both "no handoffs", never an error.
  *
- * Safety: the baton body is token-scrubbed FAIL-CLOSED before any git object is
+ * Safety: the handoff body is token-scrubbed FAIL-CLOSED before any git object is
  * created (parity with the old store's pre-commit scrub — a secret must never
  * reach the object DB, where it would be irreversible), and every tree entry name
  * passes `assertSafeRefTreeName` before it can reach mktree's line format.
  */
 
-/** The hidden per-repo ref all handoff batons live on (shared across worktrees). */
+/** The hidden per-repo ref all handoffs live on (shared across worktrees). */
 export const HANDOFF_REF = 'refs/ditto/handoffs';
 
 const ZERO_SHA = '0'.repeat(40);
@@ -55,19 +55,19 @@ export interface RefWriteResult {
 
 export type RefConsumeResult =
   | { status: 'consumed'; handoff: Handoff; body: string; commit: string }
-  /** The baton existed on the ref's history but is gone — idempotent refusal. */
+  /** The handoff existed on the ref's history but is gone — idempotent refusal. */
   | { status: 'already_consumed' }
-  /** No such baton ever existed on this ref (includes the unborn-ref 0-state). */
+  /** No such handoff ever existed on this ref (includes the unborn-ref 0-state). */
   | { status: 'not_found' };
 
-export interface RefBaton {
+export interface PendingHandoff {
   stem: string;
   handoff: Handoff;
   body: string;
 }
 
 export interface RefListResult {
-  batons: RefBaton[];
+  handoffs: PendingHandoff[];
   /** Entries at the tip that failed to parse — surfaced, never silently dropped. */
   failures: { name: string; error: string }[];
 }
@@ -148,7 +148,7 @@ interface TreeEntry {
 }
 
 /** Same serialized form as the file store: 1-line JSON frontmatter + markdown body. */
-function serializeBaton(h: Handoff): string {
+function serializeHandoff(h: Handoff): string {
   return `---\n${JSON.stringify(h)}\n---\n\n${renderHandoff(h)}\n`;
 }
 
@@ -159,7 +159,7 @@ export class HandoffRefStore {
   ) {}
 
   /**
-   * Commit a baton onto the hidden ref. Pre-commit invariants, in order:
+   * Commit a handoff onto the hidden ref. Pre-commit invariants, in order:
    * key guard (tree-entry injection) → fail-closed token scrub → THEN the first
    * git object. CAS loop: a lost race re-reads the tip and rebuilds (bounded).
    */
@@ -173,14 +173,14 @@ export class HandoffRefStore {
     const name = `${stem}.md`;
 
     // Fail-closed scrub BEFORE any git object exists — the object DB is irreversible.
-    const content = serializeBaton(scrubHandoffForCommit(h));
+    const content = serializeHandoff(scrubHandoffForCommit(h));
 
     for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt++) {
       const tip = this.tip();
       const kept = tip === null ? [] : this.treeEntries(tip).filter((e) => e.name !== name);
       const blob = this.hashObject(content);
       const tree = this.mktree([...kept, { mode: '100644', type: 'blob', sha: blob, name }]);
-      const commit = this.commitTree(tree, tip, `ditto handoff baton: write ${stem}`);
+      const commit = this.commitTree(tree, tip, `ditto handoff: write ${stem}`);
       this.hooks.beforeUpdateRef?.('write');
       const res = this.updateRefWithLockRetry(commit, tip);
       if (res.ok) return { ref: HANDOFF_REF, commit, stem, casRetries: attempt };
@@ -196,7 +196,7 @@ export class HandoffRefStore {
   }
 
   /**
-   * Consume a baton: return its body and land a deletion commit. First-consumer-
+   * Consume a handoff: return its body and land a deletion commit. First-consumer-
    * wins: the body is returned ONLY after the CAS succeeds — a loser re-reads,
    * finds the entry gone and refuses idempotently (`already_consumed`), never a
    * silent no-op and never an unhandled throw. Unborn ref / never-written stem is
@@ -223,14 +223,14 @@ export class HandoffRefStore {
       // smuggle an unparsed shape past consume.
       const handoff = handoffSchema.parse(parsed.handoff);
       const tree = this.mktree(entries.filter((e) => e.name !== name));
-      const commit = this.commitTree(tree, tip, `ditto handoff baton: consume ${stem}`);
+      const commit = this.commitTree(tree, tip, `ditto handoff: consume ${stem}`);
       this.hooks.beforeUpdateRef?.('consume');
       const res = this.updateRefWithLockRetry(commit, tip);
       if (res.ok) return { status: 'consumed', handoff, body: parsed.body, commit };
       if (res.cls !== 'cas_loss') {
         throw new HandoffRefStoreError('update_ref_failed', `update-ref failed: ${res.stderr}`);
       }
-      // cas_loss → someone raced us; re-read (they may have consumed this baton)
+      // cas_loss → someone raced us; re-read (they may have consumed this handoff)
     }
     throw new HandoffRefStoreError(
       'cas_exhausted',
@@ -239,20 +239,20 @@ export class HandoffRefStore {
   }
 
   /**
-   * Every baton at the ref tip (LOCAL lookup only — never fetch/push/sync; this is
+   * Every handoff at the ref tip (LOCAL lookup only — never fetch/push/sync; this is
    * the read path autopilot/doctor handoff-round counters ride). Unborn ref and
    * emptied tree are both the empty list. Unparsable entries are surfaced.
    */
   list(): RefListResult {
     const tip = this.tip();
-    if (tip === null) return { batons: [], failures: [] };
-    const batons: RefBaton[] = [];
+    if (tip === null) return { handoffs: [], failures: [] };
+    const handoffs: PendingHandoff[] = [];
     const failures: { name: string; error: string }[] = [];
     for (const entry of this.treeEntries(tip)) {
       if (entry.type !== 'blob' || !entry.name.endsWith('.md')) continue;
       try {
         const parsed = parseHandoffFile(this.catBlob(entry.sha));
-        batons.push({
+        handoffs.push({
           stem: entry.name.replace(/\.md$/, ''),
           handoff: parsed.handoff,
           body: parsed.body,
@@ -264,8 +264,8 @@ export class HandoffRefStore {
         });
       }
     }
-    batons.sort((a, b) => a.handoff.created_at.localeCompare(b.handoff.created_at));
-    return { batons, failures };
+    handoffs.sort((a, b) => a.handoff.created_at.localeCompare(b.handoff.created_at));
+    return { handoffs, failures };
   }
 
   // ── git plumbing ────────────────────────────────────────────────────────────

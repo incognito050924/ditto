@@ -1,6 +1,6 @@
 # work — work item(작업 항목) 생명주기 CLI
 
-> 문서 성격: 코드 설명(재설계용). 코드 변경에 자동 동기화되지 않으므로 시간이 지나면 실제 코드와 어긋날 수 있다(권위는 코드에 있다). 기준 커밋 `c2d2e16`, 기준일 2026-07-19. 핸드오프 관련 절은 바통 재설계(wi_260722g7h, ADR-20260722-handoff-hidden-ref-baton, 기준 커밋 `5f94ffe`)를 반영해 갱신됨 — 핸드오프는 더 이상 `ditto work`의 표면이 아니다(`docs/features/handoff.md` 참조).
+> 문서 성격: 코드 설명(재설계용). 코드 변경에 자동 동기화되지 않으므로 시간이 지나면 실제 코드와 어긋날 수 있다(권위는 코드에 있다). 기준 커밋 `c2d2e16`, 기준일 2026-07-19. 핸드오프 관련 절은 숨은-ref 재설계(wi_260722g7h, ADR-20260722-handoff-hidden-ref-baton, 기준 커밋 `5f94ffe`)를 반영해 갱신됨 — 핸드오프는 더 이상 `ditto work`의 표면이 아니다(`docs/features/handoff.md` 참조).
 
 ---
 
@@ -55,7 +55,7 @@
 
 > 주의: 힌트에 있던 `list`는 별도 서브커맨드로 존재하지 않는다 — 백로그 리스트는 `work status`(workId 생략)가 담당한다(`:1665`). 코드 주석·에러 문구는 이를 "`ditto work list`"로 부르지만 등록된 이름은 `status`다.
 >
-> 핸드오프 서브커맨드는 없다(wi_260722g7h에서 제거, `work.ts:3376-3393` 등록 목록 확인). 채점·상태 전이는 오직 `work done`의 소관이며, **비-pass 종료도 핸드오프를 자동 발행하지 않는다** — `--status partial|blocked` park는 re_entry(`--re-entry-command`/`--needs`)만 기록한다(`work.ts:1949-1969`). 인계가 필요하면 사용자가 `ditto handoff write`로 명시 작성한다(바통 모델 — `docs/features/handoff.md`).
+> 핸드오프 서브커맨드는 없다(wi_260722g7h에서 제거, `work.ts:3376-3393` 등록 목록 확인). 채점·상태 전이는 오직 `work done`의 소관이며, **비-pass 종료도 핸드오프를 자동 발행하지 않는다** — `--status partial|blocked` park는 re_entry(`--re-entry-command`/`--needs`)만 기록한다(`work.ts:1949-1969`). 인계가 필요하면 사용자가 `ditto handoff write`로 명시 작성한다(핸드오프 모델 — `docs/features/handoff.md`).
 
 ---
 
@@ -99,7 +99,7 @@ work done <wi>
 
 - **입력**: 사용자 goal/request/criteria, GitHub 이슈 좌표, git 상태(base ref·워킹트리), 기존 completion.json·intent.json·autopilot 그래프.
 - **변환**: 게이트(관측성·증거·잔여·리스크) 통과 판정 + 이벤트 fold + changed_files 결정적 수집.
-- **저장**: Record(record.json + events/), Run(completion.json·미러 등). (핸드오프는 `work`의 저장 표면이 아니다 — 바통은 숨은 ref `refs/ditto/handoffs`에 산다, `docs/features/handoff.md`.)
+- **저장**: Record(record.json + events/), Run(completion.json·미러 등). (핸드오프는 `work`의 저장 표면이 아니다 — 핸드오프은 숨은 ref `refs/ditto/handoffs`에 산다, `docs/features/handoff.md`.)
 - **출력**: `--output human|json`. json은 스크립트-소비 형태, human은 사람용.
 
 ---
@@ -193,7 +193,7 @@ record.json(status=draft) 작성 후 `created` status 이벤트를 append하고,
 
 ### 5-8. 핸드오프 발행 경로 없음 — 종료는 `work done`이 단독 소유 (wi_260722g7h)
 
-과거 이 자리에 있던 work-item 핸드오프 생성기(`writeWorkItemHandoff`: completion 합성 + 상태 전이 + 핸드오프 본문 작성)는 제거됐다(`work-item-handoff.ts:5-15` 주석). 채점·completion 합성·done/partial 전이는 이제 **오직 `work done` 경로**(§5-4)에 있고, 비-pass 종료는 re_entry park만 남긴다 — **핸드오프를 자동 발행하지 않는다**. 인계는 사용자-발의 바통(`ditto handoff write`)으로만 만들어지며 work 생명주기와 무결합이다(ADR-20260722 결정 4).
+과거 이 자리에 있던 work-item 핸드오프 생성기(`writeWorkItemHandoff`: completion 합성 + 상태 전이 + 핸드오프 본문 작성)는 제거됐다(`work-item-handoff.ts:5-15` 주석). 채점·completion 합성·done/partial 전이는 이제 **오직 `work done` 경로**(§5-4)에 있고, 비-pass 종료는 re_entry park만 남긴다 — **핸드오프를 자동 발행하지 않는다**. 인계는 사용자-발의 핸드오프(`ditto handoff write`)으로만 만들어지며 work 생명주기와 무결합이다(ADR-20260722 결정 4).
 
 ### 5-9. follow-up 물질화 (`work.ts:2553`)
 

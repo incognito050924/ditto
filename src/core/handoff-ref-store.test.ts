@@ -12,17 +12,17 @@ import {
 import { type SessionHandoffBuildInput, buildSessionHandoff } from './handoff-store';
 
 /**
- * Red-first unit tests for the hidden-ref baton store (wi_260722g7h, ac-1/ac-2).
+ * Red-first unit tests for the hidden-ref handoff store (wi_260722g7h, ac-1/ac-2).
  *
  * Each test encodes an AC clause against a THROWAWAY git fixture repo under the OS
  * tmpdir (mkdtemp) — no real origin, no network, no dependence on wall-clock time
  * (handoff timestamps are pinned via `now`). The store must talk ONLY to local git
  * plumbing (hash-object/mktree/commit-tree/update-ref) on `refs/ditto/handoffs`:
- *  - ac-1: write lands a baton commit on the hidden ref and leaves the working
+ *  - ac-1: write lands a handoff commit on the hidden ref and leaves the working
  *    tree, the current branch history and `git branch` COMPLETELY untouched; rich
  *    handoff fields survive the round-trip.
  *  - ac-2: consume returns the body and lands a deletion commit on the ref; a
- *    consumed baton is idempotently refused on re-consume (never a silent no-op,
+ *    consumed handoff is idempotently refused on re-consume (never a silent no-op,
  *    never an unhandled throw) and — because per-repo refs are shared across
  *    worktrees — disappears for every worktree (first-consumer-wins via CAS).
  * Sweep constraints folded into ac-1/ac-2 (delegation packet):
@@ -71,17 +71,17 @@ function makeHandoff(
 ): Handoff {
   return buildSessionHandoff({
     sessionId,
-    originalIntent: 'replace file-based handoff with a hidden-ref baton',
+    originalIntent: 'replace file-based handoff with a hidden-ref handoff',
     fromContext: 'unit-test session',
     currentState: 'mid-flight',
-    nextFirstCheck: 'read the baton ref',
+    nextFirstCheck: 'read the handoff ref',
     now: new Date('2026-01-02T03:04:05.000Z'),
     ...overrides,
   });
 }
 
 describe('HandoffRefStore.write (ac-1)', () => {
-  test('lands a baton commit on refs/ditto/handoffs; working tree, branch history and git branch untouched', async () => {
+  test('lands a handoff commit on refs/ditto/handoffs; working tree, branch history and git branch untouched', async () => {
     const repo = await makeRepo();
     const headBefore = git(repo, ['rev-parse', 'HEAD']).stdout.trim();
     const branchesBefore = git(repo, ['branch', '--list']).stdout;
@@ -89,11 +89,11 @@ describe('HandoffRefStore.write (ac-1)', () => {
     const store = new HandoffRefStore(repo);
     const res = store.write(makeHandoff('sess-1'), { author: 'alice' });
 
-    // Baton commit exists on the hidden ref and is what write reported.
+    // Handoff commit exists on the hidden ref and is what write reported.
     const tip = git(repo, ['rev-parse', '--verify', HANDOFF_REF]);
     expect(tip.exitCode).toBe(0);
     expect(tip.stdout.trim()).toBe(res.commit);
-    // Tree at the tip carries the baton entry named by the stem.
+    // Tree at the tip carries the handoff entry named by the stem.
     const lsTree = git(repo, ['ls-tree', '--name-only', HANDOFF_REF]);
     expect(lsTree.stdout).toContain(`${res.stem}.md`);
     // NOTHING else moved: clean status, same HEAD, same branch list, no new branch.
@@ -112,11 +112,11 @@ describe('HandoffRefStore.write (ac-1)', () => {
     });
     store.write(h, { author: 'alice' });
 
-    const { batons, failures } = store.list();
+    const { handoffs, failures } = store.list();
     expect(failures).toEqual([]);
-    expect(batons).toHaveLength(1);
-    const got = batons[0];
-    if (!got) throw new Error('baton missing');
+    expect(handoffs).toHaveLength(1);
+    const got = handoffs[0];
+    if (!got) throw new Error('handoff missing');
     expect(got.handoff.critical_decisions).toEqual([
       { decision: 'use hidden ref', rationale: 'no branch noise' },
     ]);
@@ -142,14 +142,14 @@ describe('HandoffRefStore.write (ac-1)', () => {
     expect(show.stdout).toContain('[redacted]');
   });
 
-  test('re-writing the same stem overwrites the single entry (no duplicate batons)', async () => {
+  test('re-writing the same stem overwrites the single entry (no duplicate handoffs)', async () => {
     const repo = await makeRepo();
     const store = new HandoffRefStore(repo);
     store.write(makeHandoff('sess-dup', { currentState: 'first' }), { author: 'alice' });
     store.write(makeHandoff('sess-dup', { currentState: 'second' }), { author: 'alice' });
-    const { batons } = store.list();
-    expect(batons).toHaveLength(1);
-    expect(batons[0]?.handoff.current_state).toBe('second');
+    const { handoffs } = store.list();
+    expect(handoffs).toHaveLength(1);
+    expect(handoffs[0]?.handoff.current_state).toBe('second');
   });
 });
 
@@ -176,19 +176,19 @@ describe('0-state contract', () => {
   test('unborn ref: list is empty and consume reports not_found — neither is an error', async () => {
     const repo = await makeRepo();
     const store = new HandoffRefStore(repo);
-    expect(store.list()).toEqual({ batons: [], failures: [] });
+    expect(store.list()).toEqual({ handoffs: [], failures: [] });
     expect(store.consume('sess-none__alice')).toEqual({ status: 'not_found' });
     // The 0-state read must not have created the ref as a side effect.
     expect(git(repo, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
   });
 
-  test('emptied tree after consuming the last baton is "no handoffs", not an error', async () => {
+  test('emptied tree after consuming the last handoff is "no handoffs", not an error', async () => {
     const repo = await makeRepo();
     const store = new HandoffRefStore(repo);
     const res = store.write(makeHandoff('sess-last'), { author: 'alice' });
     const consumed = store.consume(res.stem);
     expect(consumed.status).toBe('consumed');
-    expect(store.list()).toEqual({ batons: [], failures: [] });
+    expect(store.list()).toEqual({ handoffs: [], failures: [] });
   });
 });
 
@@ -225,7 +225,7 @@ describe('HandoffRefStore.consume (ac-2)', () => {
     expect(git(repo, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(tipAfterFirst);
   });
 
-  test('a consumed baton disappears for a second worktree of the same repo (shared refs)', async () => {
+  test('a consumed handoff disappears for a second worktree of the same repo (shared refs)', async () => {
     const repo = await makeRepo();
     const wt = join(repo, '..', `${repo.split('/').pop()}-wt`);
     fixtures.push(wt);
@@ -235,13 +235,13 @@ describe('HandoffRefStore.consume (ac-2)', () => {
     const storeWt = new HandoffRefStore(wt);
     const written = storeMain.write(makeHandoff('sess-wt'), { author: 'alice' });
 
-    // The OTHER worktree sees the baton (refs are per-repo, shared).
-    expect(storeWt.list().batons.map((b) => b.stem)).toEqual([written.stem]);
+    // The OTHER worktree sees the handoff (refs are per-repo, shared).
+    expect(storeWt.list().handoffs.map((b) => b.stem)).toEqual([written.stem]);
 
     expect(storeMain.consume(written.stem).status).toBe('consumed');
 
     // …and after consumption it is GONE there too — not re-consumable anywhere.
-    expect(storeWt.list().batons).toEqual([]);
+    expect(storeWt.list().handoffs).toEqual([]);
     expect(storeWt.consume(written.stem)).toEqual({ status: 'already_consumed' });
   });
 });
@@ -273,7 +273,7 @@ describe('CAS discipline (first-consumer-wins, bounded retry)', () => {
     expect(loser).toEqual({ status: 'already_consumed' });
   });
 
-  test('write loser of a CAS race rebuilds on the new tip and both batons survive', async () => {
+  test('write loser of a CAS race rebuilds on the new tip and both handoffs survive', async () => {
     const repo = await makeRepo();
     const plain = new HandoffRefStore(repo);
     let fired = false;
@@ -290,7 +290,7 @@ describe('CAS discipline (first-consumer-wins, bounded retry)', () => {
     expect(res.casRetries).toBe(1); // exactly one rebuild after the lost CAS
     const stems = plain
       .list()
-      .batons.map((b) => b.stem)
+      .handoffs.map((b) => b.stem)
       .sort();
     expect(stems).toEqual(['session__sess-a__alice', 'session__sess-b__bob']);
   });

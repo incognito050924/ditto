@@ -22,7 +22,7 @@ import { relative } from 'node:path';
 /**
  * Credential / token shapes scrubbed from any free-text fragment (defense-in-depth).
  * Exported (wi_260722g7h) so the handoff auto-push scrub gate DETECTS against the
- * exact same blacklist it scrubs with — a free-text baton body cannot be
+ * exact same blacklist it scrubs with — a free-text handoff body cannot be
  * allow-listed, so this coverage is the defense ceiling and is extended in the
  * same increment that introduces auto-push (PEM keys, JWTs, URL-embedded creds).
  */

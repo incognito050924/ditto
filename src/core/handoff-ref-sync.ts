@@ -7,7 +7,7 @@ import { TOKEN_PATTERNS } from './github-redaction';
 import { HANDOFF_REF } from './handoff-ref-store';
 
 /**
- * refs/ditto/*-only auto push/fetch layer for the hidden-ref handoff baton store
+ * refs/ditto/*-only auto push/fetch layer for the hidden-ref handoff store
  * (wi_260722g7h, g7h-impl-ref-sync — ac-3 / ac-scrub / ac-retention-invariant /
  * ac-concurrent-push). Used by the handoff write/consume/show CLI commands; NEVER by
  * hooks or the autopilot tick loop (network-free hook invariant — remote contact
@@ -31,26 +31,26 @@ import { HANDOFF_REF } from './handoff-ref-store';
  *    on the NEXT handoff command; a short in-command backoff retry runs first.
  *    Persistent-auth failures ('Permission denied', 'Authentication failed',
  *    'could not read Username', HTTP 403) get a DISTINCT credentials warning —
- *    and a failed consume-deletion push states that the remote baton still
+ *    and a failed consume-deletion push states that the remote handoff still
  *    exists (re-consume window open). Failure classes are PRESERVED in the
  *    warning/log (never collapsed into one skipped bucket).
  *  - Remote-ahead (ac-concurrent-push): fetch + tree-level re-merge + bounded
  *    re-push. The re-merge is a TREE reconciliation (per-file union of live
- *    batons minus consumed ones), NEVER a commit-graph merge/rebase: the new
+ *    handoffs minus consumed ones), NEVER a commit-graph merge/rebase: the new
  *    commit's single parent is the REMOTE tip, so a truncation-cut history can
  *    never be reintroduced and unrelated histories reconcile without loss. A
- *    deletion converges to the CAS winner; a stale copy of a consumed baton is
+ *    deletion converges to the CAS winner; a stale copy of a consumed handoff is
  *    dropped (its exact blob is found in the other side's history), while a
- *    never-seen local baton is always re-applied ("at-most-duplicated, never
- *    lost" — an offline consume may deliver twice, it may never lose a baton).
+ *    never-seen local handoff is always re-applied ("at-most-duplicated, never
+ *    lost" — an offline consume may deliver twice, it may never lose a handoff).
  *  - Consume 1:1 finalization: an ONLINE consume is final only after the
  *    deletion commit lands on the remote (remote CAS); the offline local-success
- *    path warns that another PC may consume the same baton (CLI wires this).
+ *    path warns that another PC may consume the same handoff (CLI wires this).
  *  - Retention (ac-retention-invariant): at push time history is kept within
  *    max(7 days, 50 commits). Truncation rebuilds the kept chain with THE SAME
  *    per-commit trees (root chain cut; author/committer identity and dates
- *    preserved) — the ref TIP TREE never changes, so pending batons always
- *    survive. Truncation fetches FIRST (absorbing remote-only pending batons),
+ *    preserved) — the ref TIP TREE never changes, so pending handoffs always
+ *    survive. Truncation fetches FIRST (absorbing remote-only pending handoffs),
  *    pushes ONLY with --force-with-lease pinned to the fetched remote sha, and
  *    flips the local ref (update-ref CAS) only AFTER the remote accepted — a
  *    failed push leaves the local ref untouched and retryable, so the
@@ -62,11 +62,11 @@ import { HANDOFF_REF } from './handoff-ref-store';
  *    landBranchToOrigin), and only in the conditional old-value form.
  *  - Visibility authorization boundary: a custom ref is advertised by ls-remote
  *    and fetchable by anyone who can read the repo, and a consume deletion
- *    cannot un-publish already-pushed history — so repo visibility IS the baton
+ *    cannot un-publish already-pushed history — so repo visibility IS the handoff
  *    readability scope. Auto-push is fail-closed: refused unless the caller
  *    proves 'private' or explicitly opts in ('unknown' counts as public).
  *  - Undetected-token recall path (chosen design): consume/rewrite the leaked
- *    baton, then `purgeHandoffHistory` rewrites local history to a single root
+ *    handoff, then `purgeHandoffHistory` rewrites local history to a single root
  *    commit (same tip tree) and lease-pushes it, cutting the leaked blob out of
  *    the remote history.
  *
@@ -104,10 +104,10 @@ const HISTORY_SCAN_CAP = 200;
  * commit the exempt path publishes. The exempt push rebuilds one commit carrying
  * the post-deletion tip tree onto the observed remote sha — collapsing any
  * piggybacked ancestor commits and STRIPPING the real author/committer so a
- * public remote never learns WHO consumed the baton. This is a NEW mask (the
+ * public remote never learns WHO consumed the handoff. This is a NEW mask (the
  * truncation/purge rebuild deliberately PRESERVES identity — not a mask precedent).
  */
-const HANDOFF_DELETION_COMMIT_MSG = 'ditto handoff baton: consume (deletion-only, identity-masked)';
+const HANDOFF_DELETION_COMMIT_MSG = 'ditto handoff: consume (deletion-only, identity-masked)';
 const MASK_IDENTITY_ENV: Record<string, string> = {
   GIT_AUTHOR_NAME: 'ditto handoff',
   GIT_AUTHOR_EMAIL: 'handoff@ditto.invalid',
@@ -144,7 +144,7 @@ export interface SecretMatch {
 }
 
 export interface ScrubFinding {
-  /** Tree path of the offending blob (the baton entry the user must fix). */
+  /** Tree path of the offending blob (the handoff entry the user must fix). */
   entry: string;
   pattern: string;
   index: number;
@@ -189,7 +189,7 @@ export interface SyncOptions {
 export interface SyncResult {
   status: SyncStatus;
   warnings: string[];
-  /** Baton stems present at the pushed tip — WHAT was sent, surfaced to the user. */
+  /** Handoff stems present at the pushed tip — WHAT was sent, surfaced to the user. */
   pushedStems: string[];
   scrubFindings: ScrubFinding[];
 }
@@ -291,7 +291,7 @@ export function buildSyncWarning(
   const first = (detail.split('\n').find((l) => l.trim().length > 0) ?? '').trim();
   const consumeNote =
     op === 'consume'
-      ? ' NOTE: the consume deletion was NOT pushed — the remote baton still exists, so another PC may still consume it (re-consume window open; at-most-duplicated, never lost).'
+      ? ' NOTE: the consume deletion was NOT pushed — the remote handoff still exists, so another PC may still consume it (re-consume window open; at-most-duplicated, never lost).'
       : '';
   switch (kind) {
     case 'auth':
@@ -485,7 +485,7 @@ function historicalBlobShas(cwd: string, tip: string, name: string): Set<string>
  *  - local only → dropped when the remote's history has seen the exact blob
  *    (remote consume wins), re-applied otherwise (pending write survives);
  *  - remote only → dropped when the local history has seen the exact blob
- *    (local consume propagates), kept otherwise (new remote baton).
+ *    (local consume propagates), kept otherwise (new remote handoff).
  * The result commit has the REMOTE tip as its ONLY parent — local-only commits
  * are replayed as content, never re-linked, so a cut history stays cut.
  */
@@ -518,7 +518,7 @@ function computeReconcileTarget(cwd: string, localTip: string | null, remoteTip:
   }
   const tree = mktree(cwd, merged);
   if (tree === treeOf(cwd, remoteTip)) return remoteTip; // everything resolved to remote state
-  return commitTree(cwd, tree, remoteTip, 'ditto handoff baton: reconcile (tree-level re-merge)');
+  return commitTree(cwd, tree, remoteTip, 'ditto handoff: reconcile (tree-level re-merge)');
 }
 
 /**
@@ -594,9 +594,9 @@ export interface DeletionOnlyDecision {
  * Decide whether an unauthorized (public/unknown, no opt-in) push may proceed as
  * a narrow DELETION-ONLY exemption, judged by the actual TRANSMIT OBJECT SET —
  * NEVER by op==='consume': computeReconcileTarget re-applies unpushed local write
- * batons onto the consume tip, so a "consume" can still carry new bodies. Called
+ * handoffs onto the consume tip, so a "consume" can still carry new bodies. Called
  * ONCE PER push attempt against the currently-observed remoteSha, so a re-merge
- * that re-introduces a local-only baton flips a prior exemption to a refusal.
+ * that re-introduces a local-only handoff flips a prior exemption to a refusal.
  *
  * Exempt iff the push publishes NO new readable content:
  *  - remoteSha must be an ACTUALLY-observed published base — null (offline /
@@ -687,7 +687,7 @@ export function evaluateDeletionOnlyExemption(
 // ─── pending-unpushed bookkeeping ─────────────────────────────────────────────
 
 /**
- * Is there local baton state the remote has not accepted yet? Backed by a LOCAL
+ * Is there local handoff state the remote has not accepted yet? Backed by a LOCAL
  * bookkeeping ref (last successfully pushed tip) so every subsequent ditto
  * command can re-surface the warning — a one-shot console line scrolls away.
  */
@@ -752,8 +752,8 @@ function rebuildTruncatedChain(cwd: string, keptOldestFirst: string[]): string {
     ]);
     const parts = meta.split('\0');
     const [an, ae, ad, cn, ce, cd] = parts;
-    const message = (parts.slice(6).join('\0') || 'ditto handoff baton').replace(/\n+$/, '');
-    parent = commitTree(cwd, treeOf(cwd, sha), parent, message || 'ditto handoff baton', {
+    const message = (parts.slice(6).join('\0') || 'ditto handoff').replace(/\n+$/, '');
+    parent = commitTree(cwd, treeOf(cwd, sha), parent, message || 'ditto handoff', {
       GIT_AUTHOR_NAME: an ?? 'ditto',
       GIT_AUTHOR_EMAIL: ae ?? 'ditto@local.invalid',
       GIT_AUTHOR_DATE: ad ?? '',
@@ -802,7 +802,7 @@ function forcePushTruncated(
 /**
  * Retention at push time. Preconditions handled here: truncation NEVER relies on
  * a push rejection (force is not rejected) — it runs only on a tip the remote is
- * known to hold (fetch/push happened first, absorbing remote-only batons), and
+ * known to hold (fetch/push happened first, absorbing remote-only handoffs), and
  * the LOCAL ref flips only after the remote accepted the lease push. A lease
  * rejection re-fetches, re-merges and recomputes (bounded); any other failure
  * defers truncation with a logged warning (never fatal to the sync).
@@ -856,7 +856,7 @@ function runRetention(
     const cls: SyncFailureClass = push.timedOut ? 'offline' : classifySyncFailure(out);
     if (cls === 'non-ff') {
       // Lease rejected — the remote moved between snapshot and push. Re-fetch,
-      // re-merge (absorbing the racing baton), recompute the truncation, retry.
+      // re-merge (absorbing the racing handoff), recompute the truncation, retry.
       const fetched = fetchRemoteTip(cwd, remote, timeoutMs);
       if (!fetched.ok || fetched.sha === null) {
         appendSyncLog(cwd, { event: 'truncation-deferred', remote, class: cls, detail: out });
@@ -881,7 +881,7 @@ function runRetention(
 
 /**
  * Sync the hidden handoff ref with `remote`: fetch-first (adopt/re-merge remote
- * batons; elided when opts.knownRemoteSha carries a same-command observation),
+ * handoffs; elided when opts.knownRemoteSha carries a same-command observation),
  * scrub-gate, push (bounded retries), then retention truncation at push time.
  * Local state is NEVER lost on any failure; every failure is class-preserved in
  * the warning and the jsonl log. Called ONLY from explicit handoff CLI commands
@@ -918,7 +918,7 @@ export interface FetchHandoffResult {
 /**
  * Fetch-only entry (READ path — wi_2607220o1): adopt/reconcile the remote
  * handoff ref WITHOUT pushing anything. Used by consume/show BEFORE resolving
- * pending batons, so a fresh clone / another PC sees origin's batons instead of
+ * pending handoffs, so a fresh clone / another PC sees origin's handoffs instead of
  * the local unborn-ref 0-state. Fetch is read-safe, so there is NO visibility
  * gate here — the fail-closed gate concerns publication (push) only. A fetch
  * failure degrades to local-only resolution with the same class-preserved
@@ -997,7 +997,7 @@ function scrubRefusal(
     ? `secret-shaped content detected in: ${entries.join(', ')}`
     : `scrub scan failed (${scan.error ?? 'unknown'})`;
   warnings.push(
-    `handoff sync: PUSH REFUSED (fail-closed) — ${reason}. Nothing was sent. Fix the baton body (rewrite or consume the offending baton) and retry; if the secret is already in local ref history, run the purge path to rewrite it out before pushing.`,
+    `handoff sync: PUSH REFUSED (fail-closed) — ${reason}. Nothing was sent. Fix the handoff body (rewrite or consume the offending handoff) and retry; if the secret is already in local ref history, run the purge path to rewrite it out before pushing.`,
   );
   appendSyncLog(cwd, {
     event: 'scrub-refused',
@@ -1034,7 +1034,7 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
   let offlineRetriesLeft = opts.offlineRetries ?? OFFLINE_PUSH_RETRIES;
 
   // Visibility authorization boundary — fail-closed: only a PROVEN-private remote
-  // (or an explicit opt-in) may receive an UNRESTRICTED baton auto-push. A
+  // (or an explicit opt-in) may receive an UNRESTRICTED handoff auto-push. A
   // public/unknown remote without opt-in is NOT refused outright here: the gate
   // moved INTO the push retry loop below, where — per attempt, against the OBSERVED
   // remote sha — a strictly deletion-only transmit set earns a narrow, identity-
@@ -1042,7 +1042,7 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
   // fetched remote sha, so it cannot live before the fetch.
   const pushAuthorized = opts.visibility === 'private' || opts.allowPublicRemote === true;
 
-  // Fetch-first: absorb remote batons and observe the remote sha (lease base).
+  // Fetch-first: absorb remote handoffs and observe the remote sha (lease base).
   // When the caller already observed the remote in THIS command (knownRemoteSha
   // from a preceding fetchHandoffRef), the initial fetch is skipped — a remote
   // that moved in the meantime is caught by the non-FF re-fetch loop below.
@@ -1098,7 +1098,7 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
         }
         // Rebuild ONE masked commit carrying the post-deletion tip tree onto the
         // observed remote sha (collapses any piggybacked ancestor commits; the tree
-        // is a subset of the published remote, so no baton is lost or newly leaked).
+        // is a subset of the published remote, so no handoff is lost or newly leaked).
         sourceTip = commitTree(
           cwd,
           treeOf(cwd, localTip),
@@ -1124,7 +1124,7 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
       if (push.ok) {
         pushed = true;
         if (exemptThisPush) {
-          // Flip the local ref to the masked commit (identical tip tree — no baton
+          // Flip the local ref to the masked commit (identical tip tree — no handoff
           // lost) so local and remote agree and pending clears.
           const cas = gitLocal(cwd, ['update-ref', HANDOFF_REF, sourceTip, localTip]);
           if (cas.exitCode !== 0) {
@@ -1200,7 +1200,7 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
  * Undetected-token recall path (the chosen recovery design): rewrite the WHOLE
  * local history to a single parentless root carrying the current tip tree, then
  * lease-push it — the leaked blob becomes unreachable on the remote (subject to
- * remote GC). The caller consumes/rewrites the offending baton FIRST; the new
+ * remote GC). The caller consumes/rewrites the offending handoff FIRST; the new
  * root is itself scrub-gated so a still-dirty tree can never be purge-pushed.
  */
 export function purgeHandoffHistory(cwd: string, remote: string, opts: SyncOptions): PurgeResult {
@@ -1234,7 +1234,7 @@ export function purgeHandoffHistory(cwd: string, remote: string, opts: SyncOptio
       cwd,
       treeOf(cwd, localTip),
       null,
-      'ditto handoff baton: purge history (secret recall)',
+      'ditto handoff: purge history (secret recall)',
     );
     const scan = scrubScan(cwd, newRoot, null);
     if (!scan.ok || scan.findings.length > 0) {
@@ -1249,7 +1249,7 @@ export function purgeHandoffHistory(cwd: string, remote: string, opts: SyncOptio
       return {
         status: 'scrub-refused',
         warnings,
-        detail: `tip tree still carries secret-shaped content (${entries.join(', ')}) — consume/rewrite the offending baton first`,
+        detail: `tip tree still carries secret-shaped content (${entries.join(', ')}) — consume/rewrite the offending handoff first`,
       };
     }
     let push: ReturnType<typeof runGitBounded>;

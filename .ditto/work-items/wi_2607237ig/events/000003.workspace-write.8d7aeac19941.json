@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607237ig",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "8d7aeac1994187dcc8841103666ec730b2f82904f63c69af65b2c77d8f57f658",
+  "ts": "2026-07-23T12:24:26.945Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c ! rg -q -i '바통|배턴|baton' src/ && rg -l -i '바통|배턴|baton' skills/ docs/ .ditto/knowledge/glossary.json | sort && echo SURFACES-ONLY-EXPECTED-FILES",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

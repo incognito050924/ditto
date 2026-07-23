@@ -254,7 +254,7 @@ async function intentHasRiskSignal(repoRoot: string, workItemId: string): Promis
 
 // re_entry 명령만 보조 힌트로 남긴다 (work item 필드 — 값이 무엇이든 그대로 전달).
 // handoff 본문·알림은 어떤 훅도 컨텍스트에 자동 주입하지 않는다 — 발견·소비는 명시적
-// pull로만 한다 (ref-baton 모델: `ditto handoff show` = 읽기 전용, `ditto handoff
+// pull로만 한다 (hidden-ref handoff 모델: `ditto handoff show` = 읽기 전용, `ditto handoff
 // consume` = 1회 소비). 아래 handler 는 본문이나 "핸드오프 있음" 알림을 컨텍스트에
 // 넣지 않는다.
 function pendingHandoffHint(item: WorkItem): string | undefined {
@@ -282,7 +282,7 @@ export async function legacyHandoffLeftoverWarning(repoRoot: string): Promise<st
     (await countMd(join(repoRoot, '.ditto', 'handoff'))) +
     (await countMd(localDir(repoRoot, 'handoff')));
   if (n === 0) return undefined;
-  return `WARNING: ${n} legacy file-tier handoff file(s) remain under .ditto/handoff/ or .ditto/local/handoff/ — the ref-baton store (\`ditto handoff\`) does not read them; migrate (ditto handoff write) or read them manually, then delete.`;
+  return `WARNING: ${n} legacy file-tier handoff file(s) remain under .ditto/handoff/ or .ditto/local/handoff/ — the hidden-ref handoff store (\`ditto handoff\`) does not read them; migrate (ditto handoff write) or read them manually, then delete.`;
 }
 
 async function logClassification(repoRoot: string, entry: Record<string, unknown>): Promise<void> {
@@ -319,9 +319,9 @@ export const userPromptSubmitHandler: HookHandler = async (input: HookInput) => 
   const ctx: CharterContext = {};
 
   // Handoff bodies are NO LONGER auto-injected (wi_260708700). Discovery/consume
-  // is an explicit pull (`ditto handoff show`/`consume` on the baton ref). The
+  // is an explicit pull (`ditto handoff show`/`consume` on the handoff ref). The
   // handoff stale-sweep GC tick that used to run here was REMOVED WITHOUT
-  // REPLACEMENT (wi_260722g7h): under the ref-baton model
+  // REPLACEMENT (wi_260722g7h): under the hidden-ref handoff model
   // consume deletes the entry immediately and retention truncation lives in the
   // ref store, so there is no stale-active set to sweep — and this prompt-path
   // tick must never grow a network call. The once-per-prompt tick keeps only:

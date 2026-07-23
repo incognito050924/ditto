@@ -4,7 +4,7 @@ import type { IntentMetric } from '~/schemas/intent-metric';
 import type { InterviewState } from '~/schemas/interview-state';
 import type { QuestionRound } from '~/schemas/question-round';
 import { type AutopilotDecision, AutopilotStore } from './autopilot-store';
-import { countHandoffBatonRounds } from './handoff-store';
+import { countHandoffRounds } from './handoff-store';
 import { InterviewStore } from './interview-store';
 import { WorkItemStore, type WorkItemSummary } from './work-item-store';
 
@@ -14,7 +14,7 @@ import { WorkItemStore, type WorkItemSummary } from './work-item-store';
  * downstream REWORK signal (fix nodes, retry/switch decisions, handoff rounds)
  * per work item, from data that is ALREADY persisted. No new instrumentation:
  * interview-state.json + autopilot.json + autopilot-decisions.jsonl + the
- * refs/ditto/handoffs baton history are read as-is.
+ * refs/ditto/handoffs handoff history are read as-is.
  *
  * The goal is to answer "are few questions thrift or neglect?" with data — the
  * process metric (questions_asked) sitting next to the outcome metric (drift +
@@ -43,7 +43,7 @@ export interface IntentQualityRow {
   retry_switch_decisions: number;
   /**
    * Handoff rounds for this work item (continuation churn) — a PERSISTENT count
-   * off the refs/ditto/handoffs history, so a consumed (deleted-at-tip) baton
+   * off the refs/ditto/handoffs history, so a consumed (deleted-at-tip) handoff
    * still counts as a round instead of the metric converging to 0.
    */
   handoff_rounds: number;
@@ -102,7 +102,7 @@ export interface IntentQualityDeps {
   readAutopilot(workItemId: string): Promise<Autopilot | null>;
   /** Read autopilot-decisions.jsonl (empty when absent). */
   readDecisions(workItemId: string): Promise<AutopilotDecision[]>;
-  /** Persistent handoff rounds (baton-ref history) owned by this work item. */
+  /** Persistent handoff rounds (handoff-ref history) owned by this work item. */
   countHandoffRounds(workItemId: string): Promise<number>;
   /** Read persisted intent-metric drift events (metrics.jsonl; empty when absent). */
   readMetrics(workItemId: string): Promise<IntentMetric[]>;
@@ -120,9 +120,9 @@ export function defaultIntentQualityDeps(repoRoot: string): IntentQualityDeps {
     readInterview: async (id) => ((await interviews.exists(id)) ? interviews.get(id) : null),
     readAutopilot: async (id) => ((await autopilots.exists(id)) ? autopilots.get(id) : null),
     readDecisions: (id) => autopilots.readDecisions(id),
-    // Persistent rounds off the baton-ref history (local ref read, no fetch);
+    // Persistent rounds off the handoff-ref history (local ref read, no fetch);
     // fail-open to 0 inside the helper like every other reader here.
-    countHandoffRounds: async (id) => countHandoffBatonRounds(repoRoot, id),
+    countHandoffRounds: async (id) => countHandoffRounds(repoRoot, id),
     readMetrics: (id) => workItems.readMetrics(id),
     readQuestionRounds: (id) => workItems.readQuestionRounds(id),
   };
