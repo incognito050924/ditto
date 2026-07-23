@@ -4,8 +4,9 @@ import { join } from 'node:path';
 
 /**
  * Purity-by-injection contract: the rebuild CORE (pure decision logic in drive/,
- * state/, verify/, and hook/stop-gate.ts) must never import the real-I/O utils
- * (util/fs, util/git) directly. Real I/O is wired only at entry points
+ * state/, verify/, and hook/stop-gate.ts) must never import the environment-
+ * coupled utils (util/fs, util/git, util/paths, util/config) directly. Real
+ * I/O and filesystem-layout knowledge are wired only at entry points
  * (hook/stop-hook.ts) and in seam/ — the injected-boundary layer.
  */
 
@@ -15,7 +16,7 @@ const CORE_DIRS = ['drive', 'state', 'verify'] as const;
 const CORE_FILES = [join('hook', 'stop-gate.ts')] as const;
 
 // Any import path reaching into rebuild/util/ from a core module.
-const UTIL_IMPORT = /from\s+['"][^'"]*\butil\/(fs|git)['"]/;
+const UTIL_IMPORT = /from\s+['"][^'"]*\butil\/(fs|git|paths|config)['"]/;
 
 async function coreSourceFiles(): Promise<string[]> {
   const files: string[] = [];
