@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723ja9",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "c28d34273af070a550db39871900a5fa5dc309a54ebd6e5aa98446898179d9f2",
+  "ts": "2026-07-23T12:39:36.185Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test rebuild/util/paths.test.ts && ! grep -q \"from ['\\\"].*src/\" rebuild/util/paths.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

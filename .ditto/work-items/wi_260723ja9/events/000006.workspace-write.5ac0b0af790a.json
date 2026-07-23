@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723ja9",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "5ac0b0af790a3205d3fc6c0f9a57710ca2caefdadad4af65e745bc1d7d92315d",
+  "ts": "2026-07-23T12:39:42.648Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test rebuild/ && bun run typecheck:rebuild",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
