@@ -1,0 +1,12 @@
+{
+  "schema": "ablation-score/1",
+  "oracle": "red",
+  "oracle_exit": 1,
+  "full_suite_exit": 0,
+  "full_suite": "pass",
+  "tamper": "clean",
+  "tampered_files": [],
+  "untracked_test_files": [],
+  "predicate_success": false,
+  "scored_at": "2026-07-23T02:02:46.423Z"
+}

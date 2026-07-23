@@ -1,0 +1,14 @@
+{
+  "schema": "ablation-score/1",
+  "oracle": "green",
+  "oracle_exit": 0,
+  "full_suite_exit": 0,
+  "full_suite": "pass",
+  "tamper": "clean",
+  "tampered_files": [],
+  "untracked_test_files": [
+    "?? tests/test_cli_load_errors.py"
+  ],
+  "predicate_success": true,
+  "scored_at": "2026-07-23T02:02:23.003Z"
+}

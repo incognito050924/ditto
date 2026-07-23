@@ -1,0 +1,31 @@
+{
+  "schema": "ablation-scope-meter/1",
+  "clone_head": "d3534c2ae911f7ad1e1d42ebc93e8125d64cac55",
+  "request_scope": [
+    "src/palimpsest/cli.py"
+  ],
+  "files_changed_tracked": [
+    "src/palimpsest/cli.py",
+    "tests/test_cli_load_errors.py"
+  ],
+  "in_request_scope": [
+    "src/palimpsest/cli.py"
+  ],
+  "out_of_request_tracked": [
+    "tests/test_cli_load_errors.py"
+  ],
+  "existing_test_modified": [
+    "tests/test_cli_load_errors.py"
+  ],
+  "engine_byproduct_tracked": [],
+  "new_test_files": [],
+  "out_of_request_untracked": [],
+  "counts": {
+    "files_changed_tracked": 2,
+    "out_of_request_tracked": 1,
+    "existing_test_modified": 1,
+    "new_test_files": 0,
+    "out_of_request_untracked": 0
+  },
+  "measured_at": "2026-07-23T02:05:31.351Z"
+}
