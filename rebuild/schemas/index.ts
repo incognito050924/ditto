@@ -15,6 +15,23 @@ export {
   type GateResult,
 } from './gate-result';
 export {
+  REBUILD_RECORD_SCHEMA_VERSION,
+  RE_ENTRY_STATUSES,
+  TERMINAL_STATUSES,
+  acceptanceCriterion,
+  declaredRisk,
+  isTerminalStatus,
+  reEntry,
+  riskSeverity,
+  workItemRecord,
+  workItemStatus,
+  type AcceptanceCriterion,
+  type DeclaredRisk,
+  type ReEntry,
+  type WorkItemRecord,
+  type WorkItemStatus,
+} from './work-item-record';
+export {
   queueExit,
   queueItem,
   queueItemKind,
