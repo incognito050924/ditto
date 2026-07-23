@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723jp4",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "8a4d282b82a597947e48c69f5093a5ea4dc517164c4ad2335232dae1caf36d90",
+  "ts": "2026-07-23T12:30:15.406Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c ! grep -q writeFileSync rebuild/hook/stop-hook.ts && bun test rebuild/ && bun run typecheck:rebuild",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

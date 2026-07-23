@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723jp4",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "3bca77cdb4cbeca00d0ccc534e4bc26f138030da64a51b8e46bc2d9dd7ec17c1",
+  "ts": "2026-07-23T12:29:04.335Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/util/fs.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

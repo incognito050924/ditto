@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723jp4",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "6b7e609a2b0007d2dda696bee73dbec58d0d25c5149ba73d8f5f097649c08278",
+  "ts": "2026-07-23T12:30:09.096Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/util/import-purity.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

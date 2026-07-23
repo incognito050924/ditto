@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723jp4",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "1a430537ebd38d6461a8de1163396faaee7c069dbbf9829f070455396d3b9bc3",
+  "ts": "2026-07-23T12:30:03.688Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test rebuild/util/fs.test.ts && ! grep -q \"from ['\\\"].*src/\" rebuild/util/fs.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

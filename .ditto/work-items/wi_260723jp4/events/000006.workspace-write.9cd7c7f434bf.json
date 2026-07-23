@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723jp4",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "9cd7c7f434bff6ff151def518c8f0c38abe9afb1f1bb0a1184f10ef233cf7ae1",
+  "ts": "2026-07-23T12:30:08.922Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/util/git.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
