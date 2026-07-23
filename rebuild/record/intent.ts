@@ -2,13 +2,14 @@ import { join } from 'node:path';
 
 import type { IntentArtifact } from '../schemas/intent-artifact';
 import {
+  isTerminalStatus,
   workItemRecord,
   type WorkItemRecord,
 } from '../schemas/work-item-record';
 import { captureIntentLock } from '../state/intent-lock';
 import { writeJson } from '../util/fs';
 import { committedWorkItemDir } from '../util/paths';
-import { loadWorkItem } from './store';
+import { loadWorkItem, TerminalStatusError } from './store';
 
 /**
  * Bind a formed intent to its work item's Record: root goal, criteria WITH
@@ -39,6 +40,15 @@ export class IntentAlreadyLockedError extends Error {
   }
 }
 
+export class IntentAfterVerdictError extends Error {
+  constructor(id: string) {
+    super(
+      `work item ${id} already carries recorded verdicts — seeding an intent now would erase criteria provenance; intent forms before verification`,
+    );
+    this.name = 'IntentAfterVerdictError';
+  }
+}
+
 export async function lockIntent(
   repoRoot: string,
   id: string,
@@ -47,9 +57,18 @@ export async function lockIntent(
   if (artifact.work_item_id !== id) {
     throw new IntentBindingMismatchError(id, artifact.work_item_id);
   }
-  const { record } = await loadWorkItem(repoRoot, id);
+  const { record, events, view } = await loadWorkItem(repoRoot, id);
   if (record.intent_lock !== undefined) {
     throw new IntentAlreadyLockedError(id);
+  }
+  if (isTerminalStatus(view.status)) {
+    throw new TerminalStatusError(id, view.status);
+  }
+  // provenance guard: wholesale criteria replacement is only safe before any
+  // verdict has landed — afterwards it would erase verdict-carrying criteria
+  // without the superseded marking the store guarantees
+  if (events.some((e) => e.kind === 'verdict')) {
+    throw new IntentAfterVerdictError(id);
   }
 
   const next: WorkItemRecord = workItemRecord.parse({

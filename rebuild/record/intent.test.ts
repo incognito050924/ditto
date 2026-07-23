@@ -78,6 +78,32 @@ describe('lockIntent — 의도 산출물이 A3 record에 결박된다', () => {
   });
 });
 
+describe('lockIntent — provenance·terminal 가드 (검증 지적 결함 차단)', () => {
+  test('refuses a record that already carries verdicts (wholesale replace would erase provenance)', async () => {
+    const root = await freshRepoWithItem('wi_i6');
+    const { setCriteria, recordVerdict } = await import('./store');
+    await setCriteria(root, 'wi_i6', [{ id: 'old1', statement: '기존 기준' }]);
+    await recordVerdict(root, 'wi_i6', {
+      criterion_id: 'old1',
+      verdict: 'pass',
+      evidence: [{ kind: 'test', path: 'x.test.ts', summary: 'green' }],
+      actor: 'me',
+    });
+    await expect(lockIntent(root, 'wi_i6', artifact('wi_i6'))).rejects.toThrow(
+      /verdict/i,
+    );
+  });
+
+  test('refuses a terminal record (done items are not re-seedable)', async () => {
+    const root = await freshRepoWithItem('wi_i7');
+    const { finalizeWorkItem } = await import('./store');
+    await finalizeWorkItem(root, 'wi_i7', { status: 'done', actor: 'me' });
+    await expect(lockIntent(root, 'wi_i7', artifact('wi_i7'))).rejects.toThrow(
+      /terminal|reopen/i,
+    );
+  });
+});
+
 describe('intent lock enforcement — 잠긴 AC 집합은 축소 불가, 추가만 허용', () => {
   test('setCriteria dropping a locked id is inadmissible', async () => {
     const root = await freshRepoWithItem('wi_i4');
