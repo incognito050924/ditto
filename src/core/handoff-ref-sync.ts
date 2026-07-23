@@ -149,6 +149,14 @@ export interface SyncOptions {
   offlineBackoffMs?: number;
   /** Retention clock injection (tests); defaults to wall clock. */
   now?: Date;
+  /**
+   * Remote tip already observed by THIS command — set when a preceding
+   * fetchHandoffRef in the same command has fetched + reconciled (null =
+   * remote-unborn was observed). When provided, syncInner SKIPS its initial
+   * fetch and starts from this sha (if the remote moved in the meantime, the
+   * non-FF re-fetch loop converges); undefined keeps fetch-first behavior.
+   */
+  knownRemoteSha?: string | null;
   hooks?: SyncHooks;
 }
 
@@ -745,10 +753,11 @@ function runRetention(
 
 /**
  * Sync the hidden handoff ref with `remote`: fetch-first (adopt/re-merge remote
- * batons), scrub-gate, push (bounded retries), then retention truncation at
- * push time. Local state is NEVER lost on any failure; every failure is
- * class-preserved in the warning and the jsonl log. Called ONLY from explicit
- * handoff CLI commands (never hooks / the autopilot tick).
+ * batons; elided when opts.knownRemoteSha carries a same-command observation),
+ * scrub-gate, push (bounded retries), then retention truncation at push time.
+ * Local state is NEVER lost on any failure; every failure is class-preserved in
+ * the warning and the jsonl log. Called ONLY from explicit handoff CLI commands
+ * (never hooks / the autopilot tick).
  */
 export function syncHandoffRef(cwd: string, remote: string, opts: SyncOptions): SyncResult {
   const warnings: string[] = [];
@@ -769,6 +778,12 @@ export interface FetchHandoffResult {
    * 'fetch-failed' — degrade to local-only resolution (warning carries the class).
    */
   status: 'fetched' | 'remote-unborn' | 'fetch-failed';
+  /**
+   * Observed remote tip: the fetched sha on 'fetched', null on 'remote-unborn'
+   * and on 'fetch-failed'. Feed it into SyncOptions.knownRemoteSha so a
+   * follow-up sync in the SAME command can skip its initial fetch.
+   */
+  sha: string | null;
   warnings: string[];
 }
 
@@ -805,17 +820,17 @@ export function fetchHandoffRef(
         op,
         detail: fetched.out.split('\n')[0] ?? '',
       });
-      return { status: 'fetch-failed', warnings };
+      return { status: 'fetch-failed', sha: null, warnings };
     }
-    if (fetched.sha === null) return { status: 'remote-unborn', warnings };
+    if (fetched.sha === null) return { status: 'remote-unborn', sha: null, warnings };
     const localTip = applyReconcile(cwd, fetched.sha);
     if (localTip === fetched.sha) recordPushed(cwd, localTip);
-    return { status: 'fetched', warnings };
+    return { status: 'fetched', sha: fetched.sha, warnings };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     appendSyncLog(cwd, { event: 'sync-error', remote, detail });
     warnings.push(`handoff sync: unexpected error — ${detail}`);
-    return { status: 'fetch-failed', warnings };
+    return { status: 'fetch-failed', sha: null, warnings };
   }
 }
 
@@ -889,20 +904,28 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
   }
 
   // Fetch-first: absorb remote batons and observe the remote sha (lease base).
-  let fetched = fetchRemoteTip(cwd, remote, timeoutMs);
-  if (!fetched.ok && offlineRetriesLeft > 0) {
-    const cls = fetched.timedOut ? 'offline' : classifySyncFailure(fetched.out);
-    if (cls === 'offline') {
-      offlineRetriesLeft -= 1;
-      Bun.sleepSync(offlineBackoffMs);
-      fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+  // When the caller already observed the remote in THIS command (knownRemoteSha
+  // from a preceding fetchHandoffRef), the initial fetch is skipped — a remote
+  // that moved in the meantime is caught by the non-FF re-fetch loop below.
+  let remoteSha: string | null;
+  if (opts.knownRemoteSha !== undefined) {
+    remoteSha = opts.knownRemoteSha;
+  } else {
+    let fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+    if (!fetched.ok && offlineRetriesLeft > 0) {
+      const cls = fetched.timedOut ? 'offline' : classifySyncFailure(fetched.out);
+      if (cls === 'offline') {
+        offlineRetriesLeft -= 1;
+        Bun.sleepSync(offlineBackoffMs);
+        fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+      }
     }
+    if (!fetched.ok) {
+      const cls = fetched.timedOut ? 'offline' : classifySyncFailure(fetched.out);
+      return failureResult(cwd, remote, op, cls, 'fetch', fetched.out, warnings);
+    }
+    remoteSha = fetched.sha;
   }
-  if (!fetched.ok) {
-    const cls = fetched.timedOut ? 'offline' : classifySyncFailure(fetched.out);
-    return failureResult(cwd, remote, op, cls, 'fetch', fetched.out, warnings);
-  }
-  let remoteSha = fetched.sha;
 
   let localTip = revParseQuiet(cwd, HANDOFF_REF);
   if (remoteSha !== null) localTip = applyReconcile(cwd, remoteSha);

@@ -8,6 +8,7 @@ import {
   type RefWriteResult,
 } from '~/core/handoff-ref-store';
 import {
+  type FetchHandoffResult,
   type RemoteVisibility,
   type SyncOp,
   type SyncResult,
@@ -139,11 +140,25 @@ function hasOriginRemote(repoRoot: string): boolean {
  * Auto-sync the hidden ref with origin (fetch-first + push). Null when there is
  * no origin remote — a purely local repo stays silent instead of warning forever.
  * All warnings (offline/auth/scrub/visibility, class-preserved) go to stderr.
+ * `knownRemoteSha` forwards a remote tip already observed by THIS command
+ * (consume's pre-resolution fetch) so the sync skips its own initial fetch;
+ * undefined keeps the fetch-first behavior.
  */
-function runAutoSync(repoRoot: string, op: SyncOp, allowPublicRemote: boolean): SyncResult | null {
+function runAutoSync(
+  repoRoot: string,
+  op: SyncOp,
+  allowPublicRemote: boolean,
+  knownRemoteSha?: string | null,
+): SyncResult | null {
   if (!hasOriginRemote(repoRoot)) return null;
   const visibility = resolveRepoVisibility(repoRoot);
-  const result = syncHandoffRef(repoRoot, 'origin', { visibility, allowPublicRemote, op });
+  const result = syncHandoffRef(repoRoot, 'origin', {
+    visibility,
+    allowPublicRemote,
+    op,
+    // exactOptionalPropertyTypes: only materialize the key when a tip was observed.
+    ...(knownRemoteSha !== undefined ? { knownRemoteSha } : {}),
+  });
   for (const w of result.warnings) writeError(w);
   if (result.status === 'public-remote-refused') {
     writeError('handoff sync: pass --push-public to opt in for a public/unknown remote.');
@@ -158,11 +173,14 @@ function runAutoSync(repoRoot: string, op: SyncOp, allowPublicRemote: boolean): 
  * consume/show never did). Read-safe, so never gated by the push visibility
  * gate; offline/unreachable degrades to local-only resolution with the module's
  * loud class-preserved warning (the CLI keeps going — never a hard failure).
+ * Returns the fetch result (null when there is no origin remote) so consume can
+ * feed the observed remote sha into its post-CAS sync and skip a second fetch.
  */
-function runPreResolutionFetch(repoRoot: string): void {
-  if (!hasOriginRemote(repoRoot)) return;
+function runPreResolutionFetch(repoRoot: string): FetchHandoffResult | null {
+  if (!hasOriginRemote(repoRoot)) return null;
   const res = fetchHandoffRef(repoRoot, 'origin');
   for (const w of res.warnings) writeError(w);
+  return res;
 }
 
 /**
@@ -438,9 +456,10 @@ async function runConsume({ args }: { args: Record<string, unknown> }): Promise<
     return;
   }
   const repoRoot = await resolveRepoRootForCreate();
-  // Adopt remote batons BEFORE resolution (cross-PC discovery); the post-CAS
-  // sync below still runs its own fetch as the deletion-push lease base.
-  runPreResolutionFetch(repoRoot);
+  // Adopt remote batons BEFORE resolution (cross-PC discovery). The observed
+  // remote tip is carried into the post-CAS sync below as knownRemoteSha, so an
+  // online consume runs ONE fetch, not two.
+  const preFetch = runPreResolutionFetch(repoRoot);
   const store = new HandoffRefStore(repoRoot);
   let stem: string;
   if (typeof args.id === 'string' && args.id.length > 0) {
@@ -482,8 +501,13 @@ async function runConsume({ args }: { args: Record<string, unknown> }): Promise<
   // 1:1 finalization: the local CAS already gated the body; push the deletion
   // commit BEFORE emitting it so an online consume is finalized on the remote. An
   // offline/auth failure degrades to local success — the op:'consume' warning
-  // states the remote baton still exists (re-consume window open).
-  const sync = runAutoSync(repoRoot, 'consume', args['push-public'] === true);
+  // states the remote baton still exists (re-consume window open). The
+  // pre-resolution fetch's observation feeds knownRemoteSha ('fetched' → the
+  // sha, 'remote-unborn' → null) so the sync skips its initial fetch;
+  // 'fetch-failed' / no origin → undefined keeps fetch-first behavior.
+  const knownRemoteSha =
+    preFetch === null || preFetch.status === 'fetch-failed' ? undefined : preFetch.sha;
+  const sync = runAutoSync(repoRoot, 'consume', args['push-public'] === true, knownRemoteSha);
   if (format === 'json') {
     writeJson({
       id: stem,

@@ -48824,19 +48824,19 @@ function fetchHandoffRef(cwd, remote, opts = {}) {
         detail: fetched.out.split(`
 `)[0] ?? ""
       });
-      return { status: "fetch-failed", warnings };
+      return { status: "fetch-failed", sha: null, warnings };
     }
     if (fetched.sha === null)
-      return { status: "remote-unborn", warnings };
+      return { status: "remote-unborn", sha: null, warnings };
     const localTip = applyReconcile(cwd, fetched.sha);
     if (localTip === fetched.sha)
       recordPushed(cwd, localTip);
-    return { status: "fetched", warnings };
+    return { status: "fetched", sha: fetched.sha, warnings };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     appendSyncLog(cwd, { event: "sync-error", remote, detail });
     warnings.push(`handoff sync: unexpected error \u2014 ${detail}`);
-    return { status: "fetch-failed", warnings };
+    return { status: "fetch-failed", sha: null, warnings };
   }
 }
 function failureResult(cwd, remote, op, cls, phase, detail, warnings) {
@@ -48883,20 +48883,25 @@ function syncInner(cwd, remote, opts, warnings) {
     });
     return { status: "public-remote-refused", warnings, pushedStems: [], scrubFindings: [] };
   }
-  let fetched = fetchRemoteTip(cwd, remote, timeoutMs);
-  if (!fetched.ok && offlineRetriesLeft > 0) {
-    const cls = fetched.timedOut ? "offline" : classifySyncFailure(fetched.out);
-    if (cls === "offline") {
-      offlineRetriesLeft -= 1;
-      Bun.sleepSync(offlineBackoffMs);
-      fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+  let remoteSha;
+  if (opts.knownRemoteSha !== undefined) {
+    remoteSha = opts.knownRemoteSha;
+  } else {
+    let fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+    if (!fetched.ok && offlineRetriesLeft > 0) {
+      const cls = fetched.timedOut ? "offline" : classifySyncFailure(fetched.out);
+      if (cls === "offline") {
+        offlineRetriesLeft -= 1;
+        Bun.sleepSync(offlineBackoffMs);
+        fetched = fetchRemoteTip(cwd, remote, timeoutMs);
+      }
     }
+    if (!fetched.ok) {
+      const cls = fetched.timedOut ? "offline" : classifySyncFailure(fetched.out);
+      return failureResult(cwd, remote, op, cls, "fetch", fetched.out, warnings);
+    }
+    remoteSha = fetched.sha;
   }
-  if (!fetched.ok) {
-    const cls = fetched.timedOut ? "offline" : classifySyncFailure(fetched.out);
-    return failureResult(cwd, remote, op, cls, "fetch", fetched.out, warnings);
-  }
-  let remoteSha = fetched.sha;
   let localTip = revParseQuiet(cwd, HANDOFF_REF);
   if (remoteSha !== null)
     localTip = applyReconcile(cwd, remoteSha);
@@ -49098,11 +49103,16 @@ function hasOriginRemote(repoRoot) {
     return false;
   }
 }
-function runAutoSync(repoRoot, op, allowPublicRemote) {
+function runAutoSync(repoRoot, op, allowPublicRemote, knownRemoteSha) {
   if (!hasOriginRemote(repoRoot))
     return null;
   const visibility = resolveRepoVisibility(repoRoot);
-  const result2 = syncHandoffRef(repoRoot, "origin", { visibility, allowPublicRemote, op });
+  const result2 = syncHandoffRef(repoRoot, "origin", {
+    visibility,
+    allowPublicRemote,
+    op,
+    ...knownRemoteSha !== undefined ? { knownRemoteSha } : {}
+  });
   for (const w2 of result2.warnings)
     writeError(w2);
   if (result2.status === "public-remote-refused") {
@@ -49112,10 +49122,11 @@ function runAutoSync(repoRoot, op, allowPublicRemote) {
 }
 function runPreResolutionFetch(repoRoot) {
   if (!hasOriginRemote(repoRoot))
-    return;
+    return null;
   const res = fetchHandoffRef(repoRoot, "origin");
   for (const w2 of res.warnings)
     writeError(w2);
+  return res;
 }
 function warnPendingUnpushed(repoRoot) {
   if (!hasOriginRemote(repoRoot))
@@ -49352,7 +49363,7 @@ async function runConsume({ args }) {
     return;
   }
   const repoRoot = await resolveRepoRootForCreate();
-  runPreResolutionFetch(repoRoot);
+  const preFetch = runPreResolutionFetch(repoRoot);
   const store = new HandoffRefStore(repoRoot);
   let stem;
   if (typeof args.id === "string" && args.id.length > 0) {
@@ -49387,7 +49398,8 @@ async function runConsume({ args }) {
     warnPendingUnpushed(repoRoot);
     return;
   }
-  const sync = runAutoSync(repoRoot, "consume", args["push-public"] === true);
+  const knownRemoteSha = preFetch === null || preFetch.status === "fetch-failed" ? undefined : preFetch.sha;
+  const sync = runAutoSync(repoRoot, "consume", args["push-public"] === true, knownRemoteSha);
   if (format === "json") {
     writeJson2({
       id: stem,
@@ -60930,4 +60942,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=78a39473fd2c8520ce329acf87ab00be5b539d257e4ce19c8bd23e5d2ef1f1c6
+//# ditto-src-stamp=963d64a681fbe4d5ca5fafffb7aa3ae505a21a42e53548b7a4da6aa4dda0a041

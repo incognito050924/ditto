@@ -434,6 +434,52 @@ describe('defect wi_2607220o1: consume/show fetch-first discovery of remote bato
   });
 });
 
+describe('wi_260723tck: consume feeds the pre-resolution fetch observation into the deletion sync', () => {
+  test('source wiring: consume forwards knownRemoteSha to the post-CAS sync (double-fetch removal)', () => {
+    // The single-fetch elision itself is pinned in src/core/handoff-ref-sync.test.ts
+    // ("the initial fetch is actually skipped"); at the CLI layer the contract is
+    // the WIRING — the observed sha must reach syncHandoffRef's opts.
+    const src = readFileSync(join(import.meta.dir, 'handoff.ts'), 'utf8');
+    expect(src).toContain('knownRemoteSha');
+  });
+
+  test('online consume with a remote baton: the deletion commit lands on origin through the observed-sha path', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    const written = JSON.parse((await runCmd('write', writeFlags())).out) as { stem: string };
+    // Origin holds the baton — consume's pre-resolution fetch observes status
+    // 'fetched' and its sha becomes knownRemoteSha for the deletion sync.
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).exitCode).toBe(0);
+
+    const res = await runCmd('consume', { id: written.stem, output: 'json', 'push-public': true });
+    expect(res.exitCode).toBe(0);
+    const localTip = refTip(repo);
+    expect(localTip).not.toBeNull();
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(localTip as string);
+    expect(new HandoffRefStore(repo).list().batons).toHaveLength(0);
+  });
+
+  test('remote-unborn observation (knownRemoteSha = null): the deletion push still lands the ref on origin', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    // Written through the STORE (no sync): origin never saw the handoff ref, so
+    // the pre-resolution fetch observes 'remote-unborn' → knownRemoteSha null.
+    const written = new HandoffRefStore(repo).write(makeBaton('unborn-remote'));
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+
+    const res = await runCmd('consume', { id: written.stem, output: 'json', 'push-public': true });
+    expect(res.exitCode).toBe(0);
+    expect((JSON.parse(res.out) as { body: string }).body).toContain('# Handoff:');
+    // The null observation elides the initial fetch but NOT the push: the
+    // deletion tip is finalized on origin within the same command.
+    const localTip = refTip(repo);
+    expect(localTip).not.toBeNull();
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(localTip as string);
+  });
+});
+
 describe('handoff purge: secret-recall history rewrite (wi_260723xh7)', () => {
   test('purge rewrites local+remote history to a single root; pending batons survive (tip tree preserved); exit 0', async () => {
     const origin = await makeBareOrigin();

@@ -13,6 +13,7 @@ import {
   buildSyncWarning,
   classifySyncFailure,
   detectSecretMatches,
+  fetchHandoffRef,
   pendingUnpushed,
   purgeHandoffHistory,
   syncHandoffRef,
@@ -644,6 +645,95 @@ describe('retention truncation (ac-retention-invariant)', () => {
       55,
     );
   }, 120_000);
+});
+
+// ─── knownRemoteSha: same-command fetch elision (double-fetch removal) ────────
+
+describe('syncHandoffRef with knownRemoteSha (fetch elision)', () => {
+  test('exact observed sha from fetchHandoffRef: push succeeds with the same result as the fetch-first path', async () => {
+    const origin = await makeBareOrigin();
+    const a = await makeRepo(origin);
+    const b = await makeRepo(origin);
+    const stemA1 = new HandoffRefStore(a).write(makeHandoff('sess-k1'), { author: 'alice' }).stem;
+    expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
+
+    // fetchHandoffRef surfaces the observed remote sha (the elision handle).
+    const fetched = fetchHandoffRef(b, 'origin');
+    expect(fetched.status).toBe('fetched');
+    expect(fetched.sha).toBe(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim());
+
+    const stemB1 = new HandoffRefStore(b).write(makeHandoff('sess-k2'), { author: 'bob' }).stem;
+    const out = syncHandoffRef(b, 'origin', opts({ knownRemoteSha: fetched.sha }));
+    // Same outcome as the fetch-first path: pushed, both batons on the remote tip.
+    expect(out.status).toBe('pushed');
+    expect(out.pushedStems.sort()).toEqual([stemA1, stemB1].sort());
+    expect(treeNames(origin, HANDOFF_REF)).toEqual([`${stemA1}.md`, `${stemB1}.md`].sort());
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(refTip(b) ?? 'MISSING');
+    expect(pendingUnpushed(b).pending).toBe(false);
+  });
+
+  test('the initial fetch is actually skipped: a remote-only baton is NOT adopted when knownRemoteSha equals the local tip', async () => {
+    const origin = await makeBareOrigin();
+    const a = await makeRepo(origin);
+    const b = await makeRepo(origin);
+    const stemA1 = new HandoffRefStore(a).write(makeHandoff('sess-s1'), { author: 'alice' }).stem;
+    expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
+    const observed = refTip(a);
+    expect(observed).not.toBeNull();
+    // the remote moves ahead AFTER A's observation.
+    const stemB1 = otherPcPush(b, 'sess-s2');
+
+    const out = syncHandoffRef(a, 'origin', opts({ knownRemoteSha: observed }));
+    // local tip === observed sha → nothing to push, and — because the initial
+    // fetch was elided — the remote-only baton was NOT adopted locally.
+    expect(out.status).toBe('nothing-to-push');
+    expect(new HandoffRefStore(a).list().batons.map((x) => x.stem)).toEqual([stemA1]);
+
+    // sanity: the fetch-first path (knownRemoteSha undefined) DOES adopt it.
+    expect(syncHandoffRef(a, 'origin', opts()).status).toBe('nothing-to-push');
+    expect(
+      new HandoffRefStore(a)
+        .list()
+        .batons.map((x) => x.stem)
+        .sort(),
+    ).toEqual([stemA1, stemB1].sort());
+  });
+
+  test('stale observed sha (remote advanced in between): the non-FF loop re-fetches, re-merges and no baton is lost', async () => {
+    const origin = await makeBareOrigin();
+    const a = await makeRepo(origin);
+    const b = await makeRepo(origin);
+    const stemA1 = new HandoffRefStore(a).write(makeHandoff('sess-t1'), { author: 'alice' }).stem;
+    expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
+    const staleObserved = refTip(a); // observation BEFORE the remote moves
+    // the remote advances between observation and sync.
+    const stemB1 = otherPcPush(b, 'sess-t2');
+    const stemA2 = new HandoffRefStore(a).write(makeHandoff('sess-t3'), { author: 'alice' }).stem;
+
+    const out = syncHandoffRef(a, 'origin', opts({ knownRemoteSha: staleObserved }));
+    // first push attempt is non-FF (stale lease base) → re-fetch + tree re-merge
+    // + re-push converge; every baton survives on the remote tip tree.
+    expect(out.status).toBe('pushed');
+    expect(treeNames(origin, HANDOFF_REF)).toEqual(
+      [`${stemA1}.md`, `${stemA2}.md`, `${stemB1}.md`].sort(),
+    );
+    expect(pendingUnpushed(a).pending).toBe(false);
+  });
+
+  test('null observed sha (remote unborn) with a local tip pushes normally', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const fetched = fetchHandoffRef(repo, 'origin');
+    expect(fetched.status).toBe('remote-unborn');
+    expect(fetched.sha).toBeNull();
+    const res = new HandoffRefStore(repo).write(makeHandoff('sess-u1'), { author: 'alice' });
+
+    const out = syncHandoffRef(repo, 'origin', opts({ knownRemoteSha: null }));
+    expect(out.status).toBe('pushed');
+    expect(out.pushedStems).toContain(res.stem);
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(refTip(repo) ?? 'MISSING');
+    expect(pendingUnpushed(repo).pending).toBe(false);
+  });
 });
 
 // ─── pending-unpushed bookkeeping ─────────────────────────────────────────────
