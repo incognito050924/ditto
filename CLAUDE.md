@@ -459,5 +459,7 @@ Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summ
 - ADR-20260722-claude-code-only-host · accepted · Claude-Code-only 호스트 — dual-host(ADR-0016) supersede · codex host flag는 시끄러운 실패 · Codex 표면 제거는 추적 후속
 - ADR-20260722-handoff-hidden-ref-baton · accepted · 핸드오프 = 사용자-발의 1:1 소멸성 바통 — 단일 저장소 refs/ditto/handoffs 숨은 ref + first-consumer-wins CAS + refs/ditto/* 한정 push 상시허가
 - ADR-20260723-handoff-publication-object-gate · accepted · 핸드오프 push의 "공개" 판정 = 신규-객체 전송 기준 — 삭제-전용 push 무동의 예외(신원 마스킹 재발행·fail-closed) + 프로젝트당 1회 write-push 동의 (ADR-20260722-handoff-hidden-ref-baton refine — supersede 아님)
+- ADR-20260723-parity-audit-classification-principles · accepted · 옛 src 능력 분류 원칙 — 기본 drop(가역·철회조건)·keep=순효능(4항 증거는 요건, validated만 산입)·#66 keep 번들 한정·redesign 전부 flip-전-완료·비사소 실증 정의+부품 사슬 판별 규칙
+- ADR-20260723-parity-audit-disposition · accepted · 옛 src 24영역 처분 확정 — keep 13·redesign 2(flip-전-완료)·drop 9(행별 철회조건), 사용자 flip 3(A5·A17·A21 keep)·계약 인수 의무(A1 오케스트레이션 ADR 5건→rebuild 루프, A20 측정→net-efficacy)·Codex 후행 백로그
 
 <!-- ditto:knowledge:end -->

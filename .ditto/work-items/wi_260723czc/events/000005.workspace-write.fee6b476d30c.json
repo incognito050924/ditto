@@ -1,0 +1,36 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723czc",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "fee6b476d30c8ab89233c5cafc98285235e2e5850e8c920d34952c90b3163307",
+  "ts": "2026-07-23T12:00:30.314Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      }
+    ]
+  }
+}

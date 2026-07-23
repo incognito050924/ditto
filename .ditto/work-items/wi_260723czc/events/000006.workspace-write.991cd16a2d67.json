@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723czc",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "991cd16a2d6754d3c9552a33dbd5dd2c03d4d79ffa148b5df6c1a4853ef79c72",
+  "ts": "2026-07-23T12:00:30.315Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "note"
+      },
+      {
+        "kind": "command"
+      },
+      {
+        "kind": "file"
+      },
+      {
+        "kind": "command",
+        "command": "python3 /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/7365642c-f541-4a96-a468-29137b6ad0f2/scratchpad/check-ac2.py",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
