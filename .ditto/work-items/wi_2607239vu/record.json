@@ -1,0 +1,131 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607239vu",
+  "title": "handoff 가시성 게이트 공개-면제 삭제 push — public repo에서 consume 1:1 회복",
+  "source_request": "사용자: 배턴 동기화를 repo 가시성 한 방법으로 결정할 수 없다(사용자 프로젝트마다 다름). 소비될 때 1:1 의미대로 동작해야 한다. 제안(전송 델타에 새 blob 0개면 가시성 게이트 통과)을 dialectic으로 검증하라 — 구현 착수는 검증·사용자 승인 후.",
+  "goal": "public/unknown 가시성 repo에서도 handoff 소비의 1:1 소멸이 원격까지 실동작으로 성립한다 — 삭제-전용(새 blob 0 델타) push 공개-면제 + 프로젝트당 1회 동의 설정. 성공 기준은 메커니즘 설치가 아니라 동작: 소비된 핸드오프가 어떤 후속 소비자에게도 다시 제시되지 않는다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "public repo에서 1회 동의 없이도 consume의 삭제 커밋이 origin에 전파되고, 그 후 두 번째 소비 시도(다른 클론)는 not_found/already_consumed로 실패한다 — 실동작 테스트로 증명",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src/cli/commands/handoff.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "새 blob이 하나라도 있는 전송은 동의 없이 절대 통과하지 않는다: write push 거부 유지, 미push 핸드오프 동반 consume 거부, 델타 열거 오류·remoteSha 관측 불가(오프라인)·unborn 원격(null) 모두 면제 불가(fail-closed), 기록된 pushed-ref 대용 base 금지, 매 push 시도마다 갱신된 remoteSha로 재평가 — 적대 테스트로 고정",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src/core/handoff-ref-sync.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "프로젝트당 1회 동의: 동의 전 public write push는 현행대로 거부, 동의 기록 후 자동 push. 동의 키는 개인 비커밋 구획(localDir 경유) 밖에서 읽히거나 쓰이지 않음을 유닛 테스트로 단언",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src/core/ditto-config.test.ts src/cli/commands/handoff.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "비회귀: show는 삭제하지 않고, 오프라인 소비의 최대-1회-중복은 반드시 시끄러운 경고로 검출되며(조용한 중복 착수 없음), 비밀 스크럽 게이트는 면제 경로 포함 모든 push 전에 실행된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src/core/handoff-ref-sync.test.ts src/cli/commands/handoff.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "retention 절단의 면제 push 경로 동작이 명시적으로 결정되고(실행 또는 생략) 그 결정이 테스트로 고정된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src/core/handoff-ref-sync.test.ts -t retention",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "ADR-20260722의 가시성 게이트 결정에 대한 정련(공개의 정의 = 새 blob 전송, 삭제-전용 push 면제, 프로젝트당 1회 동의)이 ADR로 기록된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "rg -c 새-오브젝트|삭제-전용|write-push 동의|REFINE .ditto/knowledge/adr/ADR-20260723-handoff-publication-object-gate.md",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/knowledge/adr/ADR-20260723-handoff-publication-object-gate.md",
+    "CLAUDE.md",
+    "bin/ditto",
+    "src/cli/commands/handoff.test.ts",
+    "src/cli/commands/handoff.ts",
+    "src/core/ditto-config.test.ts",
+    "src/core/ditto-config.ts",
+    "src/core/handoff-ref-sync.test.ts",
+    "src/core/handoff-ref-sync.ts"
+  ],
+  "worktrees": [],
+  "risks": [],
+  "re_entry": {
+    "command": "ditto handoff consume wi_2607239vu__hskim-ecoletree-com",
+    "fresh_evidence_needed": [
+      "동의를 consume→write push로 재배선(ac-3)",
+      "review-security-gate",
+      "verify-acs",
+      "knowledge-adr-refinement(ADR-20260722 정련 기록, ac-6)",
+      "랜딩+push(사용자 허가)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "e18ec675a47913e9b9312add1b6df8b458513791",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/memory/events/memevt_retro_e5eae7f9bbed248f.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_2607239ax/",
+    ".ditto/work-items/wi_2607239vu/",
+    ".ditto/work-items/wi_260723tck/",
+    ".ditto/work-items/wi_260723urq/",
+    ".ditto/work-items/wi_260723xh7/"
+  ],
+  "created_at": "2026-07-23T08:30:55.363Z",
+  "updated_at": "2026-07-23T12:18:20.260Z",
+  "closed_at": "2026-07-23T12:18:20.259Z"
+}

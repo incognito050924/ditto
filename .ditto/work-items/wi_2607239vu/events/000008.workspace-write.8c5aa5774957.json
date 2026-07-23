@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607239vu",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "8c5aa57749577a603386bbc23a5d8bf2c58b651b52434d8461ed97f89a9f6173",
+  "ts": "2026-07-23T12:17:11.789Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "rg -c 새-오브젝트|삭제-전용|write-push 동의|REFINE .ditto/knowledge/adr/ADR-20260723-handoff-publication-object-gate.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

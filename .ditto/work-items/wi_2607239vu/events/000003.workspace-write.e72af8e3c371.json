@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607239vu",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "e72af8e3c371b7377513c60c8e39e8f7422a9285280bdb477f1ac9ade0c2cdfb",
+  "ts": "2026-07-23T12:14:43.566Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test src/cli/commands/handoff.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

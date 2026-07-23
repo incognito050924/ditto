@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607239vu",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "0788e5a4646cc48c4b229e6f80c5328a84cf81dc28a00e4f7961f25fea521bbc",
+  "ts": "2026-07-23T12:16:37.109Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test src/core/ditto-config.test.ts src/cli/commands/handoff.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
