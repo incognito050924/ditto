@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723qd5",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "7a90e3f0d6b71355fb6e0a1ae3c6d79f6b084cfc2f7f08e08c77ce2df0e2d06b",
+  "ts": "2026-07-23T15:00:47.979Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "grep -n 매번 반드시 skills/handoff/SKILL.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

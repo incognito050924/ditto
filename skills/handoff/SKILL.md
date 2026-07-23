@@ -42,6 +42,8 @@ Carry the decisive context inline with the repeatable rich flags — the handoff
 
 Done when intent, decisions (critical ones with rationale), irreversible risks, and open threads/uncertainty are all in the body. Frame the handoff against the **code** (charter §4-11), not against local state that will not exist on the other clone.
 
+**After a successful `write`, ALWAYS print the resume prompt — 매번 반드시, no exceptions.** End your response with a copy-paste block for the next session containing: ① `ditto handoff consume <stem>` with the EXACT stem from the `write` output's `stem` field (never guessed, never id-less — a bare `consume` only auto-resolves when exactly one handoff is pending, and the next session cannot know that), and ② the first action to take after consuming (the `--next` content). A handoff whose resume prompt was not printed is not done being written.
+
 ## Transport: one hidden ref, auto-synced
 
 - **Single store = `refs/ditto/handoffs`.** A handoff is a commit on that hidden ref — no working-tree file, no branch commit, invisible to `git branch`. Refs are per-repo, so every linked worktree shares the same pending handoffs.
@@ -65,5 +67,6 @@ Ref history is truncated at push time to max(7 days, 50 commits); truncation nev
 ## Output contract
 
 - The handoff conforms to the handoff schema and is written through `ditto handoff write` (never a hand-authored file or ref surgery).
+- Every successful `write` ends with the printed resume prompt: exact-stem `ditto handoff consume <stem>` + the first post-consume action.
 - Consumption stays explicit and destructive: consume only what you continue; `show` for looking.
 - The resume target keeps the same autopilot_id and the full agreed scope.
