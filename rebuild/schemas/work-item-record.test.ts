@@ -133,6 +133,44 @@ describe('workItemRecord (new-generation minimal schema)', () => {
     ).toBe(false);
   });
 
+  test('an acceptance criterion may carry its oracle (AC↔oracle 수렴이 record에 착지)', () => {
+    expect(
+      workItemRecord.safeParse({
+        ...minimal,
+        acceptance_criteria: [
+          {
+            id: 'ac1',
+            statement: 's',
+            verdict: 'unverified',
+            evidence: [],
+            oracle: {
+              criterion_id: 'ac1',
+              statement: 'bun test exit 0',
+              verification_method: 'dynamic_test',
+              direction: 'forward',
+              maps_to: { kind: 'ac', ref: 'ac1' },
+            },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  test('the record may carry a persisted intent lock (frozen AC id-set)', () => {
+    expect(
+      workItemRecord.safeParse({
+        ...minimal,
+        intent_lock: { criteria: ['ac1', 'ac2'] },
+      }).success,
+    ).toBe(true);
+    expect(
+      workItemRecord.safeParse({
+        ...minimal,
+        intent_lock: { criteria: ['ac1'], extra: true },
+      }).success,
+    ).toBe(false);
+  });
+
   test('lineage/provenance additive-optional fields are accepted', () => {
     expect(
       workItemRecord.safeParse({

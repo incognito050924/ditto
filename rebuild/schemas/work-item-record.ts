@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { evidence } from './evidence';
+import { acOracle } from './oracle';
 import { verdict } from './verdict';
 
 /**
@@ -77,6 +78,8 @@ export const acceptanceCriterion = z
     evidence: z.array(evidence),
     /** Provenance lock: criteria replaced after first verdict are marked, never erased. */
     superseded: z.boolean().optional(),
+    /** AC↔oracle convergence landed on the record — the completion currency at close. */
+    oracle: acOracle.optional(),
   })
   .strict();
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterion>;
@@ -91,6 +94,11 @@ export const workItemRecord = z
     acceptance_criteria: z.array(acceptanceCriterion),
     risks: z.array(declaredRisk),
     re_entry: reEntry.optional(),
+    /** Persisted intent lock: the frozen AC id-set (reduction is inadmissible). */
+    intent_lock: z
+      .object({ criteria: z.array(z.string().min(1)) })
+      .strict()
+      .optional(),
     /** Lineage: previous work item(s) this one continues (stem chain edge). */
     follows: z.array(z.string().min(1)).optional(),
     /** Lineage: work item whose run surfaced this one. */
