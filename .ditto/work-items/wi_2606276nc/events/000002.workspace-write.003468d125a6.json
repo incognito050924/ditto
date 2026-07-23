@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2606276nc",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "003468d125a6c316e44fa652dda6346a272caa1e54853e178d648f7c2ba809d5",
+  "ts": "2026-07-11T16:55:49.684Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/worktree-lifecycle.test.ts tests/core/worktree-drive.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ndd",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "e0187452764db3603c87f15c6cb6723020930b8612a5f8c04bdec2f220d779dc",
+  "ts": "2026-07-20T22:42:29.355Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c e=$(bun run typecheck:rebuild 2>&1 | grep -c \"loop.ts\"); echo \"loop.ts error lines: $e\"; [ \"$e\" = 0 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

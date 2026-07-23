@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260709ft1",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "ad8d984eea6489da4bb8b0503218341b1e0f0f153fb6aaed4324e9c71fe660e3",
+  "ts": "2026-07-09T01:20:32.780Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/acg/tidy-classifier.test.ts tests/acg/tidy-subgraph.test.ts tests/core/autopilot-tidy.test.ts tests/core/autopilot-tidy-wiring.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

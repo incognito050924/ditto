@@ -1,0 +1,180 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_26071975p",
+  "title": "§10-1 rebuild 불변식 계약 잠금",
+  "source_request": "재구축 준비 §10-1: ultracode 한방 구현 전에 agents가 구현할 불변 계약을 먼저 고정한다. §7 불변식 중 데이터 계약으로 표현되는 것을 zod 스키마로.",
+  "goal": "DITTO 재구축 §7 불변식 데이터 계약을 zod 스키마로 잠근다 — 완료계약·verdict·evidence(참조)·fail-closed 게이트·큐항목을 옛 src와 격리된 rebuild/ 에 정의",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "rebuild 완료계약 테스트를 bun test로 실행하면 통과한다: 모든 AC가 evidence와 함께 pass일 때만 final_verdict=pass이고 하나라도 unverified나 fail이면 pass가 아님을 검증",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test rebuild/schemas/completion-contract.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "bun test가 verdict 집합이 정확히 pass·fail·partial·unverified 넷임과 evidence가 path·hash·preview 참조만 허용하고 원문 body를 거부함을 검증한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test rebuild/schemas/verdict.test.ts rebuild/schemas/evidence.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "bun test가 fail-closed 게이트는 불확실하거나 판정불가인 입력에 block을 반환하고 명시 근거가 있을 때만 pass를 반환함을 검증한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test rebuild/schemas/gate-result.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "bun test가 큐 항목은 resolved·new-scope-deferral·escape 중 하나로만 닫히고 그 외 이탈값을 거부함을 검증한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test rebuild/schemas/queue-item.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "git diff --name-only 결과가 rebuild 하위 파일만 포함하고 src 하위 변경이 0건임",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c [ -z \"$(git status --porcelain src/)\" ] && echo \"src/ unchanged (0 tracked/untracked changes); new code isolated under rebuild/\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "rebuild 대상 bun test 실행 결과 실패 0건",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test rebuild/",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/handoff/session__sess-2026-07-19t17-35-06-602z-03acc1__t-t-test.md",
+    ".ditto/handoff/session__sess-2026-07-19t18-20-25-478z-d36539__t-t-test.md",
+    "bin/ditto",
+    "docs/features/README.md",
+    "docs/features/acg-review.md",
+    "docs/features/architecture.md",
+    "docs/features/autopilot.md",
+    "docs/features/boundary.md",
+    "docs/features/bridge.md",
+    "docs/features/change-contract.md",
+    "docs/features/change-map.md",
+    "docs/features/classify.md",
+    "docs/features/cleanup.md",
+    "docs/features/codeql.md",
+    "docs/features/context.md",
+    "docs/features/coverage.md",
+    "docs/features/decision-conflict.md",
+    "docs/features/deep-interview.md",
+    "docs/features/doctor.md",
+    "docs/features/e2e.md",
+    "docs/features/fitness.md",
+    "docs/features/github.md",
+    "docs/features/handoff.md",
+    "docs/features/hook.md",
+    "docs/features/impact.md",
+    "docs/features/init.md",
+    "docs/features/journey-author.md",
+    "docs/features/knowledge.md",
+    "docs/features/memory.md",
+    "docs/features/mode.md",
+    "docs/features/prism.md",
+    "docs/features/push-gate.md",
+    "docs/features/refactor.md",
+    "docs/features/release.md",
+    "docs/features/review.md",
+    "docs/features/run.md",
+    "docs/features/semantic.md",
+    "docs/features/setup.md",
+    "docs/features/uninstall.md",
+    "docs/features/verify.md",
+    "docs/features/work.md",
+    "docs/features/workspace.md",
+    "docs/features/worktree.md",
+    "docs/redesign/DITTO-whitepaper.md",
+    "docs/redesign/ditto-rebuild-draft.md",
+    "docs/redesign/feature-mapping.md",
+    "resources/playwright-agents/healer.constrained.md",
+    "resources/playwright-agents/healer.constrained.toml",
+    "scripts/build-codex-plugin.mjs",
+    "skills/e2e-author/SKILL.md",
+    "src/core/autopilot-loop.ts",
+    "src/core/codeql/sarif-adapter.ts",
+    "src/core/coverage-oracle.ts",
+    "src/core/ditto-config.ts",
+    "src/core/e2e/init-agents.ts",
+    "src/core/e2e/journey-digest.ts",
+    "src/core/gates.ts",
+    "src/core/journey-authoring/store.ts",
+    "src/core/memory-store.ts",
+    "src/core/provision/provisioner.ts",
+    "src/core/question-context.ts",
+    "src/core/setup.ts",
+    "src/core/teardown.ts",
+    "src/hooks/stop.ts",
+    "tests/conformance/m0.conformance.test.ts",
+    "tests/core/autopilot-loop.test.ts",
+    "tests/core/codeql-sarif-adapter.test.ts",
+    "tests/core/convergence-store.test.ts",
+    "tests/core/coverage-oracle.test.ts",
+    "tests/core/ditto-config.test.ts",
+    "tests/core/e2e-init-agents.test.ts",
+    "tests/core/e2e-journey-digest.test.ts",
+    "tests/core/gates.test.ts",
+    "tests/core/journey-authoring/journey-authoring.test.ts",
+    "tests/core/provisioner.test.ts",
+    "tests/core/question-context.test.ts",
+    "tests/hooks/stop.test.ts",
+    "rebuild/schemas/completion-contract.test.ts",
+    "rebuild/schemas/completion-contract.ts",
+    "rebuild/schemas/evidence.test.ts",
+    "rebuild/schemas/evidence.ts",
+    "rebuild/schemas/gate-result.test.ts",
+    "rebuild/schemas/gate-result.ts",
+    "rebuild/schemas/index.ts",
+    "rebuild/schemas/queue-item.test.ts",
+    "rebuild/schemas/queue-item.ts",
+    "rebuild/schemas/verdict.test.ts",
+    "rebuild/schemas/verdict.ts"
+  ],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-19T23:17:53.654Z",
+  "updated_at": "2026-07-19T23:28:20.395Z",
+  "closed_at": "2026-07-19T23:28:20.394Z"
+}

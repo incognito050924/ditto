@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260624a6d",
+  "title": "Codex ditto surface risk report",
+  "source_request": "사용 가능한 건 알겠어. 그럼 그 내용들을 봤을 때 codex 에서 충분히 의도대로 잘 동작할 수 있도록 작성되어 있어? 수정은 하지 말고 잘 안 될 것 같은 것들만 따로 문서(md 파일)로 만들어줘",
+  "goal": "Codex에서 ditto skills/commands/agents/hooks가 의도대로 동작하기 어려운 지점을 Markdown 문서로 정리",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "abandoned",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-24T15:56:26.676Z",
+  "updated_at": "2026-07-11T15:26:08.763Z",
+  "closed_at": "2026-07-11T15:26:08.759Z"
+}

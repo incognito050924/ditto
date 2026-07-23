@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714m9w",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "3c5e7921a0ee3d2aca0d823c74d6dc1fb8cf96f23377e178beb1ddb5fdca79d2",
+  "ts": "2026-07-14T21:44:03.855Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c gh issue view 32 --repo incognito050924/ditto --json state -q \".state\" && gh issue view 39 --repo incognito050924/ditto --json number -q \".number\" && gh issue view 40 --repo incognito050924/ditto --json number -q \".number\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260709ft1",
+  "title": "bug: tidy-diff-base spurious-node 버그 영구 코드 수정: autopilot tidy 단계가 diff base를 started_at_sha..HEAD 선형 diff로 잡아, 동시/선행 세션 커밋이 HEAD를 추월하면 무관 파일에 refactor+replay 노드를 다수 생성한다(이번 run에서 work.ts/handoff-store",
+  "source_request": "Discovered while working on wi_260708faa: tidy-diff-base spurious-node 버그 영구 코드 수정: autopilot tidy 단계가 diff base를 started_at_sha..HEAD 선형 diff로 잡아, 동시/선행 세션 커밋이 HEAD를 추월하면 무관 파일에 refactor+replay 노드를 다수 생성한다(이번 run에서 work.ts/handoff-store.ts/work-item-handoff.ts로 재발, 드라이버가 change_surface 밖이라 감지·수동 제거). wi_260708yut·wi_260629vnt·issue#7서 반복. 수정 방향: tidy diff를 work item의 declared change_surface(또는 자기 start point 대비 merge-base)로 스코프. 매번 수동 subtree 제거로만 살아남는 durable escape.",
+  "goal": "Fix: tidy-diff-base spurious-node 버그 영구 코드 수정: autopilot tidy 단계가 diff base를 started_at_sha..HEAD 선형 diff로 잡아, 동시/선행 세션 커밋이 HEAD를 추월하면 무관 파일에 refactor+replay 노드를 다수 생성한다(이번 run에서 work.ts/handoff-store.ts/work-item-handoff.ts로 재발, 드라이버가 change_surface 밖이라 감지·수동 제거). wi_260708yut·wi_260629vnt·issue#7서 반복. 수정 방향: tidy diff를 work item의 declared change_surface(또는 자기 start point 대비 merge-base)로 스코프. 매번 수동 subtree 제거로만 살아남는 durable escape.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "단위 테스트가 collectTidyDiffStat(repoRoot, base, head, pathspec)를 pathspec으로 호출했을 때 반환된 diff-stat.files에 pathspec 밖 경로가 0건임을 assert한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/tidy-classifier.test.ts tests/acg/tidy-subgraph.test.ts tests/core/autopilot-tidy.test.ts tests/core/autopilot-tidy-wiring.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "단위 테스트가 spliceTidyStage(또는 planTidyOnImplementPass)에 대해, change surface가 [prism.ts]인데 base..HEAD diff에 다른 세션이 커밋한 work.ts가 포함된 픽스처를 주면 생성된 refactor 노드에 work.ts 대상이 0건임을 assert한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/tidy-classifier.test.ts tests/acg/tidy-subgraph.test.ts tests/core/autopilot-tidy.test.ts tests/core/autopilot-tidy-wiring.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "단위 테스트가 change surface가 빈 배열일 때 collectTidyDiffStat가 pathspec 없이 호출돼 기존 unscoped 결과를 반환함을 assert하고 기존 tidy classifier/subgraph 테스트가 실패 0으로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/acg/tidy-classifier.test.ts tests/acg/tidy-subgraph.test.ts tests/core/autopilot-tidy.test.ts tests/core/autopilot-tidy-wiring.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "bun run build:bin이 exit 0이고 전체 bun test가 실패 0건으로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun run build:bin && bun test",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/acg/tidy/classifier.ts",
+    "src/core/autopilot-tidy.ts",
+    "src/core/autopilot-loop.ts",
+    "tests/acg/tidy-classifier.test.ts",
+    "bin/ditto"
+  ],
+  "worktrees": [],
+  "discovered_by": "wi_260708faa",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-09T00:45:25.746Z",
+  "updated_at": "2026-07-09T01:23:36.350Z",
+  "closed_at": "2026-07-09T01:23:36.349Z"
+}

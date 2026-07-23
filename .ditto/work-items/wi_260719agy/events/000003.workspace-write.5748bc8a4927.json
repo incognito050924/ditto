@@ -1,0 +1,64 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719agy",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "5748bc8a49276a2b19525472e6b2cf3aaa56d22a3201206232257a6cef2e03c3",
+  "ts": "2026-07-19T09:49:57.791Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719agy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test question-context + coverage-oracle",
+        "summary": "102 pass 0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a whole-repo dropped symbols",
+        "summary": "CLEAN, 0 residual refs"
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat",
+        "summary": "4 files, 292 deletions"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/interview-compile.test.ts",
+        "summary": "15 pass 0 fail exit 0 — proves readDecisions is a live oracle"
+      },
+      {
+        "kind": "note",
+        "summary": "ADR corpus scan: no superseding ADR for the 3 seams (only 'supersede 아님' hits)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (3 e2e/journey scoped files)",
+        "summary": "37 pass 0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a per symbol",
+        "summary": "0 source consumers (only bin/ditto artifact, not rebuilt)"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a per dropped/preserved symbol src/ tests/",
+        "summary": "drops 0 prod refs incl string-literal; preserves present with live/test/ADR consumer"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full, no bypass)",
+        "summary": "4968 pass 17 skip 0 fail exit 0"
+      }
+    ]
+  }
+}

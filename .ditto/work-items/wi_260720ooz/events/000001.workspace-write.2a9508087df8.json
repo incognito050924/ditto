@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ooz",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "2a9508087df8d1a18e5cf3d69d020b0302160f0415946e112a24040fc8ed05f4",
+  "ts": "2026-07-20T23:21:12.722Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c n=$(bun run typecheck:rebuild 2>&1 | grep -c \"error TS\"); echo \"total tsc errors: $n\"; [ \"$n\" = 0 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

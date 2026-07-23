@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720gw6",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "2853a83ae4e55aa9babc61476df8b902d179628e75bd98df1e90b844c6c73191",
+  "ts": "2026-07-20T23:15:27.109Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun test rebuild/ 2>&1 | tail -3; echo \"live-smoke is .test.ts? $(ls rebuild/seam/live-smoke.test.ts 2>/dev/null && echo YES || echo NO)\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 9,
+  "actor": "workspace-write",
+  "event_id": "6003aded1d94bc5822fea6198b340244d5abc619a1192d27f75bdd3ad5438762",
+  "ts": "2026-07-23T02:40:21.887Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "partial",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+        "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/handoff/wi_2607227xx.md",
+        "summary": "하드닝 설계 입력"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+        "summary": "심의 원장 — 번들 흡수 4건"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "shasum -a 256 -c bundle/manifest.sha256",
+        "summary": "12/12 OK (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "harness/score.sh verify-chain",
+        "summary": "disk == manifest OK (12 files), exit 0 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+        "summary": "pytest exit 1 — sanity PASSED / shadow 단언 FAILED (서브에이전트 실행 보존본, N5가 독립 재실행 예정)"
+      },
+      {
+        "kind": "command",
+        "command": "shasum -a 256 bundle/arm-a/ditto",
+        "summary": "7120a7f4… — N2 확정 digest와 일치 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviewer-output.json",
+        "summary": "reviewer-output 영속본 — acg-review exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "pytest tests/test_ablation_oracle.py (fresh clone+venv, N5 독립 실행)",
+        "summary": "PYTEST-EXIT=1 — sanity PASSED + shadow FAILED 재현, oracle sha d857c8f8… manifest 일치"
+      },
+      {
+        "kind": "command",
+        "command": "pytest scoped regression (N5 독립 실행)",
+        "summary": "250 passed exit 0 / unscoped 191 errors 전부 testcontainers 부재 — 스코프 결정 근거 재현"
+      },
+      {
+        "kind": "command",
+        "command": "ABLATION_LEDGER_FILE=runs/ledger.jsonl bun harness/ledger.ts verify",
+        "summary": "ok — 22 entries, 10/15 attempts, chain intact (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "python3 원장 adjudication 집계",
+        "summary": "1=invalid, 2~10=valid — arm별 유효 A 3(4·6·8)/B0 3(2·7·9)/B1 3(3·5·10) (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "git show --stat ac5983c",
+        "summary": "harness 2파일 +21줄 — 동결 번들 무변경 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "command",
+        "command": "session-meta arm_a_bin_sha256 확인 (attempt 6·8)",
+        "summary": "둘 다 7120a7f4… == 동결 digest (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "note",
+        "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/runs/ledger.jsonl",
+        "summary": "attempt-4 결부 adjudication에 feeder-log 갭·보완 커밋 ac5983c 기재 (N11 확인)"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ggl",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "51a7c7242d87325e8ab4d39ac4f39808d44e238674371c47b1bd46f1d5dc0152",
+  "ts": "2026-07-20T00:18:55.028Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/seam/host-adapter.test.ts -t ac-2",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2606276nc",
+  "title": "bug: worktree drive: 실제 충돌 시 ledger reason이 빈 문자열 — mergeBranchIntoBase(worktree.ts:655-657)가 stderr만 캡처하나 git merge는 CONFLICT 텍스트를 stdout에 씀. disposition/abort/preserve는 정확, 사람이 읽는 reason만 공란. stdout",
+  "source_request": "Discovered while working on wi_260627t82: worktree drive: 실제 충돌 시 ledger reason이 빈 문자열 — mergeBranchIntoBase(worktree.ts:655-657)가 stderr만 캡처하나 git merge는 CONFLICT 텍스트를 stdout에 씀. disposition/abort/preserve는 정확, 사람이 읽는 reason만 공란. stdout도 캡처해 conflict reason 채우기",
+  "goal": "Fix: worktree drive: 실제 충돌 시 ledger reason이 빈 문자열 — mergeBranchIntoBase(worktree.ts:655-657)가 stderr만 캡처하나 git merge는 CONFLICT 텍스트를 stdout에 씀. disposition/abort/preserve는 정확, 사람이 읽는 reason만 공란. stdout도 캡처해 conflict reason 채우기",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "tests/core/worktree-lifecycle.test.ts 실행 시 새 테스트가 통과한다: 실제 git merge 충돌을 만든 뒤 mergeWorktreesForWorkItem이 반환한 conflicted outcome의 reason이 toContain('CONFLICT')로 non-empty임을 검증",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/worktree-lifecycle.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "bun test tests/core/worktree-lifecycle.test.ts tests/core/worktree-drive.test.ts 실행 시 기존 merge 관련 테스트가 전부 통과(비충돌 경로 회귀 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/worktree-lifecycle.test.ts tests/core/worktree-drive.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260627t82",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-27T09:50:19.715Z",
+  "updated_at": "2026-07-11T16:55:53.297Z",
+  "closed_at": "2026-07-11T16:55:53.297Z"
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260714f4p",
+  "title": "bug: silent partial-materialization: 드라이브 루프(autopilot-loop.ts:3392-3397)가 결함별 materializeDiscoveredDefect를 순차 await하는데 WorkItemStore.create(2663)에 try/catch 없음 → 결함 k(0<k<N)에서 throw 시 0..k-1은 orphan ",
+  "source_request": "Discovered while working on wi_260714mfx: silent partial-materialization: 드라이브 루프(autopilot-loop.ts:3392-3397)가 결함별 materializeDiscoveredDefect를 순차 await하는데 WorkItemStore.create(2663)에 try/catch 없음 → 결함 k(0<k<N)에서 throw 시 0..k-1은 orphan child Record로 남고 k..N-1 미생성, disclosure 결정 0건, origin 노드 mid-flight. 롤백/원자성 없음. pre-existing, N>1이 실패창 확대. 발견=wi_260714mfx coverage sweep(failure-recovery). 미구동(재현 현행-피해 아님).",
+  "goal": "Fix: silent partial-materialization: 드라이브 루프(autopilot-loop.ts:3392-3397)가 결함별 materializeDiscoveredDefect를 순차 await하는데 WorkItemStore.create(2663)에 try/catch 없음 → 결함 k(0<k<N)에서 throw 시 0..k-1은 orphan child Record로 남고 k..N-1 미생성, disclosure 결정 0건, origin 노드 mid-flight. 롤백/원자성 없음. pre-existing, N>1이 실패창 확대. 발견=wi_260714mfx coverage sweep(failure-recovery). 미구동(재현 현행-피해 아님).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "유닛 테스트: 물질화 루프에서 한 결함의 WorkItemStore.create가 throw할 때, recordResultCore가 예외를 밖으로 던지지 않고 나머지 drive-eligible 결함은 정상 생성되며, 실패한 결함에 대해 물질화 실패를 알리는 disclosure 결정(surface/discovered_defect)이 원장에 포함됨을 assert한다(조용한 누락 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts -t f4p-1",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "유닛 테스트: 3개 결함 모두 create 성공 시 정확히 3건의 disclosure 결정이 원장에 포함되고 각 reason의 child wi_가 생성됨을 assert한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts -t f4p-2",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "유닛 테스트: tests/core/autopilot-loop-discipline.test.ts 전체와 tests/core/autopilot-loop.test.ts가 exit 0으로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-loop.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260714mfx",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-14T21:47:03.461Z",
+  "updated_at": "2026-07-14T22:40:09.052Z",
+  "closed_at": "2026-07-14T22:40:09.051Z"
+}

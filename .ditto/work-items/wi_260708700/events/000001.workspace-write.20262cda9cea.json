@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260708700",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "20262cda9cea627db9359dc2ab9922b029a66b0d5a97e80c9735e9ddffeb9701",
+  "ts": "2026-07-08T18:21:10.998Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun run /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/278facd8-93a3-4d88-a526-0de4711e5d2a/scratchpad/check-ac1.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

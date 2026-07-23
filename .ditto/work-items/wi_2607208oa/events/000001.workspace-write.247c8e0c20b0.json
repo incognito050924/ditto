@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607208oa",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "247c8e0c20b0371aa773f5713cadaee5a8a7744fda463f88b216876802e2fec7",
+  "ts": "2026-07-20T21:49:34.757Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c diff -rq rebuild/schemas /Users/incognito/dev/projects/ditto-redesign/rebuild/schemas && diff -rq rebuild/seam /Users/incognito/dev/projects/ditto-redesign/rebuild/seam && echo \"frozen OK; rebuild files: $(find rebuild -type f -name \"*.ts\" | wc -l | tr -d \" \")\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

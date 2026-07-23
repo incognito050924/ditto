@@ -1,0 +1,29 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260711dp9",
+  "title": "repro declared_risk storage",
+  "source_request": "repro test",
+  "goal": "repro declared_risk storage",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "abandoned",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true,
+    "irreversible": true
+  },
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-11T16:31:29.863Z",
+  "updated_at": "2026-07-11T16:50:25.081Z",
+  "closed_at": "2026-07-11T16:50:25.080Z"
+}

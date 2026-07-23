@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "05506f666aef8c5951793bc404df4726e712ddc7aaca42d203648cc3a014930f",
+  "ts": "2026-07-23T02:40:21.884Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+        "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/handoff/wi_2607227xx.md",
+        "summary": "하드닝 설계 입력"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+        "summary": "심의 원장 — 번들 흡수 4건"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bash reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+        "summary": "failures=0, 50항목 ok, self-check PASS (드라이버 fresh 재실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+        "summary": "self-check 출력 전문 보존본"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+        "summary": "설계 결정·egress 2층 근거·한계·N4 번들 계약"
+      },
+      {
+        "kind": "command",
+        "command": "ABLATION_LEDGER_FILE=runs/ledger.jsonl bun harness/ledger.ts verify",
+        "summary": "ok — 9 entries, 4/15 attempts, chain intact (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/runs/attempt-4-A/session-meta.json",
+        "summary": "arm_a_bin_sha256==동결 7120a7f4…, wall 289s, claude 2.1.217 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/runs/attempt-4-A/ditto-state/local/logs/user-prompt.jsonl",
+        "summary": "훅 발화 로그 — session_id 7f14a519… transcript 결부 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "command",
+        "command": "grep -c PASS <sandbox>/attempt-4-A/logs/positive-controls.out",
+        "summary": "7 PASS — 양성대조 5종(PC3 3단언 포함) 전부 통과 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "command",
+        "command": "git show --stat ee3479e 5e7fa40 2a2ac95",
+        "summary": "하네스 수정 3건 전부 harness 파일만 — 동결 번들 무변경 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "note",
+        "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+      },
+      {
+        "kind": "command",
+        "command": "positive-controls.out 16개 전수 + egress.jsonl 전 세션 스캔 + invariance diff 5쌍",
+        "summary": "7 PASS×16, allowed 476건 전부 api.anthropic.com, pre/post 실질 동일 (N11 fresh)"
+      }
+    ]
+  }
+}

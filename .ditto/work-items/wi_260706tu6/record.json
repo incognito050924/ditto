@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260706tu6",
+  "title": "smoke-prov",
+  "source_request": "라이브 스모크",
+  "goal": "provenance 스모크 검증",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ac-1: 스모크",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "abandoned",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-06T23:34:27.206Z",
+  "updated_at": "2026-07-06T23:36:55.148Z",
+  "closed_at": "2026-07-06T23:36:55.147Z"
+}

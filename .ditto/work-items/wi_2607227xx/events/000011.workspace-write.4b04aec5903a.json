@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 11,
+  "actor": "workspace-write",
+  "event_id": "4b04aec5903a7bcbf267d595edfacaddedfa84491c8d0705cd9b977a1f948f88",
+  "ts": "2026-07-23T02:40:21.889Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+        "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/handoff/wi_2607227xx.md",
+        "summary": "하드닝 설계 입력"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+        "summary": "심의 원장 — 번들 흡수 4건"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bash reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+        "summary": "failures=0, 50항목 ok, self-check PASS (드라이버 fresh 재실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+        "summary": "self-check 출력 전문 보존본"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+        "summary": "설계 결정·egress 2층 근거·한계·N4 번들 계약"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+        "summary": "final: machine_verdict=keep, §3-3a, dS=1, dD=20(경계), C=0.7884, user_signoff 명기 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-15-B1/score.json",
+        "summary": "15-B1 oracle=red — B1 무산출 종료 세션 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "command",
+        "command": "ABLATION_MAX_ATTEMPTS=16 bun harness/ledger.ts verify",
+        "summary": "ok — 36 entries, 16/16 attempts, chain intact (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+        "summary": "ablation-verdict/2 — task1 보존+task2+합산+분기행렬+민감도, final.machine_verdict=keep §3-3a (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/scoring/scoring-log.md",
+        "summary": "채점 전 과정 로그 (§1~15)"
+      },
+      {
+        "kind": "note",
+        "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+        "summary": "독립 재집계 정확 일치 (N11 fresh)"
+      }
+    ]
+  }
+}

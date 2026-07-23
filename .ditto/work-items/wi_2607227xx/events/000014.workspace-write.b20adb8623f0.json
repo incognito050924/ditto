@@ -1,0 +1,64 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 14,
+  "actor": "workspace-write",
+  "event_id": "b20adb8623f008e8f7c54ac075e7b93f146ebbe52c8513f04653b81d7e26ed79",
+  "ts": "2026-07-23T07:30:05.558Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-7",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+        "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/handoff/wi_2607227xx.md",
+        "summary": "하드닝 설계 입력"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+        "summary": "심의 원장 — 번들 흡수 4건"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "git show --name-only faaaf1c1 | grep -cv '^reports/measurements/efficacy-ablation-3arm'",
+        "summary": "0 — 캠페인 밖 파일 없음, runs/ 포함 0 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm.md",
+        "summary": "310행, '서명은 사용자' 명기 확인 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "command",
+        "command": "staged-diff grep 3종 (Python 소스 마커/내부 식별자/palimpsest 언급)",
+        "summary": "소스 조각 0·내부 식별자 0·경로 수준 43건만 (N10 실행, 보고서 §8 공개)"
+      },
+      {
+        "kind": "note",
+        "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+      },
+      {
+        "kind": "command",
+        "command": "git show --name-only faaaf1c1 + proprietary grep + gh issue view 66",
+        "summary": "캠페인 밖 0·소스 조각 0·#66 OPEN (N11 fresh)"
+      },
+      {
+        "kind": "command",
+        "command": "bash -c set -e\nSTATE=$(gh issue view 66 -R incognito050924/ditto --json state -q .state)\necho \"issue #66 state: $STATE\"; [ \"$STATE\" = \"CLOSED\" ]\ngit -C /Users/incognito/dev/projects/ditto cat-file -e faaaf1c10d51c01c0e76020af2cf1746ac0751ac && echo \"보고서 landed 커밋 실재: faaaf1c1\"\ngit -C /Users/incognito/dev/projects/ditto log --format=%h -1 -- reports/measurements/efficacy-ablation-3arm.md\ngrep -c \"keep\" /Users/incognito/dev/projects/ditto/reports/measurements/efficacy-ablation-3arm.md >/dev/null && echo \"판정 기재 확인\"\ngrep -q \"최종 서명\" /Users/incognito/dev/projects/ditto/reports/measurements/efficacy-ablation-3arm.md && echo \"사용자 서명 §10 기재 확인\"\ngrep -q \"게이트\" /Users/incognito/dev/projects/ditto/reports/measurements/efficacy-ablation-3arm.md && echo \"게이트 입력 기재 확인\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

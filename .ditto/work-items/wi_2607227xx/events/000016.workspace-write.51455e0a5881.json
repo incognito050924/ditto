@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 16,
+  "actor": "workspace-write",
+  "event_id": "51455e0a5881482b9b98798216497c312b220a64da1bbf463a60be7998f439bb",
+  "ts": "2026-07-23T07:30:28.100Z",
+  "kind": "claim_release",
+  "payload": {
+    "claimed_branch": "rebuild/foundation",
+    "posted_claim_marker": "claim:rebuild/foundation"
+  }
+}

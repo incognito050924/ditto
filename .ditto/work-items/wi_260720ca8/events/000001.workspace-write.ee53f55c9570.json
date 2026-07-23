@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ca8",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "ee53f55c95706eef7a94fd774669254698dd886742837e20f3ce0414698a3511",
+  "ts": "2026-07-20T23:34:45.622Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c n=$(grep -cE \"^\\| (9|45|47|48|49|50|52|60|61) \" /Users/incognito/dev/projects/ditto/.ditto/local/worktrees/wi_260720ca8/reports/backlog-audit-2026-07-21.md); echo \"classified issue rows: $n\"; [ \"$n\" = 9 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

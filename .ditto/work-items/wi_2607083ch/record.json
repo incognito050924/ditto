@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607083ch",
+  "title": "bug: Stop 게이트가 terminal(abandoned/done) work item에도 completion 기반 사유 발화 — nonPassTerminationGate/completionGate가 workItem.status terminal 가드 없음(stop.ts:871-887). 또 ditto work start가 세션 포인터를 새 WI로 재바인딩",
+  "source_request": "Discovered while working on wi_260708700: Stop 게이트가 terminal(abandoned/done) work item에도 completion 기반 사유 발화 — nonPassTerminationGate/completionGate가 workItem.status terminal 가드 없음(stop.ts:871-887). 또 ditto work start가 세션 포인터를 새 WI로 재바인딩 안 해 옛 abandoned 항목을 계속 가리킴",
+  "goal": "Fix: Stop 게이트가 terminal(abandoned/done) work item에도 completion 기반 사유 발화 — nonPassTerminationGate/completionGate가 workItem.status terminal 가드 없음(stop.ts:871-887). 또 ditto work start가 세션 포인터를 새 WI로 재바인딩 안 해 옛 abandoned 항목을 계속 가리킴",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "abandoned work item + partial completion.json에서 stop hook이 exit 0(continuation 사유 0건)을 반환한다. done work item + uncommitted changed_files에서는 landGate가 여전히 exit 2로 발화한다(테스트로 두 케이스 단언)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/stop.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "resolveActiveWorkItem이 세션 포인터가 terminal(done/abandoned) WI를 가리킬 때 workItem=undefined를 반환하고(action=ask/guide), non-terminal WI면 기존대로 loaded를 반환한다(테스트로 단언)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "실패 테스트 RED 확인 후 GREEN 전환 + bun test src tests 전체 0 fail + 양 호스트 재빌드",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260708700",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T17:53:36.236Z",
+  "updated_at": "2026-07-08T23:08:02.061Z",
+  "closed_at": "2026-07-08T23:08:02.060Z"
+}

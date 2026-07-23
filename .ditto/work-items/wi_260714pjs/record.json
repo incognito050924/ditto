@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260714pjs",
+  "title": "bug: condition_b sibling starvation: driveEligible에 condition_b 결함이 있으면 conditionBDefect find가 materialize 루프(autopilot-loop.ts:3390) 전에 branch를 block으로 short-circuit(3348-3382) → condition_b 없는 drive",
+  "source_request": "Discovered while working on wi_260714mfx: condition_b sibling starvation: driveEligible에 condition_b 결함이 있으면 conditionBDefect find가 materialize 루프(autopilot-loop.ts:3390) 전에 branch를 block으로 short-circuit(3348-3382) → condition_b 없는 drive-eligible 형제 결함이 물질화·disclosure 안 됨(backlogOnly는 3331 루프가 먼저 돌아 물질화됨 — 비대칭). code-evident·untested latent, N>1 drive-eligible+mixed condition_b 필요. 발견=wi_260714mfx coverage sweep(boundary-edge). 미구동(재현 현행-피해 아님).",
+  "goal": "Fix: condition_b sibling starvation: driveEligible에 condition_b 결함이 있으면 conditionBDefect find가 materialize 루프(autopilot-loop.ts:3390) 전에 branch를 block으로 short-circuit(3348-3382) → condition_b 없는 drive-eligible 형제 결함이 물질화·disclosure 안 됨(backlogOnly는 3331 루프가 먼저 돌아 물질화됨 — 비대칭). code-evident·untested latent, N>1 drive-eligible+mixed condition_b 필요. 발견=wi_260714mfx coverage sweep(boundary-edge). 미구동(재현 현행-피해 아님).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "유닛 테스트: N>1 drive-eligible 결함 중 하나가 condition_b를 가질 때, 모든 drive-eligible 결함(condition_b 본체 포함)에 대해 surface/discovered_defect 결정이 원장에 기록되고 각 reason에 물질화된 child wi_ id가 포함됨을 assert한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts -t pjs-1",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "유닛 테스트: 같은 condition_b 시나리오에서 record-result가 status=blocked·decision=escalate·failure_class=user_decision_needed를 반환함을 assert한다(block 동작 보존)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts -t pjs-2",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "유닛 테스트: tests/core/autopilot-loop-discipline.test.ts 전체와 tests/core/autopilot-loop.test.ts가 exit 0으로 통과한다(backlogOnly·condition_b 없는 drive 경로 회귀 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-loop.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "discovered_by": "wi_260714mfx",
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-14T21:47:03.351Z",
+  "updated_at": "2026-07-14T22:31:25.043Z",
+  "closed_at": "2026-07-14T22:31:25.041Z"
+}

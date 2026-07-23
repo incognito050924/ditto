@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 10,
+  "actor": "workspace-write",
+  "event_id": "6dead50b93b19d8e5248b7ac7bc28b9eb0a031928a0da6473693f944790ffe4e",
+  "ts": "2026-07-23T02:40:21.888Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+        "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/handoff/wi_2607227xx.md",
+        "summary": "하드닝 설계 입력"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+        "summary": "심의 원장 — 번들 흡수 4건"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bash reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+        "summary": "failures=0, 50항목 ok, self-check PASS (드라이버 fresh 재실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+        "summary": "self-check 출력 전문 보존본"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+        "summary": "설계 결정·egress 2층 근거·한계·N4 번들 계약"
+      },
+      {
+        "kind": "command",
+        "command": "ABLATION_LEDGER_FILE=runs/ledger.jsonl bun harness/ledger.ts verify",
+        "summary": "ok — 22 entries, 10/15 attempts, chain intact (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "python3 원장 adjudication 집계",
+        "summary": "1=invalid, 2~10=valid — arm별 유효 A 3(4·6·8)/B0 3(2·7·9)/B1 3(3·5·10) (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "git show --stat ac5983c",
+        "summary": "harness 2파일 +21줄 — 동결 번들 무변경 (드라이버 fresh 확인)"
+      },
+      {
+        "kind": "command",
+        "command": "session-meta arm_a_bin_sha256 확인 (attempt 6·8)",
+        "summary": "둘 다 7120a7f4… == 동결 digest (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "note",
+        "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+      },
+      {
+        "kind": "command",
+        "command": "ABLATION_MAX_ATTEMPTS=16 bun ledger.ts verify + digest 재계산 ×5 + A 세션 전수",
+        "summary": "ok — 36 entries, 16/16, chain intact; 전부 일치 (N11 fresh)"
+      }
+    ]
+  }
+}

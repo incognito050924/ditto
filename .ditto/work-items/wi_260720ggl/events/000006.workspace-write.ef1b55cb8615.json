@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ggl",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "ef1b55cb8615bf88fa1af67f0ce11f23555e9656e0e6d170938f41e8fe7b3f03",
+  "ts": "2026-07-20T00:19:03.977Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c [ -z \"$(git status --porcelain src/)\" ] && echo \"src/ unchanged\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

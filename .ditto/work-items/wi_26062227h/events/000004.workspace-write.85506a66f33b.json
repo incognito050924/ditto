@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26062227h",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "85506a66f33bf950bf80bfe11317c353636a7aa96724044957c06c30bb2dbd0f",
+  "ts": "2026-07-06T23:37:46.248Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -z \"$(git diff src/core/interview-driver.ts)\" && echo \"interview-driver.ts UNCHANGED\" && bun test tests/integration/coverage-category-seeding.test.ts tests/integration/coverage-loop-drive.test.ts tests/core/coverage-relevance.test.ts 2>&1 | tail -3",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

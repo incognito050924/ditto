@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260708xgo",
+  "title": "핸드오프 수동 로드 매커니즘 — 자동주입 제거 대체 읽기 명령 + 깨진 ditto work resume 참조 정리",
+  "source_request": "핸드오프 효능감이 진짜 없었어. 수동으로 할 수 있는 매커니즘으로 교체하는 WI 후속으로 (wi_260708700에서 자동로드 제거함; 읽기 명령 신설 + re_entry의 존재하지 않는 ditto work resume 참조 정리)",
+  "goal": "핸드오프 수동 로드 매커니즘 — 자동주입 제거 대체 읽기 명령 + 깨진 ditto work resume 참조 정리",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "핸드오프 수동 읽기 명령 — 기존 work handoff 명령에 --show 플래그 추가(신규 명령 아님·표면 재사용): active .ditto/local/handoff/<wi>.md 또는 archive의 핸드오프 본문을 재생성 없이 출력",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/handoff-store.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "깨진 re_entry 참조 정리 — work-item-handoff.ts의 re_entry.command를 존재하지 않는 'ditto work resume <id>'에서 실존하는 'ditto work handoff <id> --show'로 교체(두 갭을 한 capability로 통합)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/work-item-handoff.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "영향 테스트 추가·갱신 + 전체 green + 양 호스트 재빌드",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T18:48:30.805Z",
+  "updated_at": "2026-07-08T23:41:43.800Z",
+  "closed_at": "2026-07-08T23:40:36.312Z"
+}

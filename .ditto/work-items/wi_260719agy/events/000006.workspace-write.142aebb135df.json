@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719agy",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "142aebb135df80d989282d3317a3225a58ac1dc875a0909260805a6148439f51",
+  "ts": "2026-07-19T09:49:57.793Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719agy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a healer-policy|filterHealPatch|HealFilterResult|HealHunk src/ tests/ skills/",
+        "summary": "exit 1 — no references remain"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a heal-proposal|applyHeal src/",
+        "summary": "no heal-apply mechanism exists — corroborates unenforced guarantee"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a filterHealPatch src/ skills/ resources/",
+        "summary": "exit 1, 0 hits"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a 'regardless of any agent|real guarantee|obedience alone|filterHealPatch' skills/ resources/ dist/",
+        "summary": "0 retracted-promise hits; only corrected replacement framing"
+      }
+    ]
+  }
+}

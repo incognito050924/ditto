@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_a05bc4fb34660aef",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] recipe barrier 명령이 사설 테스트 서비스 토큰을 품을 수 있으나 이 변경 이전부터 존재; secret-exposure(relevant)로 커버.\n[residual] opt-out 재사용이 floor를 의도치 않게 완화할 수 있으나 그 게이트-강제 상호작용은 cross-feature(relevant)로 스윕.\n[residual] 없음(왜곡할 authz 모델 자체가 없음).\n[residual] floor/degrade가 왜 발화했는지 기록 못 하면 사후 추적성 저하 — observability(relevant)로 스윕.\n[residual] 캡처된 stdout이 PII를 담아 로컬 completion reason으로 echo될 수 있으나 secret-in-stdout과 동일 채널 — secret-exposure(relevant)로 스윕.\n[residual] 없음(규제 대상 코드베이스에 실행돼도 floor 로직은 규제 데이터를 처리하지 않음).\n[residual] 바이너리 재빌드 중 진행 중인 autopilot run이 구/신 게이트 동작을 넘나들 수 있음 — compat-version(relevant)으로 스윕.\n[residual] per-file 캡처가 각각 ~10분 상한을 상속해 N파일 시 총 wall-time 급증 가능 — resource-exhaustion(relevant)으로 스윕.\n[close_reason] 테스트-러너 파생·red-출력 분류·완료 flooring만 건드리며 자격증명/세션/principal 코드는 읽거나 쓰지 않는다. classifyAuthoredRed/captureTestCommand에 인증 표면 없음.\n[close_reason] principal-permission 강제를 건드리지 않는다. barrier_opt_out은 floor에 대한 config 정책 토글이지 리소스/행위자 권한 게이트가 아니다.\n[close_reason] 테스트-러너 파생/출력 분류/verdict flooring에 접근제어 모델이 없고 수정되지도 않는다.\n[close_reason] 보안/컴플라이언스 감사 추적을 쓰거나 바꾸지 않는다; floor 이유를 운영 추적용으로 기록할 뿐 변조방지 감사 로그가 아니다.\n[close_reason] 개인정보 필드를 읽거나 저장/전송하지 않는다; 엔진은 개발자 자기 로컬 프로젝트의 테스트 명령·pass/fail 마커만 다룬다.\n[close_reason] 규제 데이터 도메인(금융/건강/개인)을 처리하지 않는다; verdict flooring을 결정하는 내부 오케스트레이션 엔진.\n[close_reason] 배포/롤아웃 seam이 범위에 없음 — 스테이지 릴리스/마이그레이션/버전 롤아웃 없이 일반 로컬 bin 재빌드로 in-process 로직 배포.\n[close_reason] 새 시간/클럭 의존을 도입하지 않는다; captureTestCommand의 wall-clock timeout은 기존 것이고 이 범위에서 불변, 분류/floor 로직은 시간 독립적.",
+  "created_at": "2026-07-11T01:49:16.787Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

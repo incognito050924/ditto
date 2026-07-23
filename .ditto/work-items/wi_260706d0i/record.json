@@ -1,0 +1,96 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260706d0i",
+  "title": "push-gate green-tree 캐시 — 이미 full-suite green으로 검증된 트리는 push 시 test 재실행을 skip한다 ",
+  "source_request": "지금처럼 push 하는데도 너무 오래걸린다(pre-push가 매번 full bun test ~130초). 이걸 해결. 새 세션에서 작업 중이라 git worktree로 격리 처리.",
+  "goal": "push-gate green-tree 캐시 — 이미 full-suite green으로 검증된 트리는 push 시 test 재실행을 skip한다 (트리 불일치·dirty는 여전히 full test, 안전 무변)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ac-1: gate 테스트 통과 시 HEAD tree-hash(git rev-parse HEAD^{tree})가 green으로 기록되고, push-gate가 working tree clean AND HEAD tree가 기록과 일치하면 test_command 재실행 없이 exit 0(cache-hit 로그)로 통과시킨다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/push-gate-cache.test.ts tests/cli/push-gate.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ac-2: working tree가 dirty면 HEAD가 기록과 일치해도 절대 skip 안 하고 full test_command를 돈다(안전)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/push-gate-cache.test.ts tests/cli/push-gate.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "ac-3: HEAD tree-hash가 어느 green 기록과도 불일치하면 full test_command를 돈다(안전)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/push-gate-cache.test.ts tests/cli/push-gate.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "ac-4: green 기록은 실행 명령이 gate의 test_command와 정확히 일치할 때만 기록된다 — 다른 명령(subset 등) 통과는 기록 안 함(캐시 오염 차단)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/push-gate-cache.test.ts tests/cli/push-gate.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "ac-5: full-gate 통과로 tree T가 기록된 뒤 clean·미변경 상태의 T 재-push는 재실행 없이 skip된다(결정적 재현)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/push-gate-cache.test.ts tests/cli/push-gate.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "ac-6: bun test 전체 GREEN + biome 통과",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx biome check src tests scripts",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-06T15:41:10.470Z",
+  "updated_at": "2026-07-06T16:58:34.931Z",
+  "closed_at": "2026-07-06T16:51:21.806Z"
+}

@@ -1,0 +1,115 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260718geb",
+  "title": "[harness] ac-oracle 'legacy round-trip' 테스트가 gitignored per-developer .ditto/local/work-items에 의존 → fresh worktree/CI에서 실패 (#42 형제)",
+  "source_request": "[harness] ac-oracle 'legacy round-trip' 테스트가 gitignored per-developer .ditto/local/work-items에 의존 → fresh worktree/CI에서 실패 (#42 형제)\n\n심각도: medium. #42와 같은 부류(공유·gitignored per-developer tier 상태에 의존하는 테스트)의 또 다른 사례.\n\n## 문제\n`tests/schemas/ac-oracle.test.ts`의 테스트 \"on-disk intent.json fixtures still parse under the new schema\"가 `<repoRoot>/.ditto/local/work-items/*/intent.json`를 스캔하고 `expect(files.length).toBeGreaterThan(0)`를 요구한다. 그 디렉터리는 ADR-0012 tier ③(gitignored, 개발자·머신마다 다른 개인 런타임)이다.\n\n## 증상 (검증됨)\n- fresh git worktree(또는 clean CI checkout)에는 `.ditto/local/work-items`가 없어 스캔 결과 0건 → `files.length > 0` 실패로 이 테스트가 fail한다.\n- 개발자 로컬 main 체크아웃에는 그 디렉터리가 있어 통과한다 (환경 의존).\n\n## 관측된 영향\n- worktree 컨텍스트에서 `git push`를 하면 pre-push 게이트(`bun test`)가 이 테스트 하나로 막힌다. wi_2607156f8의 land는 이 때문에 main cwd에서 `git push origin <branch>:main`으로 수행했다.\n- CI clean checkout에서도 같은 이유로 fail할 것으로 보인다(미실증).\n\n## 코드 포인터\n- `tests/schemas/ac-oracle.test.ts` — `import.meta.dir` 상대로 `.ditto/local/work-items/*/intent.json` 스캔 + `files.length > 0` 단언.\n- ADR-0012 (`.ditto/local` = tier ③ gitignored 개인 런타임).\n- 같은 부류의 선례: 이슈 #42 (surfaces.json에 대해 테스트를 코드-자족화로 해소).",
+  "goal": "[harness] ac-oracle 'legacy round-trip' 테스트가 gitignored per-developer .ditto/local/work-items에 의존 → fresh worktree/CI에서 실패 (#42 형제)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "grep로 tests/schemas/ac-oracle.test.ts에 .ditto/local·readFileSync·Bun.Glob·import.meta 디스크 접근이 코드에 0건임을 확인한다(주석 제외)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c ! grep -qE \"\\.ditto/local|readFileSync|Bun\\.Glob|import\\.meta\" <(grep -vE \"^\\s*//\" tests/schemas/ac-oracle.test.ts) && echo \"PASS: no code-level disk access\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": ".ditto/local/work-items 디렉터리를 제거한 상태에서 bun test tests/schemas/ac-oracle.test.ts를 실행하면 9 pass 0 fail로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c \n  set -e\n  BAK=\"/private/tmp/claude-501/-Users-incognito-dev-projects-ditto/5427e627-a936-4014-8f86-ea9c0d19ecfa/scratchpad/wi-bak-ac2\"\n  trap \"[ -d \\\"$BAK\\\" ] && mv \\\"$BAK\\\" .ditto/local/work-items\" EXIT\n  mv .ditto/local/work-items \"$BAK\"\n  echo \"work-items dir moved away (fresh-checkout sim)\"\n  bun test tests/schemas/ac-oracle.test.ts\n",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "전체 bun test를 실행하면 0 fail로 통과한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 43,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgy6dOA"
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "a33e188e4ce77a85da5234a78837cefedc77a7c2",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260718geb/",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
+  "created_at": "2026-07-18T15:39:12.429Z",
+  "updated_at": "2026-07-18T15:49:10.420Z",
+  "closed_at": "2026-07-18T15:49:10.419Z"
+}

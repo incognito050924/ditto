@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260628sx5",
+  "title": "GitHub 연계 tech-spec (백로그·진척 통합 설계)",
+  "source_request": "다음 세션에서 /ditto:tech-spec으로 GitHub 연계 설계 시작. 합의됨: GitHub=백로그 SoT, ditto work item=실행 단위, 수동 링크 v1, github_issue 필드 추가. 닫을 미해결: 계층 SoT·done 코멘트 정책·repo 범위·ADR화 여부",
+  "goal": "GitHub Issues/Projects와 ditto work item 백로그·진척을 v1 수동 링크로 연계하는 통합 설계를 tech-spec 문서로 합의한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "TBD — derive observable criteria during interview/planning",
+      "verdict": "unverified",
+      "evidence": []
+    }
+  ],
+  "status": "abandoned",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    ".ditto/local/work-items/wi_260628sx5/completion.json",
+    ".ditto/local/work-items/wi_260628sx5/work-item.json",
+    ".ditto/specs/github-backlog-integration.md",
+    "backlog.md",
+    "reports/research/standard-process-bottlenecks.md"
+  ],
+  "worktrees": [],
+  "risks": [],
+  "re_entry": {
+    "command": "ditto work resume wi_260628sx5",
+    "fresh_evidence_needed": [
+      "미pass acceptance에 대한 검증 결과"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_260628sx5.md",
+  "created_at": "2026-06-28T05:30:07.902Z",
+  "updated_at": "2026-07-11T15:18:33.509Z",
+  "closed_at": "2026-07-11T15:18:33.504Z"
+}

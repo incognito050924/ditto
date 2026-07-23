@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720gw6",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "3c723302843b178d1b31454ee6c06444737f9f317cb11cfed6d42844587a9b4e",
+  "ts": "2026-07-20T23:15:26.290Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -q \"boundary-schema-valid=true sessionId-non-empty=true\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt && grep \"runDrive\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

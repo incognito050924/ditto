@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_0f73eda3d072c65f",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] If a consumer gated a GitHub write on the reduced idempotency set while gh was mis-authenticated, a rejected post could record as posted — github idempotency correctness (cross-feature/external-env), not an auth-path defect this change adds.\n[residual] Split newly commits Record to shared repo = visibility shift for previously-personal state; swept under pii-leak/secret-exposure, no per-WI access control exists to regress.\n[residual] A repo-write party could forge events (arbitrary seq/actor) to steer terminal-first-wins or inject claim markers — but repo-write already grants full file control, so this is data-integrity/concurrency trust, not an external abuse vector.\n[residual] events/<seq>.<actor>.<eid>.json path is safe only because actor=profileName enum today; if actor later widens to a free session id, open(wx) becomes a path-traversal sink — pin/sanitize the actor path segment + test hostile-actor (scope-creep guard, not a T0 blocker).\n[residual] Split commits authoring identity (GitHub login, github-claim.ts:45) + free-text goal to immutable git history that cannot be hard-deleted; if a project treats contributor identity as regulated PII, git's no-erasure conflicts with a deletion duty — exposure itself swept under pii-leak, legal framing is a project-policy call outside this mechanism.\n[close_reason] CLI+core+schema refactor of on-disk work-item state; no endpoint/session exposed, GitHub auth owned by gh CLI (github-progress/claim hold no token), C5 relocates idempotency markers not an auth mechanism.\n[close_reason] No product authz model (no RBAC/ABAC/tenant/policy); owner_profile is an execution-permission enum (common.ts:37), not an access subject; fs+git govern access and are untouched.\n[close_reason] Local single-dev CLI on own repo; no untrusted remote actor/rate-limiter/quota in scope; event actor is a local profile/session; event_id dedupe covers accidental replay not adversarial flooding.\n[close_reason] No untrusted-input-to-interpreter sink (no SQL/OS-cmd/template); gh via execFileSync no-shell argv; event payloads JSON+zod validated; inputs local/authoring not an untrusted boundary.\n[close_reason] Internal dev-tool's own work-item metadata; no regulated data subject or compliance duty; no new third-party PII collection/transfer introduced.",
+  "created_at": "2026-07-06T12:01:28.931Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

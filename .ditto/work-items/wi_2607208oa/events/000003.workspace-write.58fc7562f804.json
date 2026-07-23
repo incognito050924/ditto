@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607208oa",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "58fc7562f804592d3cbb78bc9c334b7520403dba576f8e45fc15755da48766a3",
+  "ts": "2026-07-20T21:49:43.596Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test -f rebuild/tsconfig.json && grep -q \"\\\"test:rebuild\\\"\" package.json && grep -q \"\\\"typecheck:rebuild\\\"\" package.json && echo \"tsconfig+scripts present; typecheck baseline errors:\" && (bun run typecheck:rebuild 2>&1 | grep -c \"error TS\" || true)",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

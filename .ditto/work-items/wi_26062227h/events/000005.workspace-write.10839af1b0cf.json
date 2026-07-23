@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26062227h",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "10839af1b0cf9ba4fd72a7566d03071b2603b0a5cdb05ffbb0fe3c6361eca06e",
+  "ts": "2026-07-06T23:38:02.641Z",
+  "kind": "status",
+  "payload": {
+    "to": "done",
+    "closed_at": "2026-07-06T23:38:02.639Z"
+  }
+}

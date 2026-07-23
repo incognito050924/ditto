@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 6,
+  "actor": "workspace-write",
+  "event_id": "3645e98dbe8846432db26c8ca0ac07dfc77b396a03b275576edeffd2b7e644db",
+  "ts": "2026-07-11T01:49:44.182Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607103tp/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t \"2-STACK\"",
+        "summary": "4 pass / 0 fail — bun-block, bun-present, non-bun-degrade, non-bun-floor legs green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (full suite, driver fresh run)",
+        "summary": "4523 pass / 17 skip / 0 fail across 363 files — 2-stack fixture present + no regression"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t 2-STACK",
+        "summary": "4 pass — bun block+present, non-bun degrade+floor end-to-end"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests",
+        "summary": "4527 pass / 17 skip / 0 fail across 363 files — full suite green"
+      }
+    ]
+  }
+}

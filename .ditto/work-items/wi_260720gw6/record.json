@@ -1,0 +1,158 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260720gw6",
+  "title": "[정초] LiveHost 라이브 CLI 통합 미배선 — runDrive/runFanout (네이티브 배선 첫 마일스톤)",
+  "source_request": "[정초] LiveHost 라이브 CLI 통합 미배선 — runDrive/runFanout (네이티브 배선 첫 마일스톤)\n\n## 갭\n`rebuild/seam/live-host.ts`의 `liveHostDeps.runDrive`/`runFanout`이 실제 Claude Code CLI를 호출하도록 **배선되지 않았다**(지금은 \"not wired\" throw). `LiveHost` 어댑터 로직(경계 스키마 검증·seal)은 fake/injected deps로만 검증됐고, 실제 host 호출 인자 포맷·동작은 **라이브로 한 번도 검증되지 않았다**.\n\n## 맥락\n정초 완료 run에서 어댑터 로직은 주입-deps로 pass, 라이브 통합은 `live-cli-integration-smoke`로 new-scope-deferral(throw로 fail-closed 격리). 즉 실제 host를 부르는 seam이 진짜로 안 돌아봤다 = capability-without-live-surface 갭.\n\n## 성격 (버그 아님 — 설계 마일스톤)\n이건 타입 위생 같은 결함이 아니라 **네이티브 배선의 첫 설계 단계**다(재구축 로드맵 §10: \"라이브 host CLI 배선 → 작업 하나 end-to-end self-host\"). 드라이브 루프가 실제로 Claude Code를 어떤 CLI 프로토콜로 호출하는지를 확정하는 일이라, 정초 아키텍처의 핵심을 결정한다.\n\n## 필요\n1. `runDrive`: `claude --print --output-format json --json-schema '<boundaryEnvelope 스키마>'`로 fresh-context 드라이브 스텝 호출 → session_id + 구조화 boundary 반환(스파이크 §6.4에서 `structured_output` 강제 확인됨).\n2. `runFanout`: 병렬 격리 서브에이전트 호출 → 자유텍스트 반환.\n3. 중첩-CLI 환경에서 **라이브 스모크 1회**로 인자 포맷·반환 실증.\n\n## 위험/미결\n- 실제 CLI 프로토콜(프롬프트·boundary 스키마 매핑·fanout↔서브에이전트 매핑)은 정초 전체를 좌우하는 설계 결정.\n- 중첩 `claude` 실행 실현 가능성(이 환경에서 nested-CLI) 확인 필요.\n\nseverity: medium\n\n---\nprovenance: hskim-ecoletree/ditto-redesign#2에서 이관(재설계 저장소 은퇴에 따라 이 repo 백로그 SoT로).",
+  "goal": "[정초] LiveHost 라이브 CLI 통합 미배선 — runDrive/runFanout (네이티브 배선 첫 마일스톤)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "liveHostDeps.runDrive가 실제 claude CLI를 spawn하도록 구현되어(throw 아님) 라이브 스모크에서 비어있지 않은 sessionId와 boundaryEnvelope 스키마를 통과하는 boundary를 반환함이 스모크 출력으로 확인됨",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -q \"boundary-schema-valid=true sessionId-non-empty=true\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt && grep \"runDrive\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "liveHostDeps.runFanout가 실제 claude CLI를 task마다 spawn하도록 구현되어 라이브 스모크에서 task 수만큼 비어있지 않은 자유텍스트 string 배열을 반환함이 확인됨",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c grep -q \"two-nonempty-texts=true\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt && grep \"runFanout\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "rebuild/seam/live-host.ts에서 grep으로 'zodToJsonSchema(boundaryEnvelope' 호출이 1건 이상 매치되어 JSON 스키마가 zod SoT에서 파생됨을 확인",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c n=$(grep -c \"zodToJsonSchema(boundaryEnvelope\" rebuild/seam/live-host.ts); echo \"matches: $n\"; [ \"$n\" -ge 1 ]",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "bun test rebuild/가 여전히 135 pass 0 fail이고 live-smoke.ts가 .test.ts 확장자가 아니어서 유닛 스위트에 포함되지 않음",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c bun test rebuild/ 2>&1 | tail -3; echo \"live-smoke is .test.ts? $(ls rebuild/seam/live-smoke.test.ts 2>/dev/null && echo YES || echo NO)\"",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "git diff로 rebuild/seam/host-adapter.ts와 rebuild/schemas 변경이 0줄",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c d=$(git diff --numstat rebuild/seam/host-adapter.ts rebuild/schemas | wc -l | tr -d \" \"); echo \"changed contract files: $d\"; [ \"$d\" = 0 ]",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "rebuild/seam/live-host.ts",
+    "rebuild/seam/live-smoke.ts"
+  ],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 63,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgzfHcc"
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "73aefac7a4ce67118a0fb71c0d02355a50e7ca91",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_72777105687f54cb.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8b0f781dbe49828f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260718geb/",
+    ".ditto/work-items/wi_26071975p/",
+    ".ditto/work-items/wi_260719agy/",
+    ".ditto/work-items/wi_260719ka9/events/000001.workspace-write.f7343f3ee103.json",
+    ".ditto/work-items/wi_260719ka9/events/000002.workspace-write.a7a176feee7d.json",
+    ".ditto/work-items/wi_260719ka9/events/000003.workspace-write.5163aaf7a358.json",
+    ".ditto/work-items/wi_260719ka9/events/000004.workspace-write.8324203f6dd7.json",
+    ".ditto/work-items/wi_2607208oa/",
+    ".ditto/work-items/wi_260720ggl/",
+    ".ditto/work-items/wi_260720gw6/",
+    ".ditto/work-items/wi_260720l0o/",
+    ".ditto/work-items/wi_260720ndd/",
+    "reports/design/palimpsest-ditto-convergence-design.md",
+    "vb1.html",
+    "vb2.html",
+    "vb3.html"
+  ],
+  "created_at": "2026-07-20T23:10:25.471Z",
+  "updated_at": "2026-07-20T23:15:49.430Z",
+  "closed_at": "2026-07-20T23:15:49.429Z"
+}

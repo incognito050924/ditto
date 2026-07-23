@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720l0o",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "abcf1c524f91d467045d94dd3cd6f358cc6160d17f2875b2bd1a66668bfaa3b0",
+  "ts": "2026-07-20T22:34:04.906Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c d=$(git diff --cached --name-only --diff-filter=D | wc -l | tr -d \" \"); echo \"staged deletions: $d\"; git diff --cached --name-only --diff-filter=D | grep -c \"^src/\" | sed \"s/^/src deletions: /\"; [ \"$d\" = 442 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

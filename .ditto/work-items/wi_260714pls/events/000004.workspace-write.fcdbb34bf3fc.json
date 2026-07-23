@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714pls",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "fcdbb34bf3fce93bd87c80dbf72cb6633bb7a84971360f2dc72680e52f6bec59",
+  "ts": "2026-07-14T21:51:23.497Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c ./dist/ditto work status wi_260714pls | grep -q \"board:  status=\" && echo \"BOARD_RESOLVED\" || (echo \"STILL_UNAVAILABLE\"; exit 1)",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

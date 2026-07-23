@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26071975p",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "de151e95048b815b5166542641ccd4d651a3a54f6bad20e1aee93d50f906fa57",
+  "ts": "2026-07-19T23:27:28.933Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/schemas/completion-contract.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

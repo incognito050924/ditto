@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26071975p",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "cd236e4b107ffbda601a939d17c763bef2440028b4668d3e3ce3907e74504d26",
+  "ts": "2026-07-19T23:27:36.280Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c [ -z \"$(git status --porcelain src/)\" ] && echo \"src/ unchanged (0 tracked/untracked changes); new code isolated under rebuild/\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

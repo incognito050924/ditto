@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_eb1b873c1b5431e9",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[unverified] uncommitted tracked changes outside the recorded set\n[residual] 트랜스크립트·manifest에 로컬 경로(/Users/incognito), git author 이메일, env 덤프 같은 개인 식별자가 섞이고 그 일부가 커밋되는 manifest/보고서로 흘러 들어가 나중에 push되면 노출된다.\n[close_reason] 취급 데이터 = 사용자 본인 소유 repo의 소스 코드와 그에 대한 에이전트 트랜스크립트뿐. palimpsest는 정적 코드 추출 도구로(pyproject.toml 확인) 개인정보 저장·처리 표면이 없고, 스코프가 웹 표면·프로덕션·DB·사용자 데이터 비접촉을 명시하며 원시 트랜스크립트는 run-tier(비커밋)에 남는다.",
+  "created_at": "2026-07-23T02:40:21.773Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

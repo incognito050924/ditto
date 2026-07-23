@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714mfx",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "8eebea1786fa10f5602a576cd0bc574cf2bbf3dc94b121f73e1600d7eb2bbfb0",
+  "ts": "2026-07-14T21:59:24.782Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260714mfx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop-discipline.test.ts",
+        "summary": "exit 0, 63 pass / 0 fail (238 expect); mfx-1..4 green, RED proven first"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop.test.ts tests/core/autopilot-store.test.ts",
+        "summary": "120 pass / 0 fail (regression)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck (tsc --noEmit)",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop-discipline.test.ts",
+        "summary": "exit 0, 63 pass/0 fail (fresh, verifier-run)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test autopilot-loop.test.ts autopilot-store.test.ts handoff-store.test.ts",
+        "summary": "exit 0, 141 pass/0 fail (regression)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "ec04cf3502e0be2c41842d64d31199e3652ba4185532f7e3c8b5601ac5f0b1aa",
+  "ts": "2026-07-11T01:49:44.180Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607103tp/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts -t RUNNER-AWARE",
+        "summary": "2 fail assertion-red (indeterminate vs compile_import_red) — genuine assertion, file loaded"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts",
+        "summary": "23 pass / 0 fail — s2a RUNNER-AWARE reds green, definite-phantom guard green, no regression"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t \"2-STACK\"",
+        "summary": "4 pass / 0 fail — bun-block, bun-present, non-bun-degrade, non-bun-floor legs green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (full suite, driver fresh run)",
+        "summary": "4523 pass / 17 skip / 0 fail across 363 files — 2-stack fixture present + no regression"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts -t RUNNER-AWARE",
+        "summary": "2 pass — non-bun bun-marker chatter → indeterminate not compile_import_red"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t non-bun-degrade",
+        "summary": "1 pass — phantomRedGate non-bun → verdict degrade not block (false-block prevented)"
+      }
+    ]
+  }
+}

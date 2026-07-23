@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714m9w",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "0e10e7cc76eb8a40afa980082f740aab47a7cefd30d7eddd7cf66adbef9687db",
+  "ts": "2026-07-14T21:44:12.518Z",
+  "kind": "claim_release",
+  "payload": {
+    "claimed_branch": "main",
+    "posted_claim_marker": "claim:main"
+  }
+}

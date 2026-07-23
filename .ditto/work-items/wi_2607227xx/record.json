@@ -1,0 +1,754 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_2607227xx",
+  "title": "[대체 로드맵] 순효능 증거 감사 — palimpsest 3-arm ablation (B0/B1/A)",
+  "source_request": "[대체 로드맵] 순효능 증거 감사 — palimpsest 3-arm ablation (B0/B1/A)\n\n에픽 #64 · 단계 2/5. keep 판정을 내려 #67·#69를 게이트한다.\n\n## 원 의도 (초안 §8 순효능 측정 프로토콜)\n\"3-arm ablation — B0 맨 Claude Code(지침 없음) / B1 CC+charter 주입만(값싼 DITTO) / A 풀 DITTO(엔진·경로·완료게이트=비싼 DITTO). **A vs B1이 핵심 대조** — 무거운 엔진이 얇은 charter 주입 대비 값을 하나. A ≈ B1이면 엔진은 순효능 없이 비용만.\"\n- fixture(확정) = palimpsest: 다른 스택 실프로젝트(Python 3.11 / pytest, tree-sitter 다언어 추출 → Neo4j, src ~11.5K LOC).\n- 첫 측정 작업 = recognizer가 `const fetch = …` 지역 바인딩 shadow를 확인 안 해 false-positive 내는 재현형 버그(`src/palimpsest/extract/ecmascript.py`).\n\n## 검증된 사실\n- ADR-20260713: ditto의 가치는 도그푸딩이 아니라 사용자 프로젝트에서 발현 — efficacy 주장은 **비-DITTO fixture 선결**.\n- 기존 열린 이슈가 이 단계의 실행 항목으로 접힘(중복 생성 금지): #48(경쟁 하네스 대조 벤치마크)·#49(가벼운경로 오버헤드 실측)·#50(가벼운경로 소수 배포 외부 피드백).\n\n## 열린 결정\n- 측정 하네스 설계, arm 격리 방법(charter·hook 배어 A/B1 분리), 순효능 판정 임계.\n\n\n## 검토 보강 (2026-07-21) — arm A의 정체 명시\n- **arm A = 현행 옛 제품(`bin/ditto` = 옛 `src/` 빌드)이지 rebuild가 아니다.** rebuild/엔 실행 진입점(bin·CLI)이 없어 \"풀 DITTO\"를 구동할 수 없다. 따라서 이 감사는 \"**옛 엔진**이 charter 주입(B1) 대비 순효능을 내나\"를 재고, 그 keep 판정이 #67 재진입을 게이트한다.\n- 함의: 이 명시로 **#66은 #68(배포 표면)을 선행하지 않는다** — A를 rebuild로 오독하면 감사가 #68을 요구하는 순환의존이 생긴다. 그 오독을 차단한다.",
+  "goal": "palimpsest fixture 3-arm ablation(B0 맨 CC / B1 헌장 문서만 / A 풀 DITTO 제품 통째=엔진+훅+게이트=옛 bin/ditto)으로 '풀 DITTO 제품이 얇은 헌장 주입 대비 순효능을 내나'를 사전 등록 규칙 위에서 판정하고, 판정·근거·한계를 보고서로 landed하여 #67/#69 게이트 입력을 만든다. 모든 세션은 격리 샌드박스에서만 실행한다.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "격리 샌드박스가 세션 실행 전 검증된다: ~/.claude 전역 무접촉(격리 HOME/CLAUDE_CONFIG_DIR), clone은 --no-hardlinks+origin 제거, 자격증명 env 미도달, hook-무력화 env(DITTO_SKIP_HOOKS 등) 세션서 제거, 네트워크 egress 0회 positive 단언 — 양성 대조(경계 넘는 행위가 실제 차단)로 실효 증명. arm별 clone 준비(B0 지침파일 부재/B1 헌장만/A 옛 bin/ditto 가동)도 사후조건 검증",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bash reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+          "summary": "failures=0, 50항목 ok, self-check PASS (드라이버 fresh 재실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+          "summary": "self-check 출력 전문 보존본"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+          "summary": "설계 결정·egress 2층 근거·한계·N4 번들 계약"
+        },
+        {
+          "kind": "command",
+          "command": "ABLATION_LEDGER_FILE=runs/ledger.jsonl bun harness/ledger.ts verify",
+          "summary": "ok — 9 entries, 4/15 attempts, chain intact (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/runs/attempt-4-A/session-meta.json",
+          "summary": "arm_a_bin_sha256==동결 7120a7f4…, wall 289s, claude 2.1.217 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/runs/attempt-4-A/ditto-state/local/logs/user-prompt.jsonl",
+          "summary": "훅 발화 로그 — session_id 7f14a519… transcript 결부 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "grep -c PASS <sandbox>/attempt-4-A/logs/positive-controls.out",
+          "summary": "7 PASS — 양성대조 5종(PC3 3단언 포함) 전부 통과 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "git show --stat ee3479e 5e7fa40 2a2ac95",
+          "summary": "하네스 수정 3건 전부 harness 파일만 — 동결 번들 무변경 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "command",
+          "command": "positive-controls.out 16개 전수 + egress.jsonl 전 세션 스캔 + invariance diff 5쌍",
+          "summary": "7 PASS×16, allowed 476건 전부 api.anthropic.com, pre/post 실질 동일 (N11 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "사전 등록 번들(keep 규칙: 수치 임계로 무수치 제거·무효시행 술어·재실행 상한·파일럿 포함·arm 대칭 권한·꼬리사건 반영규칙 포함, oracle, 공유 프롬프트, 정보-동등 답변세트, arm A 실행물 정체=bin/ditto executable digest sha256+대응 source commit(ditto-src-stamp), arm B1 헌장 스냅샷=주입할 exact source file+digest)이 어떤 arm 세션보다 먼저 커밋 동결되고, sha 참조체인(injected==frozen==committed blob)으로 세션이 소비한 번들==동결본임이 검증됨이 git 이력·해시로 증명된다. arm A는 실행 전 bin/ditto가 landed commit에 앵커됨(dirty 해소 또는 명시 동결)이, arm B1은 ac-1의 '헌장만' arm 준비 사후조건이 이 digest 대조로 검증됨이 함께 증명된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "git show --stat --format= HEAD",
+          "summary": "bin/ditto | 2 +- / 1 file changed — 커밋 4edee81 단독 파일 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 bin/ditto",
+          "summary": "7120a7f44cb39e36b542c88166e6bbbd124153c87004ec1ab952eb89abebd160 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "git status --short -- bin/ditto",
+          "summary": "empty — 커밋 후 clean (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 -c bundle/manifest.sha256",
+          "summary": "12/12 OK (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "harness/score.sh verify-chain",
+          "summary": "disk == manifest OK (12 files), exit 0 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+          "summary": "pytest exit 1 — sanity PASSED / shadow 단언 FAILED (서브에이전트 실행 보존본, N5가 독립 재실행 예정)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 bundle/arm-a/ditto",
+          "summary": "7120a7f4… — N2 확정 digest와 일치 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviewer-output.json",
+          "summary": "reviewer-output 영속본 — acg-review exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "pytest tests/test_ablation_oracle.py (fresh clone+venv, N5 독립 실행)",
+          "summary": "PYTEST-EXIT=1 — sanity PASSED + shadow FAILED 재현, oracle sha d857c8f8… manifest 일치"
+        },
+        {
+          "kind": "command",
+          "command": "pytest scoped regression (N5 독립 실행)",
+          "summary": "250 passed exit 0 / unscoped 191 errors 전부 testcontainers 부재 — 스코프 결정 근거 재현"
+        },
+        {
+          "kind": "command",
+          "command": "git show --name-only b9585a36dee6… | grep -cv '^reports/measurements/efficacy-ablation-3arm/'",
+          "summary": "0 — 동결 커밋에 캠페인 밖 파일 없음 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "harness/score.sh verify-chain --frozen-commit b9585a36dee6…",
+          "summary": "disk==manifest OK + manifest==committed blobs OK, exit 0 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "bash harness/self-check.sh",
+          "summary": "failures=0, 51 ok (S6 잔재-제거 신규 항목 포함, N6 실행)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "command",
+          "command": "score.sh verify-chain --frozen-commit b9585a3 / 392e2ad + --session ×15",
+          "summary": "전부 exit 0 (N11 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "shadow fetch 재현 oracle이 arm 실행 전 작성·봉인되고 버그 존재 상태에서 red(pytest exit 1)임이 증명되며, 성공 술어=oracle green ∧ 기존 전체 스위트 무회귀 ∧ 테스트 파일 무변조로 정의되고 채점 시 oracle이 동결 번들서 digest검증 후 재주입됨",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 -c bundle/manifest.sha256",
+          "summary": "12/12 OK (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "harness/score.sh verify-chain",
+          "summary": "disk == manifest OK (12 files), exit 0 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+          "summary": "pytest exit 1 — sanity PASSED / shadow 단언 FAILED (서브에이전트 실행 보존본, N5가 독립 재실행 예정)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 bundle/arm-a/ditto",
+          "summary": "7120a7f4… — N2 확정 digest와 일치 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "git show --name-only b9585a36dee6… | grep -cv '^reports/measurements/efficacy-ablation-3arm/'",
+          "summary": "0 — 동결 커밋에 캠페인 밖 파일 없음 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "harness/score.sh verify-chain --frozen-commit b9585a36dee6…",
+          "summary": "disk==manifest OK + manifest==committed blobs OK, exit 0 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "bash harness/self-check.sh",
+          "summary": "failures=0, 51 ok (S6 잔재-제거 신규 항목 포함, N6 실행)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+          "summary": "exit 1, sanity PASSED (N11 재확인)"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "A용 고정 답변 세트가 공유 프롬프트 도출 가능 정보만 담고(진단·파일위치·수정방향 등 새 사실 없음), 세션별 실주입 내용이 트랜스크립트에 축자 기록돼 동결 답변세트와 대조 가능하며, 피더가 정보 채널이지 승인 채널이 아님(엔진 승인 게이트 자동통과 금지)이 증명된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 -c bundle/manifest.sha256",
+          "summary": "12/12 OK (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "harness/score.sh verify-chain",
+          "summary": "disk == manifest OK (12 files), exit 0 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+          "summary": "pytest exit 1 — sanity PASSED / shadow 단언 FAILED (서브에이전트 실행 보존본, N5가 독립 재실행 예정)"
+        },
+        {
+          "kind": "command",
+          "command": "shasum -a 256 bundle/arm-a/ditto",
+          "summary": "7120a7f4… — N2 확정 digest와 일치 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviewer-output.json",
+          "summary": "reviewer-output 영속본 — acg-review exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "pytest tests/test_ablation_oracle.py (fresh clone+venv, N5 독립 실행)",
+          "summary": "PYTEST-EXIT=1 — sanity PASSED + shadow FAILED 재현, oracle sha d857c8f8… manifest 일치"
+        },
+        {
+          "kind": "command",
+          "command": "pytest scoped regression (N5 독립 실행)",
+          "summary": "250 passed exit 0 / unscoped 191 errors 전부 testcontainers 부재 — 스코프 결정 근거 재현"
+        },
+        {
+          "kind": "command",
+          "command": "ABLATION_LEDGER_FILE=runs/ledger.jsonl bun harness/ledger.ts verify",
+          "summary": "ok — 22 entries, 10/15 attempts, chain intact (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "python3 원장 adjudication 집계",
+          "summary": "1=invalid, 2~10=valid — arm별 유효 A 3(4·6·8)/B0 3(2·7·9)/B1 3(3·5·10) (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "git show --stat ac5983c",
+          "summary": "harness 2파일 +21줄 — 동결 번들 무변경 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "session-meta arm_a_bin_sha256 확인 (attempt 6·8)",
+          "summary": "둘 다 7120a7f4… == 동결 digest (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/runs/ledger.jsonl",
+          "summary": "attempt-4 결부 adjudication에 feeder-log 갭·보완 커밋 ac5983c 기재 (N11 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "bash /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/52ab06d8-8c29-4b40-8122-ec97744da29e/scratchpad/check-feeder.sh",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "3조건×3회=9세션이 격리 샌드박스에서 실행되고, 회차마다 fresh clone/hard-reset로 오염 차단, 세션별 원시 산출물(트랜스크립트·diff·oracle결과·토큰/시간·model/CLI버전)이 per-session 증분 durable 영속되며, 모든 시행(무효 포함)이 append-only 원장에 사유와 함께 보존되고, A 세션마다 엔진 실가동 증거(hook 실발화·판정 관측)와 실행물 정체 증거(가동된 bin/ditto의 digest가 동결 번들의 arm A digest와 일치)가 원장·산출물에 결부되며 truncated 세션은 완결마커로 구분된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bash reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+          "summary": "failures=0, 50항목 ok, self-check PASS (드라이버 fresh 재실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+          "summary": "self-check 출력 전문 보존본"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+          "summary": "설계 결정·egress 2층 근거·한계·N4 번들 계약"
+        },
+        {
+          "kind": "command",
+          "command": "ABLATION_LEDGER_FILE=runs/ledger.jsonl bun harness/ledger.ts verify",
+          "summary": "ok — 22 entries, 10/15 attempts, chain intact (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "python3 원장 adjudication 집계",
+          "summary": "1=invalid, 2~10=valid — arm별 유효 A 3(4·6·8)/B0 3(2·7·9)/B1 3(3·5·10) (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "command",
+          "command": "git show --stat ac5983c",
+          "summary": "harness 2파일 +21줄 — 동결 번들 무변경 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "session-meta arm_a_bin_sha256 확인 (attempt 6·8)",
+          "summary": "둘 다 7120a7f4… == 동결 digest (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "command",
+          "command": "ABLATION_MAX_ATTEMPTS=16 bun ledger.ts verify + digest 재계산 ×5 + A 세션 전수",
+          "summary": "ok — 36 entries, 16/16, chain intact; 전부 일치 (N11 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "결과는 기계 채점, 과정 규율은 arm 라벨 strip blind 채점(잔존 arm-식별 시그널 기계검사)으로 채점되고, 동결 규칙만 적용한 3단 판정(keep/insufficient-evidence/no-net-efficacy)이 '풀 DITTO 제품 통째 vs 문서' 프레이밍으로 도출되며, 2차 발동조건은 기계 평가·로그되고 해당 시 조건부 2차 실행 후 재판정한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "bash reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+          "summary": "failures=0, 50항목 ok, self-check PASS (드라이버 fresh 재실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+          "summary": "self-check 출력 전문 보존본"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+          "summary": "설계 결정·egress 2층 근거·한계·N4 번들 계약"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+          "summary": "final: machine_verdict=keep, §3-3a, dS=1, dD=20(경계), C=0.7884, user_signoff 명기 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-15-B1/score.json",
+          "summary": "15-B1 oracle=red — B1 무산출 종료 세션 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "ABLATION_MAX_ATTEMPTS=16 bun harness/ledger.ts verify",
+          "summary": "ok — 36 entries, 16/16 attempts, chain intact (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+          "summary": "ablation-verdict/2 — task1 보존+task2+합산+분기행렬+민감도, final.machine_verdict=keep §3-3a (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/scoring/scoring-log.md",
+          "summary": "채점 전 과정 로그 (§1~15)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+          "summary": "독립 재집계 정확 일치 (N11 fresh)"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "판정·근거·한계(소표본·비용축 구독계정 훼손·프레이밍)·꼬리사건을 담은 보고서가 reports/measurements/ 컨벤션으로 landed되고 커밋 산출물에 proprietary palimpsest 소스 인용이 없으며, 실저장소 불변(palimpsest·~/.claude 전역·ditto repo 실험 전후 동일) 스탬프가 전사되고, #66이 닫히며 keep 판정이 #67/#69 게이트 입력으로 기록된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+          "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/handoff/wi_2607227xx.md",
+          "summary": "하드닝 설계 입력"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+          "summary": "심의 원장 — 번들 흡수 4건"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command",
+          "command": "git show --name-only faaaf1c1 | grep -cv '^reports/measurements/efficacy-ablation-3arm'",
+          "summary": "0 — 캠페인 밖 파일 없음, runs/ 포함 0 (드라이버 fresh 실행)"
+        },
+        {
+          "kind": "file",
+          "path": "reports/measurements/efficacy-ablation-3arm.md",
+          "summary": "310행, '서명은 사용자' 명기 확인 (드라이버 fresh 확인)"
+        },
+        {
+          "kind": "command",
+          "command": "staged-diff grep 3종 (Python 소스 마커/내부 식별자/palimpsest 언급)",
+          "summary": "소스 조각 0·내부 식별자 0·경로 수준 43건만 (N10 실행, 보고서 §8 공개)"
+        },
+        {
+          "kind": "note",
+          "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+        },
+        {
+          "kind": "command",
+          "command": "git show --name-only faaaf1c1 + proprietary grep + gh issue view 66",
+          "summary": "캠페인 밖 0·소스 조각 0·#66 OPEN (N11 fresh)"
+        },
+        {
+          "kind": "command",
+          "command": "bash -c set -e\nSTATE=$(gh issue view 66 -R incognito050924/ditto --json state -q .state)\necho \"issue #66 state: $STATE\"; [ \"$STATE\" = \"CLOSED\" ]\ngit -C /Users/incognito/dev/projects/ditto cat-file -e faaaf1c10d51c01c0e76020af2cf1746ac0751ac && echo \"보고서 landed 커밋 실재: faaaf1c1\"\ngit -C /Users/incognito/dev/projects/ditto log --format=%h -1 -- reports/measurements/efficacy-ablation-3arm.md\ngrep -c \"keep\" /Users/incognito/dev/projects/ditto/reports/measurements/efficacy-ablation-3arm.md >/dev/null && echo \"판정 기재 확인\"\ngrep -q \"최종 서명\" /Users/incognito/dev/projects/ditto/reports/measurements/efficacy-ablation-3arm.md && echo \"사용자 서명 §10 기재 확인\"\ngrep -q \"게이트\" /Users/incognito/dev/projects/ditto/reports/measurements/efficacy-ablation-3arm.md && echo \"게이트 입력 기재 확인\"",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "bin/ditto",
+    "reports/measurements/efficacy-ablation-3arm.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/answers/answers.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/arm-a.json",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/arm-a/ditto",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/charter/CLAUDE.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/charter/manifest.json",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/claude-flags.txt",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/manifest-2.sha256",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/manifest.sha256",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/oracle/DEST",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/oracle/red-proof-2.txt",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/oracle/test_cli_load_error_reporting.py",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/prompt-2.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/rules-2-addendum.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/scope-meter.sh",
+    "reports/measurements/efficacy-ablation-3arm/bundle-2/self-gate-2.txt",
+    "reports/measurements/efficacy-ablation-3arm/bundle/answers/answers.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle/arm-a.json",
+    "reports/measurements/efficacy-ablation-3arm/bundle/arm-a/ditto",
+    "reports/measurements/efficacy-ablation-3arm/bundle/charter/CLAUDE.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle/charter/manifest.json",
+    "reports/measurements/efficacy-ablation-3arm/bundle/claude-flags.txt",
+    "reports/measurements/efficacy-ablation-3arm/bundle/manifest.sha256",
+    "reports/measurements/efficacy-ablation-3arm/bundle/oracle/DEST",
+    "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+    "reports/measurements/efficacy-ablation-3arm/bundle/oracle/test_shadow_fetch_repro.py",
+    "reports/measurements/efficacy-ablation-3arm/bundle/prompts/task.md",
+    "reports/measurements/efficacy-ablation-3arm/bundle/rules.json",
+    "reports/measurements/efficacy-ablation-3arm/bundle/rules.md",
+    "reports/measurements/efficacy-ablation-3arm/harness/README.md",
+    "reports/measurements/efficacy-ablation-3arm/harness/config.sh",
+    "reports/measurements/efficacy-ablation-3arm/harness/egress-proxy.ts",
+    "reports/measurements/efficacy-ablation-3arm/harness/ledger.ts",
+    "reports/measurements/efficacy-ablation-3arm/harness/positive-controls.sh",
+    "reports/measurements/efficacy-ablation-3arm/harness/provision-sandbox.sh",
+    "reports/measurements/efficacy-ablation-3arm/harness/run-session.sh",
+    "reports/measurements/efficacy-ablation-3arm/harness/score.sh",
+    "reports/measurements/efficacy-ablation-3arm/harness/self-check.out",
+    "reports/measurements/efficacy-ablation-3arm/harness/self-check.sh",
+    "reports/measurements/efficacy-ablation-3arm/scoring/discipline-summary.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/pipeline/aggregate-final.ts",
+    "reports/measurements/efficacy-ablation-3arm/scoring/pipeline/aggregate-verdict.ts",
+    "reports/measurements/efficacy-ablation-3arm/scoring/pipeline/restrip-and-discipline.ts",
+    "reports/measurements/efficacy-ablation-3arm/scoring/pipeline/score-one-t2.sh",
+    "reports/measurements/efficacy-ablation-3arm/scoring/pipeline/score-one.sh",
+    "reports/measurements/efficacy-ablation-3arm/scoring/pipeline/t2-discipline.ts",
+    "reports/measurements/efficacy-ablation-3arm/scoring/scoring-log.md",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-10-B1/corrected-predicate.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-10-B1/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-10-B1/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-2-B0/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-2-B0/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-3-B1/corrected-predicate.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-3-B1/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-3-B1/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-4-A/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-4-A/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-5-B1/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-5-B1/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-6-A/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-6-A/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-7-B0/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-7-B0/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-8-A/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-8-A/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-9-B0/discipline.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/sessions/attempt-9-B0/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-11-B1/corrected-predicate.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-11-B1/scope-meter.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-11-B1/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-12-A/scope-meter.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-12-A/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-13-A/scope-meter.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-13-A/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-14-B1/corrected-predicate.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-14-B1/scope-meter.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-14-B1/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-15-B1/scope-meter.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-15-B1/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-16-A/scope-meter.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-sessions/attempt-16-A/score.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/verdict.json",
+    ".ditto/local/work-items/wi_2607227xx/completion.json",
+    ".ditto/local/work-items/wi_2607227xx/work-item.json",
+    "reports/measurements/efficacy-ablation-3arm/scoring/task2-discipline-summary.json"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "irreversible": true
+  },
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 66,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgzgmb4"
+  },
+  "risks": [
+    {
+      "description": "partial under-commit close justification (tree-dirt override): 잔여 dirty(.ditto/work-items/wi_260722kom/record.json)는 동시 세션(wi_260722kom)의 Record-tier 기록 파일로 이 WI 소유가 아님. 이 WI의 변경은 전부 landed 커밋(4edee81 앵커·b9585a36/392e2adb 동결·하네스 수정 4건·faaaf1c1 보고서·7174af9 서명)으로 기록돼 있고 changed_files는 노드별 기록과 일치.",
+      "severity": "low"
+    },
+    {
+      "description": "partial under-commit close justification (tree-dirt override): 잔여 dirty(.ditto/work-items/wi_260722kom/record.json)는 동시 세션(wi_260722kom)의 Record-tier 기록 파일로 이 WI 소유가 아님. 이 WI의 변경은 전부 landed 커밋(4edee81·b9585a36·392e2adb·하네스 4건·faaaf1c1·7174af9)으로 기록됨.",
+      "severity": "low"
+    }
+  ],
+  "re_entry": {
+    "command": "ditto work handoff wi_2607227xx --show",
+    "fresh_evidence_needed": [
+      "미pass acceptance에 대한 검증 결과"
+    ]
+  },
+  "runs": [],
+  "handoff_path": ".ditto/local/handoff/wi_2607227xx.md",
+  "started_at_sha": "e92faaed0630e50ae52b6d2a04e7efda4627c124",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_72777105687f54cb.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8b0f781dbe49828f.json",
+    ".ditto/memory/events/memevt_retro_8ca903bc6ea9df68.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260718geb/",
+    ".ditto/work-items/wi_26071975p/",
+    ".ditto/work-items/wi_260719agy/",
+    ".ditto/work-items/wi_260719ka9/events/000001.workspace-write.f7343f3ee103.json",
+    ".ditto/work-items/wi_260719ka9/events/000002.workspace-write.a7a176feee7d.json",
+    ".ditto/work-items/wi_260719ka9/events/000003.workspace-write.5163aaf7a358.json",
+    ".ditto/work-items/wi_260719ka9/events/000004.workspace-write.8324203f6dd7.json",
+    ".ditto/work-items/wi_2607208oa/",
+    ".ditto/work-items/wi_260720ca8/",
+    ".ditto/work-items/wi_260720ggl/",
+    ".ditto/work-items/wi_260720gw6/",
+    ".ditto/work-items/wi_260720l0o/",
+    ".ditto/work-items/wi_260720ndd/",
+    ".ditto/work-items/wi_260720ooz/",
+    ".ditto/work-items/wi_2607227xx/",
+    ".ditto/work-items/wi_260722kom/events/000009.workspace-write.1cb1e722bcb3.json",
+    ".ditto/work-items/wi_260722kom/events/000010.workspace-write.c759aa3371e3.json",
+    "reports/design/palimpsest-ditto-convergence-design.md",
+    "vb1.html",
+    "vb2.html",
+    "vb3.html"
+  ],
+  "created_at": "2026-07-22T12:59:03.971Z",
+  "updated_at": "2026-07-23T07:30:15.284Z",
+  "closed_at": "2026-07-23T07:30:15.283Z"
+}

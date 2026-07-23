@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719agy",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "df8277e47797ec2fe4631413045a6cb96d1ea1aae2b09e58467f8e68839c0fe8",
+  "ts": "2026-07-19T09:49:57.790Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719agy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/conformance/m0.conformance.test.ts",
+        "summary": "28 pass 0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full, no bypass env)",
+        "summary": "4968 pass 17 skip 0 fail exit 0, 381 files"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/codeql-sarif-adapter.test.ts",
+        "summary": "3 pass 0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a toObjection",
+        "summary": "0 external consumers (only defs + own test + docs)"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a healer-policy|filterHealPatch|HealFilterResult|HealHunk src/ tests/ skills/",
+        "summary": "exit 1 — no references remain"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a heal-proposal|applyHeal src/",
+        "summary": "no heal-apply mechanism exists — corroborates unenforced guarantee"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a per dropped/preserved symbol src/ tests/",
+        "summary": "drops 0 prod refs incl string-literal; preserves present with live/test/ADR consumer"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full, no bypass)",
+        "summary": "4968 pass 17 skip 0 fail exit 0"
+      }
+    ]
+  }
+}

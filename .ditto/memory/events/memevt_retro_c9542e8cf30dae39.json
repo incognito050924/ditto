@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_c9542e8cf30dae39",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] re-classification이 다른 host/actor로 재-dispatch를 바꾸면 identity 실수가 unswept될 수 있으나 touched path에 identity 읽기 없음\n[residual] planner fan-out 자식이 부모보다 넓은 write profile 상속하면 갭 — 단 스키마상 per-node profile 필드 없음(work-item tier flat), 상속할 것 자체가 없음\n[residual] 없음 — 권한 모델 정의/변경 없음\n[residual] tamper-evidence 필요했다면 오기록이 약화시킬 수 있으나 그런 audit 계약 없음\n[residual] red→green oscillate로 cap 회피 무한루프 — 단 ac-2 + no_progress_rounds 플로어(=3)로 이중 상한\n[residual] 오라클이 나중에 crafted token 삼키는 패턴으로 parse하면 오작동 — 현 counting 로직엔 없음\n[residual] re-dispatch가 test 출력을 verbatim 로깅해 비밀 포함 시 누출 — 단 그 로깅 경로는 기존·불변\n[residual] 없음 — touched 자료구조에 PII 없음\n[residual] 없음 — 규제 데이터/프로세스 scope 밖\n[residual] 신 코드가 구 코드 autopilot.json resume 시 mid-run 마이그레이션 — 단 compat-version이 커버(모든 신 필드 .default/.optional)\n[residual] cap/progress 결정이 time-relative였다면 clock skew 영향 — 단 오라클은 transition-count 기반\n[close_reason] 인증/자격/세션/로그인 경로가 scope에 없음; 5개 touched 파일은 분류·오라클·순서·상태 로직만, grep상 auth 표면 없음\n[close_reason] 무엇을 어떻게 분류/순서 짓는지 바꾸지 WHO may dispatch/write를 안 바꿈; owner_profile 게이팅 불변\n[close_reason] user-intent 카테고리; 의도는 cap-model 종료 버그 수정, 권한 모델 없음\n[close_reason] decisions.jsonl은 운영 오케스트레이션 telemetry지 accountability audit 아님; 정확성은 observability/data-integrity가 커버\n[close_reason] 외부 공격자 표면 없음; 오라클 입력은 dogfood 루프 내 에이전트-산출 test 결과, gameability는 resource-exhaustion(red-count 상한)·boundary-edge가 근거리 커버\n[close_reason] untrusted data로 query/command/template 구성 안 함; 오라클은 test 결과 count를 parse(실행 아님), planner.md는 authored prompt\n[close_reason] 분류/순서/상태 로직·decision log는 node id·verdict·attempt count만; 비밀/토큰/자격 안 읽고 안 씀\n[close_reason] 개인정보가 node 상태·attempt 회계·decision log를 흐르지 않음; scope는 오케스트레이션 bookkeeping\n[close_reason] user-intent 카테고리; 내부 오케스트레이션 버그 수정, 규제 도메인 의무 없음\n[close_reason] CI/CD·feature-flag·canary·아티팩트 포맷 변경 없음; 산출물은 로컬 상태 파일\n[close_reason] 분류/순서/상태/오라클 경로에 시간/시계/기간/타임존 로직 없음; updated_at은 안 읽고 안 분기",
+  "created_at": "2026-07-11T07:41:42.963Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

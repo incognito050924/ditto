@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720gw6",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "bf7bf7292e98aadedd495fa8bfb9f5dfae346629bdbd719bbc318f1a0a25b894",
+  "ts": "2026-07-20T23:15:27.286Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c d=$(git diff --numstat rebuild/seam/host-adapter.ts rebuild/schemas | wc -l | tr -d \" \"); echo \"changed contract files: $d\"; [ \"$d\" = 0 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

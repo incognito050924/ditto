@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714f4p",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "69b4e69af646e63e583ea00c687f9d7cd499f8b6fa0369fbb24f612809122c79",
+  "ts": "2026-07-14T22:40:02.144Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop-discipline.test.ts tests/core/autopilot-loop.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714pjs",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "9ab22168ce87dfb522dd3d531347209cada51635f86e87e997ae2ffa68e40cca",
+  "ts": "2026-07-14T22:31:12.774Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-loop-discipline.test.ts -t pjs-2",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

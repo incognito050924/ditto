@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260714pls",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "c9b708211df485eebd4227da48cf09980bb9c68dfd1443b3522411c9221327f4",
+  "ts": "2026-07-14T21:51:19.151Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/core/gh-client.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

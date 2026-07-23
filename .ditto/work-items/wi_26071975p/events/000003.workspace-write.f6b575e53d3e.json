@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26071975p",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "f6b575e53d3ef82a665cde1682c01c4330c1a377e9392790272546d0cd07b202",
+  "ts": "2026-07-19T23:27:29.288Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/schemas/gate-result.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

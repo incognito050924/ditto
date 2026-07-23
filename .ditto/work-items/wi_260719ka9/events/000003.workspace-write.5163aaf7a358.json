@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719ka9",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "5163aaf7a358b8f8039bf7640a8de79eb593a49d9dc4f2ca7baf1eea47f3d2ba",
+  "ts": "2026-07-19T02:48:31.625Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-done.test.ts -t ac-3: pre-existing pass completion",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

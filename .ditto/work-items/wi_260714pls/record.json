@@ -1,0 +1,89 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260714pls",
+  "title": "[bug] work claim/start: 착수 시 assignee만 지정하고 보드 상태를 In progress로 안 옮김 (projectItemList page-limit)",
+  "source_request": "[bug] work claim/start: 착수 시 assignee만 지정하고 보드 상태를 In progress로 안 옮김 (projectItemList page-limit)\n\n## 증상\n\nGitHub Project 백로그 아이템을 claim + 착수(`ditto work start --issue …#n`)하면 **assignee만 지정되고 보드 상태가 In progress로 안 옮겨진다**. 카드가 Backlog 칼럼에 그대로 남는다.\n\n- 관찰: #33을 claim → assignee만 붙고 카드는 Backlog에 잔존.\n- 재현: #32를 claim할 때 CLI가 그대로 노출 — `\"Project board: issue not on the board (no project_item_id) — board status update skipped.\"` (그러나 #32는 보드 Backlog에 실제로 존재)\n\n## 근본 원인 (확정)\n\n`ditto`의 `projectItemList`가 `gh project item-list`를 **`--limit` 없이** 호출한다 — `gh`의 기본 limit은 30이다.\n\n- `src/core/gh-client.ts:280-283` — `['project','item-list', String(projectNumber), '--owner', owner, '--format','json']` (no `--limit`)\n- 이 프로젝트 보드엔 60개 아이템이 있고 #32/#33은 30번째 밖 → 반환 페이지에 없음\n- `resolveProjectItemId`(`src/cli/commands/work.ts:1407`)가 `parseBoardPosition`에서 매칭 실패 → `null` 반환\n- `--issue` 링크 시 `project_item_id`가 저장되지 않음 (`work.ts:297`의 `...(projectItemId ? … : {})`가 빈 객체로 귀결)\n- claim의 보드 이동(`applyBoardStatusOption`, `src/core/github-reflection.ts:141-146`)이 `project_item_id` 부재로 skip → assignee만 남음\n\n### 증거\n\n```\n# ditto 호출과 동일(기본 limit 30): #32/#33 없음\ngh project item-list 2 --owner incognito050924 --format json      → 30개, #32/#33 미포함\n# 높은 limit: 둘 다 Backlog로 존재\ngh project item-list 2 --owner incognito050924 --format json --limit 200\n  → total 60, hits: (32,'PVTI_…DTA','Backlog'), (33,'PVTI_…gTw','Backlog')\n```\n\n`#32` work item 저장 상태에도 `project_item_id`가 없다: `github_issue = {repo, number}`.\n\n## 기대 동작\n\nclaim + 착수 시 보드 상태가 In progress(claim_status_map의 `in_progress`)로 이동해야 한다.\n\n## 수정 방향 (별도 단위)\n\n`projectItemList`에 충분한 `--limit`을 주거나 페이지네이션한다. 보드가 임의 크기로 커질 수 있으므로 단순 상수 상향보다 페이지네이션이 안전. 부수적으로, `project_item_id`를 못 찾았을 때의 skip이 조용하다 — claim 성공 출력에 \"보드 이동 안 됨\" 경고가 사용자에게 더 크게 보여야 한다.\n\n## 관계\n\n- 이 버그는 `#33`(이슈번호만으로 repo 매칭 → 엉뚱한 카드 이동)과 **별개**다: #33은 매칭 대상 오류, 이 건은 page-limit로 대상 자체를 못 찾는 문제.\n- 발견 경위: #32(handoff 정황 조사) claim 중 CLI 경고로 표면화.",
+  "goal": "[bug] work claim/start: 착수 시 assignee만 지정하고 보드 상태를 In progress로 안 옮김 (projectItemList page-limit)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "gh-client projectItemList가 gh 기본 30개 절단을 무력화할 충분한 --limit을 넘긴다 (결정적 회귀: bun test tests/core/gh-client.test.ts)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/core/gh-client.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "재빌드한 bin/ditto가 보드 위치가 기본 페이지 밖(>30번째)인 이슈 #39의 live 보드 위치를 해결한다 — ditto work status wi_260714pls가 '보드에 없음'이 아니라 #39의 Status를 표시",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c ./dist/ditto work status wi_260714pls | grep -q \"board:  status=\" && echo \"BOARD_RESOLVED\" || (echo \"STILL_UNAVAILABLE\"; exit 1)",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 39
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "7b31742008f6e0a4e3c869d50f5437945968f007",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260714usn/",
+    "reports/design/palimpsest-ditto-convergence-design.md"
+  ],
+  "created_at": "2026-07-14T21:45:26.674Z",
+  "updated_at": "2026-07-14T22:34:48.173Z",
+  "closed_at": "2026-07-14T22:02:20.352Z"
+}

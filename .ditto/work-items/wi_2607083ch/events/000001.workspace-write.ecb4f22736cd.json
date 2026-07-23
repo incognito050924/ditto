@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607083ch",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "ecb4f22736cdfaf114eff38a36b173fb251d384d5683778d3c39f57b3cc6783d",
+  "ts": "2026-07-08T23:05:27.464Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/hooks/stop.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

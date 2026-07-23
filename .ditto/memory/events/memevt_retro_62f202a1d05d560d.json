@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_62f202a1d05d560d",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] future remote endpoint would inherit no auth check.\n[residual] wrong --wi could write another work item's map (integrity).\n[residual] if prism maps later shared across users/tenants, absence of ownership boundary surfaces here.\n[residual] verdict JSON carries no provenance stamp; can't distinguish host-delegated from hand-fed.\n[residual] out-of-scope host agent env variance could yield inconsistent verdict JSON.\n[residual] brief-emit uses uncapped selectors; pathologically large prism tree yields large brief JSON.\n[residual] --json accepts arbitrary verdict text; user could inject fabricated critiques into own map (integrity).\n[residual] recorded text stored verbatim; later human-readable prism view rendering markup could be affected (sink out of scope).\n[residual] if intent text embedded a secret, emitting brief surfaces it — inherent to existing prism.\n[residual] intent text could incidentally carry PII if a description contained it — inherent to existing prism.\n[residual] only material if prism maps later classified as regulated records.\n[residual] defaulted host/model_policy could misroute — but lives in unchanged existing seam.\n[residual] if verdicts later gain freshness/expiry tied to timestamp, clock skew would matter — no such gate today.\n[close_reason] Local dev CLI on .ditto/local files; no API token/web session/OAuth/service-token entry path.\n[close_reason] No permission grant/check; writes work-item-scoped map by filesystem path, no principal.\n[close_reason] Single-user local dev tool; no RBAC/ABAC/ownership/tenant model.\n[close_reason] Recorded verdict is feature OUTPUT (engaged stamp), not actor audit trail; git-tracked reversible local file.\n[close_reason] CLI makes NO external/3rd-party call; opponent invocation host-delegated OUTSIDE CLI; only side-effect is local map write.\n[close_reason] Local single-work-item CLI; no load multiplier/unbounded loop; fan-out bounded; record is single read-modify-write.\n[close_reason] No shared rate limiter/quota/remote endpoint; local CLI, no replay/scraping/cred-stuffing.\n[close_reason] No interpreter sink; --json via JSON.parse into plain data, recorded as opaque text via pure primitives; no SQL/OS/LDAP/XPath/template exec.\n[close_reason] No credentials/tokens/keys handled/stored/logged; brief JSON carries labels+intent+selection, none secret.\n[close_reason] Dev tool over code-work-item maps; no personal-data collection/processing; text is engineering content.\n[close_reason] No personal-data processing/retention/deletion/cross-border/consent obligation on a local reversible git-tracked map.\n[close_reason] No new config file/env/flag gates failure; hardcodes BARE_MODEL_POLICY, defaults host claude-code; --wi/--json validated at parse.\n[close_reason] Correctness independent of time; no expiry/TTL/cert, no tz/DST, no monotonic-vs-wall-clock in emit/record/round-trip.",
+  "created_at": "2026-07-09T00:42:12.029Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_26062227h",
+  "title": "far-field pre-mortem 재설계 — ③약함 카테고리 deep-interview 이관 + ①강함 oracle 결정적 검증",
+  "source_request": "어차피 pre-mortem으로 질문을 생성하는데 far-field 19개 항목이 추가되는 게 비용적으로 얼마나 큰 차이인지 지표가 불명확하다. 점검을 19개로 나누지 않고 한 에이전트가 전부 체크하면 더 싸지 않은지 — 이걸 별도로 제대로 측정해서 자동화 가부를 재판정하자. (후속 대화로 확장: LLM pre-mortem 신뢰성 — 환각 검박 불가 카테고리는 자동 sweep에서 빼고 deep-interview 사용자확인으로.)",
+  "goal": "far-field 위험을 '누가·언제 답하나'로 라우팅한다 — 코드가 답하는 것(①②+정적탐지)은 자동 검증, 사용자 의도 단계에 답할 요구사항형(③ 감사·인가모델·호환성 보장 등)은 deep-interview, 구현 후에야 답 나오는 구현위험형(③ race·external-env·boundary 재현)은 검증·리뷰 단계로. ① 강함에 oracle 결정적 검증(file:line 실재) 부착, ③를 요구사항형/구현위험형으로 재분할. 비용·본질·신뢰성 동시 해소; 원 비용측정(분할 vs 통합·ON/OFF 증분)은 ① 축소 후 부차.",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ac-1: `--relevance`가 전달된 seed 호출은 .ditto/local/runs/<wi>/relevance-provenance.json을 schema-validated로 영속하며, raw judgments+refutes를 그대로 담아 각 카테고리의 skip 제안과 refute 결과를 사후 재구성할 수 있다(b/c 진단 가능)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "ac-2: 같은 파일이 구조적 tally {seeded,skipped,relevant}를 담아 coverage.json 없이도 skip율을 산출할 수 있다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "ac-3: --relevance 미전달 시 provenance 파일을 만들지 않는다(게이트 없음=기록 없음, 기존 ac-7 정합)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "ac-4: nextCoverageNode 시그니처는 optional 인자 추가만이며 기존 호출부(interview-driver.ts:520) 무변경 + 전체 테스트 suite GREEN(prism 무파급)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c test -z \"$(git diff src/core/interview-driver.ts)\" && echo \"interview-driver.ts UNCHANGED\" && bun test tests/integration/coverage-category-seeding.test.ts tests/integration/coverage-loop-drive.test.ts tests/core/coverage-relevance.test.ts 2>&1 | tail -3",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-22T23:34:50.515Z",
+  "updated_at": "2026-07-06T23:38:02.640Z",
+  "closed_at": "2026-07-06T23:38:02.639Z"
+}

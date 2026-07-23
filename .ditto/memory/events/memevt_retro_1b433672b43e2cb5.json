@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_1b433672b43e2cb5",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] none\n[residual] none\n[residual] none\n[residual] 베이스라인 오기록시 changed_files 조용히 달라짐 — data-integrity에서 커버\n[residual] core.quotepath 경로 인용 변동은 boundary-edge/input-validation에서 커버\n[residual] none\n[residual] none\n[residual] none\n[residual] record.json에 경로명(내용 아님) 기록 가능하나 비밀노출 아님\n[residual] record.json 경로명은 PII 유출 계약 대상 아님\n[residual] none\n[residual] per-loop 개별 배제 결정이 별도 로그 없어 잘못 배제된 파일이 흔적없이 드롭 — 진단성 공백 잔존\n[residual] none\n[residual] none\n[residual] none\n[close_reason] 로컬 git 상태 읽기·인프로세스 파일 위생뿐, 인증 코드 경로 미접촉\n[close_reason] 권한 검사 로직 부재, 경로 필터링은 접근제어 아님\n[close_reason] 권한 모델 도메인 없음(autopilot 엔진 내부)\n[close_reason] 감사 로그 계약 불변, 베이스라인은 record.json authored 필드 1회 기록\n[close_reason] 신규 외부 의존 없음, git status --porcelain은 이미 전방위 사용·fail-open, v1 출력 로케일/버전 무관 안정\n[close_reason] 유한 git status 출력 위 선형 필터, 무한성장·재귀 없음\n[close_reason] 로컬 도구 인프로세스 경로, 적대적 외부입력 표면 없음\n[close_reason] execFileSync 셸 미경유, 경로는 비교값일 뿐 명령·쿼리 보간 없음\n[close_reason] 비밀·토큰 미독출, 경로 문자열만 취급\n[close_reason] 개인정보 처리 경로 없음, 파일 내용 미독출\n[close_reason] 규제·컴플라이언스 도메인 미접촉(내부 엔진 로직)\n[close_reason] 기존 관측성 미저하, 베이스라인은 record.json 지속기록 inspectable\n[close_reason] 배포·롤아웃 표면 없음, optional 필드 호환은 compat-version이 커버\n[close_reason] 신규 설정·플래그·recipe 키 없음, fail-open은 하드코딩\n[close_reason] 시간·타임존·만료 로직 없음, 1회 캡처는 상태전환 트리거지 시계연산 아님",
+  "created_at": "2026-07-11T05:35:17.032Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

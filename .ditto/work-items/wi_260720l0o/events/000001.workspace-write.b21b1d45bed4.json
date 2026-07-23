@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720l0o",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "b21b1d45bed420e3cdb359416af17fa1c5cb736c7b9a87a07ca08fa671eba1c8",
+  "ts": "2026-07-20T22:33:51.929Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c t=$(find tests -type f 2>/dev/null|wc -l|tr -d \" \"); s=$(find src -name \"*.test.ts\"|wc -l|tr -d \" \"); r=$(find rebuild -name \"*.test.ts\"|wc -l|tr -d \" \"); echo \"tests/=$t src.test=$s rebuild.test=$r\"; [ \"$t\" = 0 ] && [ \"$s\" = 0 ] && [ \"$r\" = 18 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

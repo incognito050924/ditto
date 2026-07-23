@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260708700",
+  "title": "charter 매턴 주입 감량 — PRIME_DIRECTIVE 앵커 압축 + 핸드오프 본문 자동주입 제거",
+  "source_request": "핸드오프 잘 동작하지도 않는것 같은데 빼고, PRIME_DIRECTIVE/advisory 줄여도 된다면 줄여줘. 큰 영향없겠지? (A: charter 주입 부피 감량, B는 플러그인 하우스키핑 병행)",
+  "goal": "charter 매턴 주입 감량 — PRIME_DIRECTIVE 앵커 압축 + 핸드오프 본문 자동주입 제거",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "PRIME_DIRECTIVE 압축 — charterProjection() 빈 ctx 길이가 2683에서 1300자 이하로 줄되 핵심 앵커(원요청 보존·2-path/no-adhoc·evidence gate·QuestionGate·minimal-increment self-check)는 모두 잔존하고 장황 명령어나열과 중복 두 줄만 제거·압축",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun run /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/278facd8-93a3-4d88-a526-0de4711e5d2a/scratchpad/check-ac1.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "핸드오프 자동로드 제거 — hook이 handoff 본문을 더는 주입·consume 안 하고(consume+inject 블록 제거) charterProjection도 handoffBodies 렌더 안 하되 sweepStaleActive와 sessionPointer.sweepStale GC는 유지(수동 로드 매커니즘은 별도 후속)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test tests/hooks/user-prompt-submit.test.ts tests/core/charter.test.ts",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "전체 테스트 green + 양 호스트 플러그인 재빌드하고 영향받는 charter/hook 테스트는 새 계약에 맞게 갱신",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test src tests",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "핸드오프 수동 로드 매커니즘 — 자동주입 제거를 대체할 읽기 명령(예: ditto work handoff <wi> --show, active+archive 본문 출력) 신설 + 깨진 re_entry 'ditto work resume' 참조를 실존 명령으로 정리"
+    },
+    {
+      "kind": "bug",
+      "note": "Stop 게이트가 terminal(abandoned/done) work item에도 completion 기반 사유 발화 — nonPassTerminationGate/completionGate가 workItem.status terminal 가드 없음(stop.ts:871-887). 또 ditto work start가 세션 포인터를 새 WI로 재바인딩 안 해 옛 abandoned 항목을 계속 가리킴",
+      "materialized_wi": "wi_2607083ch"
+    }
+  ],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-07-08T17:44:51.356Z",
+  "updated_at": "2026-07-08T18:24:47.928Z",
+  "closed_at": "2026-07-08T18:24:47.927Z"
+}

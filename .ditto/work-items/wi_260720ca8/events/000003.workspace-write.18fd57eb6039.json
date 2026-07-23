@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ca8",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "18fd57eb60397eb0e7ac102fd2160b18d2cdae2f2a58450c493968ce15bc3bf0",
+  "ts": "2026-07-20T23:34:46.526Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c c=$(git -C /Users/incognito/dev/projects/ditto/.ditto/local/worktrees/wi_260720ca8 log --oneline -- reports/backlog-audit-2026-07-21.md | wc -l | tr -d \" \"); echo \"commits touching report: $c\"; [ \"$c\" -ge 1 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

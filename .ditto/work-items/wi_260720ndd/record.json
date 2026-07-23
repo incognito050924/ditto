@@ -1,0 +1,132 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260720ndd",
+  "title": "[정초] rebuild/drive/loop.ts:25 strict-tsc 에러 — driveStep resolved 분기 grounds (exactOptionalPropertyTypes)",
+  "source_request": "[정초] rebuild/drive/loop.ts:25 strict-tsc 에러 — driveStep resolved 분기 grounds (exactOptionalPropertyTypes)\n\n## 갭\n`rebuild/drive/loop.ts:25` — `exactOptionalPropertyTypes: true` 하에서 driveStep의 resolved 분기가 `gate.grounds`(`string | undefined`)를 optional prop `DriveStepResult.grounds?: string`에 명시 대입 → TS2375. `bun test rebuild/`는 green(135 pass)이나 `bun run typecheck:rebuild`는 이 에러를 낸다.\n\n## 맥락\n재설계 정초를 이 repo `rebuild/`로 임포트할 때 타입체크 baseline으로 넘어온 항목. 원래 정초 자율 빌드 run에서 `tsc-preexisting-baseline`으로 new-scope-deferral 처리됐으나, 이 파일은 정초 첫 슬라이스 = **우리 코드**다(외부 아님). 완료 게이트가 bun test라 완주는 막지 않았지만 남은 타입 위생 구멍.\n\n## 근본\n`decideGate`는 decision==pass일 때 항상 non-empty string grounds를 반환하지만(gate-result.ts), `GateResult.grounds`가 optional 타입이라 TS가 pass 분기에서 좁히지 못한다.\n\n## 수정 방향\nloop.ts resolved 분기에서 grounds를 조건부로만 포함(exactOptional 정합) — frozen 스키마(gate-result)는 불변. 또는 grounds가 항상 존재하도록 보장.\n\n## 재현\n`bun run typecheck:rebuild` → `rebuild/drive/loop.ts(25,5): error TS2375`\n\nseverity: low\n\n---\nprovenance: hskim-ecoletree/ditto-redesign#1에서 이관(재설계 저장소 은퇴에 따라 이 repo 백로그 SoT로).",
+  "goal": "[정초] rebuild/drive/loop.ts:25 strict-tsc 에러 — driveStep resolved 분기 grounds (exactOptionalPropertyTypes)",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "bun run typecheck:rebuild 출력에 rebuild/drive/loop.ts 관련 에러가 0건(loop.ts가 에러 목록에 없음)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c e=$(bun run typecheck:rebuild 2>&1 | grep -c \"loop.ts\"); echo \"loop.ts error lines: $e\"; [ \"$e\" = 0 ]",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "bun test rebuild/가 135 pass 0 fail",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bun test rebuild/",
+          "summary": "exit 0"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "frozen 스키마 rebuild/schemas/gate-result.ts가 git diff로 미변경(0줄)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c d=$(git diff --numstat rebuild/schemas/gate-result.ts | wc -l | tr -d \" \"); echo \"gate-result.ts changed lines-of-diff records: $d\"; [ \"$d\" = 0 ]",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "rebuild/drive/loop.ts"
+  ],
+  "worktrees": [],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 62,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgzfHcA"
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "6f298c8ee4abc08ec8294f4e6366d7a13fc4e929",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_0f73eda3d072c65f.json",
+    ".ditto/memory/events/memevt_retro_1b433672b43e2cb5.json",
+    ".ditto/memory/events/memevt_retro_3b6b75dbeda10ded.json",
+    ".ditto/memory/events/memevt_retro_551a25ad2bc435f7.json",
+    ".ditto/memory/events/memevt_retro_62f202a1d05d560d.json",
+    ".ditto/memory/events/memevt_retro_72777105687f54cb.json",
+    ".ditto/memory/events/memevt_retro_7a96c4f594622c56.json",
+    ".ditto/memory/events/memevt_retro_7f36a4a36bdf815f.json",
+    ".ditto/memory/events/memevt_retro_8b0f781dbe49828f.json",
+    ".ditto/memory/events/memevt_retro_8f6249074e837c8b.json",
+    ".ditto/memory/events/memevt_retro_a05bc4fb34660aef.json",
+    ".ditto/memory/events/memevt_retro_a13e919c2d107ce4.json",
+    ".ditto/memory/events/memevt_retro_c9542e8cf30dae39.json",
+    ".ditto/work-items/wi_26062227h/",
+    ".ditto/work-items/wi_260624a6d/",
+    ".ditto/work-items/wi_260625mrf/",
+    ".ditto/work-items/wi_2606276nc/",
+    ".ditto/work-items/wi_260628sx5/",
+    ".ditto/work-items/wi_260706aka/",
+    ".ditto/work-items/wi_260706d0i/",
+    ".ditto/work-items/wi_260706tu6/",
+    ".ditto/work-items/wi_2607083ch/",
+    ".ditto/work-items/wi_260708700/",
+    ".ditto/work-items/wi_260708e1x/",
+    ".ditto/work-items/wi_260708xgo/",
+    ".ditto/work-items/wi_260708yyf/events/000001.workspace-write.8fc084a42aa0.json",
+    ".ditto/work-items/wi_260709ft1/",
+    ".ditto/work-items/wi_2607103tp/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607103tp/events/000002.workspace-write.58bb7b742846.json",
+    ".ditto/work-items/wi_2607103tp/events/000003.workspace-write.ec04cf3502e0.json",
+    ".ditto/work-items/wi_2607103tp/events/000004.workspace-write.1602ce418cb5.json",
+    ".ditto/work-items/wi_2607103tp/events/000005.workspace-write.08291e16e48c.json",
+    ".ditto/work-items/wi_2607103tp/events/000006.workspace-write.3645e98dbe88.json",
+    ".ditto/work-items/wi_2607103tp/events/000007.workspace-write.f408047b6223.json",
+    ".ditto/work-items/wi_2607103tp/events/000008.workspace-write.80abfd837747.json",
+    ".ditto/work-items/wi_260711dp9/",
+    ".ditto/work-items/wi_2607141uq/",
+    ".ditto/work-items/wi_260714f4p/",
+    ".ditto/work-items/wi_260714m9w/",
+    ".ditto/work-items/wi_260714mfx/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_260714mfx/events/000002.workspace-write.80d66f889ea4.json",
+    ".ditto/work-items/wi_260714mfx/events/000003.workspace-write.01aef73c6fe3.json",
+    ".ditto/work-items/wi_260714mfx/events/000004.workspace-write.dac67e4daa67.json",
+    ".ditto/work-items/wi_260714mfx/events/000005.workspace-write.8d9ac1584c57.json",
+    ".ditto/work-items/wi_260714mfx/events/000006.workspace-write.f3cc40446f90.json",
+    ".ditto/work-items/wi_260714mfx/events/000007.workspace-write.8eebea1786fa.json",
+    ".ditto/work-items/wi_260714mfx/events/000008.workspace-write.66a58e722d8a.json",
+    ".ditto/work-items/wi_260714mfx/events/000009.workspace-write.37b762d4fbb2.json",
+    ".ditto/work-items/wi_260714mfx/events/000010.workspace-write.c14c2df01108.json",
+    ".ditto/work-items/wi_260714mfx/events/000011.workspace-write.0b3321b9a0e6.json",
+    ".ditto/work-items/wi_260714pjs/",
+    ".ditto/work-items/wi_260714pls/",
+    ".ditto/work-items/wi_260718geb/",
+    ".ditto/work-items/wi_26071975p/",
+    ".ditto/work-items/wi_260719agy/",
+    ".ditto/work-items/wi_260719ka9/events/000001.workspace-write.f7343f3ee103.json",
+    ".ditto/work-items/wi_260719ka9/events/000002.workspace-write.a7a176feee7d.json",
+    ".ditto/work-items/wi_260719ka9/events/000003.workspace-write.5163aaf7a358.json",
+    ".ditto/work-items/wi_260719ka9/events/000004.workspace-write.8324203f6dd7.json",
+    ".ditto/work-items/wi_2607208oa/",
+    ".ditto/work-items/wi_260720ggl/",
+    ".ditto/work-items/wi_260720l0o/",
+    ".ditto/work-items/wi_260720ndd/",
+    "reports/design/palimpsest-ditto-convergence-design.md",
+    "vb1.html",
+    "vb2.html",
+    "vb3.html"
+  ],
+  "created_at": "2026-07-20T22:41:14.738Z",
+  "updated_at": "2026-07-20T22:42:42.996Z",
+  "closed_at": "2026-07-20T22:42:42.995Z"
+}

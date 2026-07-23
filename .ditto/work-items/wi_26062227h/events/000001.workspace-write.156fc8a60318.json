@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_26062227h",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "156fc8a6031848236d8be333965f3bec99ae85b9373659deea77940c6cd0fe34",
+  "ts": "2026-07-06T23:37:30.474Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/integration/coverage-category-seeding.test.ts",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

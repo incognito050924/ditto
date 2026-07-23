@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607208oa",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "f2d89aad441cf00581bd26bd05b35ec82817271a8be6a68b7a2d0798af3b83be",
+  "ts": "2026-07-20T21:52:46.740Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c echo \"src-import count in rebuild/: $(grep -rnE \"from ['\\\"](~/|\\.\\./src|src/)\" rebuild/ --include='*.ts' | wc -l | tr -d ' ')\" && echo 'full suite (bun test src tests) result:' && tail -5 /private/tmp/claude-501/-Users-incognito-dev-projects-ditto/f12d010a-dd89-4aa0-bfc3-d9bc011fc8d1/tasks/bwwqf6923.output",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

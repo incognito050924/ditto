@@ -1,0 +1,35 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719agy",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "29ea86272c0fd440c5ced9e6204ff62654cb4f2cf8574ded01479620f5b07f50",
+  "ts": "2026-07-19T09:49:57.794Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-7",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719agy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin + sha256 bin/ditto",
+        "summary": "identical hash 24e3110f, version 0.9.3 exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run build:bin + shasum before/after",
+        "summary": "byte-identical 24e3110f (fresh)"
+      },
+      {
+        "kind": "command",
+        "command": "comm declared(34) vs tracked(34)",
+        "summary": "exact match, 0 foreign contamination"
+      }
+    ]
+  }
+}

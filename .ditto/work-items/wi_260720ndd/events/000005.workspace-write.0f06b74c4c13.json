@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ndd",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "0f06b74c4c13e7e8e1385e9e61e8b14e2f24a3b529dff08fd3bc8c0ba04f2f6c",
+  "ts": "2026-07-20T22:42:29.982Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c d=$(git diff --numstat rebuild/schemas/gate-result.ts | wc -l | tr -d \" \"); echo \"gate-result.ts changed lines-of-diff records: $d\"; [ \"$d\" = 0 ]",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

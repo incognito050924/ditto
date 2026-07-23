@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260718geb",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "b4c70ec6bc4d03b95c49e000f5ba23774aa8c9483053469367443e980f8e5d38",
+  "ts": "2026-07-18T15:45:32.703Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c ! grep -qE \"\\.ditto/local|readFileSync|Bun\\.Glob|import\\.meta\" <(grep -vE \"^\\s*//\" tests/schemas/ac-oracle.test.ts) && echo \"PASS: no code-level disk access\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

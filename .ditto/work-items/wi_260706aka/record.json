@@ -1,0 +1,186 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260706aka",
+  "title": "WS0-T1 공유 백로그 projection + work list 질의 뷰",
+  "source_request": "WS0-T1 시작해 (핸드오프 세션: WS0-T0 done 이후 spine-first 다음 임계경로. base=wi_2607069bk-ws0-t0를 origin/main에 rebase해 병렬작업 통합·재빌드·3945 pass 확인 후 stacked. 이전 old-store 등록분 wi_2607062sd는 store 마이그레이션으로 반쪽생성되어 폐기·재생성)",
+  "goal": "공유 committed Record tier에서 결정적으로 재생성되는 백로그 projection과 확장된 ditto work list 질의 뷰를 만들어, 기존 work item의 라이브 상태(상태·미해결 후속·막힘 사유·github 이슈·push-ready·계보)를 필터로 훑을 수 있게 한다 (상태 거울 — 설계 문서 대체 아님).",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto work list --wide(및 --output json)가 각 work item에 대해 확장 요약 필드(status, 미해결 follow_ups 수, blocking 사유, github_issue, push-ready, 계보 마커)를 보여주고, 각 값은 committed Record에서 파생된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706aka/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "note"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "note"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "--status <s>, --has-followups(미해결만), --orphan-drafts(draft ∧ updated_at 14일 초과 ∧ follows 계보 없음)가 각각 목록을 좁히고, 여러 필터를 함께 주면 AND로 결합된다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706aka/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "note"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "기본 human 출력은 현재 4열(id/status/updated_at/title)을 그대로 유지하고, 확장 필드는 --wide에서만 나타나며, JSON 출력은 전체 필드를 포함한다(기존 소비자 불파괴)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706aka/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "note"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "기본 뷰는 active(비terminal) 항목을 status로 그룹지어 앞에 두고, terminal(done/abandoned)은 --all을 줄 때만 나타난다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706aka/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "note"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "projection은 공유 committed Record tier 단독으로 결정적으로 재생성된다 — Run tier(.ditto/local)를 삭제한 뒤 재생성해도 목록·필드가 동일하다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706aka/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        },
+        {
+          "kind": "note"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "명령이 기존 실제 work item들을 각 필터로 나열한다(실데이터 스모크)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260706aka/coverage.json",
+          "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+        },
+        {
+          "kind": "command"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "src/core/work-item-store.ts",
+    "src/core/work-item-project.ts",
+    "tests/core/work-item-project.test.ts",
+    "src/cli/commands/work.ts",
+    "tests/cli/work-list.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "follows": "wi_2607069bk",
+  "risks": [],
+  "re_entry": {
+    "command": "# resolve the land blocker, then re-run: ditto autopilot complete --workItem wi_260706aka",
+    "fresh_evidence_needed": [
+      "land aborted — 27 working-tree path(s) outside the declared change_surface: .: .ditto/work-items/wi_2607069bk/events/000000.workspace-write.2451247bd58e.json, .ditto/work-items/wi_2607069bk/events/000001.workspace-write.61c52534552b.json, .ditto/work-items/wi_2607069bk/events/000002.workspace-write.d67f6c594729.json, .ditto/work-items/wi_2607069bk/events/000003.workspace-write.dd18d648ee23.json, .ditto/work-items/wi_2607069bk/events/000004.workspace-write.2f610dbe2a27.json, .ditto/work-items/wi_2607069bk/events/000005.workspace-write.14586449b8e7.json, .ditto/work-items/wi_2607069bk/events/000006.workspace-write.91f93c51d320.json, .ditto/work-items/wi_2607069bk/events/000007.workspace-write.166e8734b477.json, .ditto/work-items/wi_2607069bk/events/000008.workspace-write.ff43b8df2cd8.json, .ditto/work-items/wi_2607069bk/events/000009.workspace-write.08dcb99091eb.json, .ditto/work-items/wi_2607069bk/events/000010.workspace-write.da3a1df2a4c2.json, .ditto/work-items/wi_2607069bk/events/000011.workspace-write.2a6fbbd3ed14.json, .ditto/work-items/wi_2607069bk/events/000012.workspace-write.6f7f5bbeda7f.json, .ditto/work-items/wi_2607069bk/record.json, .ditto/work-items/wi_260706aka/events/000000.workspace-write.89120a853494.json, .ditto/work-items/wi_260706aka/events/000001.workspace-write.597fcc6c2756.json, .ditto/work-items/wi_260706aka/events/000002.workspace-write.f6144f82eae6.json, .ditto/work-items/wi_260706aka/events/000003.workspace-write.44d4ea0add69.json, .ditto/work-items/wi_260706aka/events/000004.workspace-write.81ca2c5e4f02.json, .ditto/work-items/wi_260706aka/events/000005.workspace-write.762cd40ce772.json, .ditto/work-items/wi_260706aka/events/000006.workspace-write.8c2429d7201b.json, .ditto/work-items/wi_260706aka/events/000007.workspace-write.de8b586b55f3.json, .ditto/work-items/wi_260706aka/record.json, .ditto/work-items/wi_260706d0i/events/000000.workspace-write.939021107f6c.json, .ditto/work-items/wi_260706d0i/record.json, bin/ditto, reports/design/palimpsest-ditto-convergence-design.md. These are likely files an owner changed but did NOT report in its record-result changed_files (change_surface under-declaration), or genuinely unrelated concurrent work. Next: check the owners' reported changed_files against `git status`, then either expand the work item's changed_files to include the real run output, or stash the unrelated work — then re-run `ditto autopilot complete`. (Run byproducts under .ditto/memory are auto-absorbed; these paths are not.)"
+    ]
+  },
+  "runs": [],
+  "started_at_sha": "f11e83537cda6ff5dee8c08a33d87dcd7dc07602",
+  "created_at": "2026-07-06T16:40:21.626Z",
+  "updated_at": "2026-07-06T21:06:33.394Z",
+  "closed_at": "2026-07-06T21:06:33.393Z"
+}

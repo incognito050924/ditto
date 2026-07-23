@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719agy",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "2c14cc2b86ff49e8ab9dafeaff93f201d38300797a5dc15670dd696892eb1107",
+  "ts": "2026-07-19T09:49:57.794Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-6",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719agy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test evidence-store/memory-store/setup/teardown/... (8 files)",
+        "summary": "before AND after: exit 0, 113 pass 0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "git diff --stat",
+        "summary": "3 files, 6+/20-"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (5 affected files) before/after",
+        "summary": "before 47p/after 38p, 0 fail exit 0 both — delta is removed-dead-code tests"
+      },
+      {
+        "kind": "command",
+        "command": "build.surface.test.ts spawns real build-codex-plugin.mjs",
+        "summary": "generated .codex/agents/*.toml byte-equivalent green both runs"
+      },
+      {
+        "kind": "command",
+        "command": "bun test ditto-config+provisioner+evidence-store+memory-store+setup+teardown+build.surface+agent-projection",
+        "summary": "88 pass 0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "rg -a -l function globToRegExp src/",
+        "summary": "3 files (not deduped)"
+      }
+    ]
+  }
+}

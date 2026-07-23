@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607208oa",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "a70400d0b58836f2d485dcf55f9f759b83d64aa0cd305f321f065b5cb3092dd5",
+  "ts": "2026-07-20T21:49:38.467Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719ka9",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "a7a176feee7dc846c54896769bc701d5a30fecf5a088e43bd04f32843c411dc6",
+  "ts": "2026-07-19T02:48:31.266Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test tests/cli/work-done.test.ts -t ac-2: stale partial completion",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

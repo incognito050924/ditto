@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260625mrf",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "9f48bf6808ed5a3336bc6285b9ed1d51c4f975ed96ac4b24e4bb4c74fb78a9f8",
+  "ts": "2026-07-11T15:21:11.538Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c git merge-base --is-ancestor ccb73fc HEAD && grep -qi -- '--local' skills/handoff/SKILL.md && grep -qi -- '--remote' skills/handoff/SKILL.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

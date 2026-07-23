@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260625mrf",
+  "title": "handoff --local/--remote 모드 분기",
+  "source_request": "핸드오프를 같은 PC 에서 하는 방법과 다른 PC 를 위한 방법 2개가 있는데 이걸 command 로 만들어줘. 매번 원하는 대로 안 돼. - 다른 PC 를 위한 핸드오프 > ditto:handoff --remote - 로컬 핸드오프 > ditto:handoff [--local]",
+  "goal": "ditto:handoff 스킬이 --local(기본, 같은 PC) / --remote(다른 PC: HANDOFF.md 작성+커밋+푸시) 두 모드를 명시 플래그로 구분해 라우팅한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "ditto:handoff 스킬이 --local(기본)과 --remote 두 모드로 분기하고 skills/handoff/SKILL.md에 두 모드 섹션이 존재하며(grep -c로 --local·--remote 참조 다수), 이 기능이 커밋 ccb73fc로 main에 landed되어 HEAD의 조상이다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "command",
+          "command": "bash -c git merge-base --is-ancestor ccb73fc HEAD && grep -qi -- '--local' skills/handoff/SKILL.md && grep -qi -- '--remote' skills/handoff/SKILL.md",
+          "summary": "exit 0"
+        }
+      ]
+    }
+  ],
+  "status": "done",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [],
+  "worktrees": [],
+  "risks": [],
+  "runs": [],
+  "created_at": "2026-06-25T14:42:59.200Z",
+  "updated_at": "2026-07-11T15:21:11.651Z",
+  "closed_at": "2026-07-11T15:21:11.649Z"
+}

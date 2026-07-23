@@ -1,0 +1,79 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607227xx",
+  "seq": 8,
+  "actor": "workspace-write",
+  "event_id": "8dd37ed718cf9dfd619b6919ad8ea2dc749719000bd1de05f3f5814bb0515c0b",
+  "ts": "2026-07-23T02:40:21.886Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/intent.json",
+        "summary": "AC 정본 (dialectic required_edits 2건 반영본)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/handoff/wi_2607227xx.md",
+        "summary": "하드닝 설계 입력"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_2607227xx/reviews/dialectic-1.md",
+        "summary": "심의 원장 — 번들 흡수 4건"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607227xx/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "shasum -a 256 -c bundle/manifest.sha256",
+        "summary": "12/12 OK (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "harness/score.sh verify-chain",
+        "summary": "disk == manifest OK (12 files), exit 0 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+        "summary": "pytest exit 1 — sanity PASSED / shadow 단언 FAILED (서브에이전트 실행 보존본, N5가 독립 재실행 예정)"
+      },
+      {
+        "kind": "command",
+        "command": "shasum -a 256 bundle/arm-a/ditto",
+        "summary": "7120a7f4… — N2 확정 digest와 일치 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "git show --name-only b9585a36dee6… | grep -cv '^reports/measurements/efficacy-ablation-3arm/'",
+        "summary": "0 — 동결 커밋에 캠페인 밖 파일 없음 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "harness/score.sh verify-chain --frozen-commit b9585a36dee6…",
+        "summary": "disk==manifest OK + manifest==committed blobs OK, exit 0 (드라이버 fresh 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "bash harness/self-check.sh",
+        "summary": "failures=0, 51 ok (S6 잔재-제거 신규 항목 포함, N6 실행)"
+      },
+      {
+        "kind": "note",
+        "summary": "N11 검증 명령 10종 전부 exit 0 — 원장·체인·digest·egress·invariance·재집계·proprietary·이슈 상태"
+      },
+      {
+        "kind": "file",
+        "path": "reports/measurements/efficacy-ablation-3arm/bundle/oracle/red-proof.txt",
+        "summary": "exit 1, sanity PASSED (N11 재확인)"
+      }
+    ]
+  }
+}

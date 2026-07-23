@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720ggl",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "a5bb196953ec57303a59a313cd2e3d553b9d6fa93938b532f91dc66bbd9b5ced",
+  "ts": "2026-07-20T00:19:03.800Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bun test rebuild/seam/host-adapter.test.ts -t ac-4",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc -p rebuild/seam/tsconfig.json --noEmit",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

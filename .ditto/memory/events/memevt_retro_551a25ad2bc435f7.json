@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_551a25ad2bc435f7",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 인터뷰 상태를 신원에 쓰는 소비자 부재\n[residual] 보호 자원을 가드하지 않음\n[residual] 인가 개념 없음\n[residual] provenance 흐림은 data-integrity/directive-fidelity(open) 소관\n[residual] 동시 append는 기존 순차 설계상 범위 밖\n[residual] host-LLM 의존은 기존; degrade는 failure-recovery(open)\n[residual] 조종 위험은 directive-fidelity(open)\n[residual] 프롬프트 내용은 directive-fidelity(open)\n[residual] grounding은 file:line 표면, 비밀 아님\n[residual] 사용자 free-text jsonl은 기존, 변경 없음\n[residual] 규제 데이터 없음\n[residual] bin/ditto 재빌드는 빌드 단계, 롤아웃 속성 아님\n[residual] budget 하드코딩 상호작용은 autonomy-liveness/resource-exhaustion(open)\n[residual] 시간 의존 동작 없음\n[close_reason] 인증/세션/로그인 로직이 변경 표면에 없음\n[close_reason] 권한 검사/접근 제어 경로 없음; 추가 게이트는 구조적 필드 존재 검사뿐\n[close_reason] 행위자/역할/권한 모델 미도입\n[close_reason] 감사 로그/부인방지 표면 없음; jsonl은 측정 계측\n[close_reason] work item당 순차 단일 writer; 선택기는 순수\n[close_reason] env/배포/3rd-party 추가 없음; recommended_answer는 기존 생성기 seam\n[close_reason] 단일 신뢰 운영자, 적대적 입력 표면 없음\n[close_reason] SQL/shell/path sink 없음; 텍스트는 프롬프트 렌더\n[close_reason] 비밀값/토큰 경로 없음\n[close_reason] 추천 필드는 에이전트 생성; 개인정보 경로 없음\n[close_reason] 내부 개발도구 UX 수정, 규제 요구 없음\n[close_reason] additive-optional 스키마, 마이그레이션/스테이지 롤아웃 없음\n[close_reason] 단일 발사 budget=1은 고정 상수, 새 플래그 없음; recommended_answer는 필수 필드\n[close_reason] 시간/타임존/시계 로직 없음; asked_at 스탬프 불변",
+  "created_at": "2026-07-13T14:04:39.811Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

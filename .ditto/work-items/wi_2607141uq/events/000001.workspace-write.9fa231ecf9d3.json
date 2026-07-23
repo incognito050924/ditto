@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607141uq",
+  "seq": 1,
+  "actor": "workspace-write",
+  "event_id": "9fa231ecf9d3b8fd25feeba303c8a81e243d2f56685e9f7b92a93f9462208c30",
+  "ts": "2026-07-14T23:32:55.147Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c DITTO_REPO_ROOT=/Users/incognito/dev/projects/ditto bun test tests/schemas/repo-self-validation.test.ts 2>&1 | grep -q \"0 fail\" && echo OK",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

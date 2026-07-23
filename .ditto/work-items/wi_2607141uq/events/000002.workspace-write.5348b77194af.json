@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607141uq",
+  "seq": 2,
+  "actor": "workspace-write",
+  "event_id": "5348b77194af6691a02a77c92b8830471be7efb152ccf6ecb1cf669e94fdb130",
+  "ts": "2026-07-14T23:32:55.745Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c test \"$(git ls-remote origin main | cut -f1)\" = \"$(git rev-parse main)\" && echo \"GATE-PASSED-PUSHED\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

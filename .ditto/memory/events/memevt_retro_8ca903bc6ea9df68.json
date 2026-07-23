@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_8ca903bc6ea9df68",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] 하네스가 나중에 gh 등 인증 필요 명령을 shell-out하면 인증 실패가 측정 결과를 조용히 왜곡할 수 있다.\n[residual] 격리 fixture 디렉터리가 기본 퍼미션으로 생성되어 멀티유저 머신에서 타 로컬 사용자에게 읽힐 수 있다.\n[residual] ditto가 향후 다중 사용자 표면을 얻으면 이 측정 선례가 그 인가 관점을 전혀 커버하지 못한다.\n[residual] fixture를 체리피킹해 유리한 측정치를 만들면 증거 감사 자체가 오도될 수 있다(방법론 게이밍 — 스킵 시 미검토로 남음).\n[residual] fixture가 나중에 외부 데이터에서 생성되면 stop-hook.ts:42의 sh -c seam이 그대로 주입 지점이 된다.\n[residual] 보고서가 외부 공개될 경우 캡처된 머신 정보에 프라이버시 기대가 붙을 수 있다(pii-leak 스윕이 커버).\n[residual] 하네스가 소스 import 대신 stale bin/ditto를 측정하면 옛 바이너리를 재는 왜곡(기지의 binary_fresh drift 클래스).\n[residual] 하네스가 stderr 텍스트 매칭으로 결과를 분류하면 이후 배너 리워딩 시 측정 분류가 조용히 깨진다.\n[close_reason] 측정 대상 4개 파일 전수 확인 — 로컬 fs·git·프로세스 spawn만 수행, 인증 경로·자격증명·네트워크 호출 없음(grep 히트는 전부 completion 'token' 문자열, credential 아님). 하네스도 로컬 스크립트로 신원 표면 없음.\n[close_reason] 측정 대상 코드에 권한 검사 자체가 존재하지 않고 이 변경은 권한 검사를 추가하지도 않는다 — 모든 접근이 호출 사용자 계정의 로컬 파일시스템뿐.\n[close_reason] 인가 모델이 측정 대상·하네스 어디에도 없으므로 모델의 의도 적합성을 물을 대상이 부재.\n[close_reason] 하네스는 배포되지 않는 로컬 일회성 측정 스크립트이고 제품 코드는 읽기 전용 — 외부 행위자가 도달할 수 있는 오남용 표면이 생기지 않는다(stop-hook의 sh -c seam도 이 변경이 노출을 바꾸지 않음).\n[close_reason] spawn되는 셸 문자열의 유일한 출처는 하네스 자신이 저작하는 env(VEHICLE_TEST_CMD)와 fixture 경로(stop-hook.ts:42 sh -c, :55 env 기본값) — 신뢰 불가 외부 입력이 명령 조립에 유입되는 경로 없음, 제품 코드의 주입 표면은 이 변경으로 불변.\n[close_reason] 내부 개발도구의 완료 게이트 지연·신뢰성 측정 — 측정 경로·fixture·보고서 어디에도 규제 대상 데이터·규제 도메인이 닿지 않음.\n[close_reason] src/·rebuild/ 제품 코드 무수정, bin/dist 산출물·훅 등록·배포 조립에 아무것도 배선되지 않음 — 배포·롤아웃되는 표면이 이 변경에 부재(신규물은 스크립트·fixture·보고서뿐).\n[close_reason] 게이트 배너·stderr 지시 문자열(ADR-20260713 보호 대상) 포함 제품 코드 전부 읽기 전용 — operative 문자열을 저작·리라이트하지 않으며 보고서는 서술문.",
+  "created_at": "2026-07-22T12:45:27.402Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "1602ce418cb5a7d3c71892e4e69efd0838a613b8b88ee532a6a5aca6a62b79c7",
+  "ts": "2026-07-11T01:49:44.180Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607103tp/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts",
+        "summary": "65 pass / 3 fail — 3 ac-3 floor tests assertion-red (final_verdict not floored yet), s3i job"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/core/autopilot-complete.test.ts",
+        "summary": "68 pass / 0 fail — 3 ac-3 phantom-red floor reds now green, no regression to barrier_opt_out tests"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_SKIP_HOOKS=1 bun test tests/core/authored-red-discrimination.test.ts",
+        "summary": "23 pass / 0 fail — definite-phantom BLOCK invariant + s1a/s2a guards intact"
+      },
+      {
+        "kind": "command",
+        "command": "bunx biome check src/core/autopilot-loop.ts src/core/autopilot-complete.ts src/schemas/recipe.ts src/cli/commands/autopilot.ts",
+        "summary": "Checked 4 files. No fixes applied — clean"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t \"2-STACK\"",
+        "summary": "4 pass / 0 fail — bun-block, bun-present, non-bun-degrade, non-bun-floor legs green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (full suite, driver fresh run)",
+        "summary": "4523 pass / 17 skip / 0 fail across 363 files — 2-stack fixture present + no regression"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t \"phantom-red degrade floors\"",
+        "summary": "3 pass — degrade floors final_verdict; phantom_red_opt_out suppresses; barrier_opt_out does NOT"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t non-bun-floor",
+        "summary": "1 pass — end-to-end gate degrade→completion floor"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts",
+        "summary": "23 pass — definite phantom still blocks (not weakened), no deadlock"
+      }
+    ]
+  }
+}

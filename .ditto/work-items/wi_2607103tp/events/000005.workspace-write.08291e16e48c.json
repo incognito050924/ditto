@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607103tp",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "08291e16e48c368c72a8153877dd3246f9fbb5db29d873c3a6d6f2e819114352",
+  "ts": "2026-07-11T01:49:44.181Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607103tp/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts -t buildAuthoredRedRunCommand",
+        "summary": "2 pass (s1a reds now green — derived command from recipe)"
+      },
+      {
+        "kind": "command",
+        "command": "resolveBarrierCommand(recipe,\"\") on real recipe.yaml",
+        "summary": "returns undefined — settled-tree barrier NOT armed; authored_test_command feeds phantom-red only (bun test \"path\")"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-complete.test.ts -t \"2-STACK\"",
+        "summary": "4 pass / 0 fail — bun-block, bun-present, non-bun-degrade, non-bun-floor legs green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src tests (full suite, driver fresh run)",
+        "summary": "4523 pass / 17 skip / 0 fail across 363 files — 2-stack fixture present + no regression"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/authored-red-discrimination.test.ts",
+        "summary": "23 pass/0 fail — ac-1 derivation + definite-phantom block guards"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/core/autopilot-authoring-node.test.ts",
+        "summary": "20 pass/0 fail — bun compile-red still BLOCKS"
+      },
+      {
+        "kind": "command",
+        "command": "resolveBarrierCommand + buildAuthoredRedRunCommand on live recipe.yaml",
+        "summary": "barrier=undefined (unarmed), phantom=bun test \"x.test.ts\" — ditto no-regression, barrier not self-fired"
+      }
+    ]
+  }
+}

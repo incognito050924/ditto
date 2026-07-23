@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260720gw6",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "0f560a2f5123a57d6dce072ea29a1701ad1d193a0bf4271a5c040ba7b451c0e8",
+  "ts": "2026-07-20T23:15:26.460Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c grep -q \"two-nonempty-texts=true\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt && grep \"runFanout\" .ditto/local/work-items/wi_260720gw6/live-smoke-evidence.txt",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

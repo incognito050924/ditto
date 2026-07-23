@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260719agy",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "f7f8f0b011d984fd3124f498bbe172fa9521c6a0fe963449f58a2b264ee5380a",
+  "ts": "2026-07-19T09:49:57.792Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-4",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260719agy/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test tests/conformance/m0.conformance.test.ts",
+        "summary": "28 pass 0 fail exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test (full, no bypass env)",
+        "summary": "4968 pass 17 skip 0 fail exit 0, 381 files"
+      },
+      {
+        "kind": "command",
+        "command": "bun test gates+stop+convergence-store+autopilot-loop+m0.conformance",
+        "summary": "392 pass 0 fail exit 0"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/gates.ts",
+        "summary": "line 834 cap_reached carve-out + :822 consistency check"
+      }
+    ]
+  }
+}

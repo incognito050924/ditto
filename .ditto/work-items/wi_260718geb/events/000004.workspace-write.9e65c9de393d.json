@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260718geb",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "9e65c9de393db0d8cb0583661989ed5690524e9c6cd2a182a5265299f7071781",
+  "ts": "2026-07-18T15:45:41.383Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c \n  set -e\n  BAK=\"/private/tmp/claude-501/-Users-incognito-dev-projects-ditto/5427e627-a936-4014-8f86-ea9c0d19ecfa/scratchpad/wi-bak-ac2\"\n  trap \"[ -d \\\"$BAK\\\" ] && mv \\\"$BAK\\\" .ditto/local/work-items\" EXIT\n  mv .ditto/local/work-items \"$BAK\"\n  echo \"work-items dir moved away (fresh-checkout sim)\"\n  bun test tests/schemas/ac-oracle.test.ts\n",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

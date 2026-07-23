@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "memevt_retro_8b0f781dbe49828f",
+  "event_type": "analysis",
+  "actor": {
+    "kind": "agent",
+    "role": "retrospective"
+  },
+  "text": "[residual] likely-drop 심볼이 gh 토큰 경로에 전이적으로 걸려 있었다면 auth 호출이 조용히 깨질 수 있으나, projectItemAdd는 보존되고 auth 심볼은 범위에 없음.\n[residual] rejectForReauthor 드롭이 실제 freeze 체크포인트를 지운다면 autopilot이 freeze를 넘어 자기진행 — autonomy-liveness/failure-recovery(open)에서 다룸.\n[residual] approval-gate 제어 드롭이 autopilot freeze 경계를 약화할 수 있으나 autonomy-liveness/failure-recovery(open)에서 다룸.\n[residual] 드롭 심볼이 trace를 emit했다면 signal 손실 — 그러나 0-ref이고 로깅 손실은 observability(open)에서 다룸.\n[residual] convergence writer가 append였다면 tick당 증가 가능하나 단일파일 per-run overwrite, 증가는 data-integrity(open)에서 표면화.\n[residual] 이 변경 내 untrusted actor 도달 경로 없음.\n[residual] globToRegExp 통합이 hostile glob에 regex 의미를 바꾸면(ReDoS) 오작동 가능하나 내부 config이고 behavior-preserving, reuse-build-vs-buy/compat-version(open)에서 다룸.\n[residual] 두 sha256Hex 구현이 encoding/salt가 달랐다면 병합본이 digest를 바꿀 수 있으나 correctness 이슈로 data-integrity(open)에서 다룸.\n[residual] 없음 — 접촉 표면에 PII 흐름 없음.\n[residual] 없음 — 범위에 규제 데이터 카테고리 없음.\n[residual] malformed convergence.json은 schema parse 실패로 conv.status!=='ok'가 되어 게이트 silent no-op — 그 silent-degrade는 failure-recovery/data-integrity(open)에서 다룸.\n[residual] loadCharterShas dedup이 읽는 경로/기본값을 바꾸면 config mis-load 가능하나 behavior-preserving, reuse-build-vs-buy/compat-version(open)에서 다룸.\n[residual] 없음 — 범위에 시간파생 값 없음.\n[close_reason] drop/wire/dedup set에 인증·자격증명 경로 없음; 유일한 credentialed seam projectItemAdd는 PRESERVE 불변.\n[close_reason] 인접 게이트 rejectForReauthor(autopilot-approval.ts:70)는 프로덕션 참조 0(테스트만)인 죽은 코드이며, 접근 인가가 아니라 autopilot plan-freeze 제어 전이. 죽은 코드 제거는 live authz 제거 아님.\n[close_reason] 내부 dev-tool 엔진 변경, actor/role/tenant 접근 모델 범위 없음.\n[close_reason] 감사/provenance 추적(memory events, record.json) 미재구조; rejectForReauthor의 감사 노트는 0 참조라 실행되지 않음.\n[close_reason] 순효과는 코드 제거 + 루프 반복당 bounded convergence.json 1회 overwrite. 새 무한 루프/쿼터/N+1/보존증가 없음.\n[close_reason] 내부 개발 도구, 외부노출/레이트리밋/replayable 엔드포인트 범위 없음.\n[close_reason] untrusted 입력이 sink에 도달 안 함; globToRegExp는 내부 glob config, convergence.json은 엔진생산+schema-parse.\n[close_reason] 시크릿/토큰/키 미취급; sha256Hex는 내부 evidence 내용 해시.\n[close_reason] 개인/민감 데이터 수집·로깅·전송·노출 없음.\n[close_reason] 내부 죽은코드 제거·게이트 배선·헬퍼 dedup에 규제 데이터/컴플라이언스 의무 없음.\n[close_reason] convergence.json은 엔진이 생산+소비, 읽기 시 schema-validated(conv.status 가드).\n[close_reason] 새 config 키/플래그/기본값/env 없음; dedup은 behavior-preserving.\n[close_reason] 시간 의존 correctness 없음 — TTL/만료/타임존/monotonic 로직 미접촉.",
+  "created_at": "2026-07-19T09:48:46.368Z",
+  "status": "pending",
+  "sources": [],
+  "confidence_kind": "EXTRACTED",
+  "sensitivity": "internal",
+  "governs": []
+}
