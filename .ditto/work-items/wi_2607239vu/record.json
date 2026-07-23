@@ -93,6 +93,12 @@
     "src/core/handoff-ref-sync.ts"
   ],
   "worktrees": [],
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "리뷰어 unverified 2건(offline×public 조합: fetch 실패 시 push 루프 전 강등이라 면제 판정에 도달 불가 추정)이 테스트로 고정되지 않고 completion.json unverified=[]로 이월 누락 — 구조적 도달불가를 테스트로 고정할지 검토 (retro 관찰)"
+    }
+  ],
   "risks": [],
   "re_entry": {
     "command": "ditto handoff consume wi_2607239vu__hskim-ecoletree-com",
@@ -126,6 +132,6 @@
     ".ditto/work-items/wi_260723xh7/"
   ],
   "created_at": "2026-07-23T08:30:55.363Z",
-  "updated_at": "2026-07-23T12:18:20.260Z",
+  "updated_at": "2026-07-23T12:26:49.339Z",
   "closed_at": "2026-07-23T12:18:20.259Z"
 }
