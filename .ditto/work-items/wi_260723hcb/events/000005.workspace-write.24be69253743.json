@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723hcb",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "24be692537431b40e332b6074bccb678af729861e90c85672d62b2c0b9c97669",
+  "ts": "2026-07-23T16:39:09.333Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "gh issue view 79 --repo incognito050924/ditto --json state,comments --jq .state + \" comments:\" + (.comments|length|tostring)",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
