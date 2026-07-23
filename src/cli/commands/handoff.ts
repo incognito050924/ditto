@@ -13,6 +13,7 @@ import {
   type SyncResult,
   fetchHandoffRef,
   pendingUnpushed,
+  purgeHandoffHistory,
   syncHandoffRef,
 } from '~/core/handoff-ref-sync';
 import { type Handoff, handoff as handoffSchema } from '~/schemas/handoff';
@@ -42,6 +43,12 @@ import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson 
  *    must name one (exit 65, never a prompt).
  *  - `show [id]` is a read-only peek — no deletion, no marker, no push; same id
  *    resolution as consume.
+ *  - `purge` is the secret-recall path: `purgeHandoffHistory` rewrites the LOCAL
+ *    baton ref history to a single parentless root carrying the current tip tree
+ *    and lease-pushes it, cutting a leaked blob out of the remote history. It
+ *    requires an origin remote (a local-only repo has nothing to recall from)
+ *    and goes through the same fail-closed visibility gate (`--push-public`
+ *    opt-in) plus the scrub gate: a still-dirty tip tree refuses the purge.
  *  - Both consume and show run a fetch-only adopt (wi_2607220o1) BEFORE resolving
  *    pending batons, so a fresh clone / another PC discovers origin's batons
  *    instead of the local unborn-ref 0-state. Fetch is read-safe and is NOT
@@ -590,11 +597,81 @@ const handoffShow = defineCommand({
   run: runShow,
 });
 
+async function runPurge({ args }: { args: Record<string, unknown> }): Promise<void> {
+  let format: ReturnType<typeof parseOutputFormat>;
+  try {
+    format = parseOutputFormat(args.output as string | undefined);
+  } catch (err) {
+    writeError(err instanceof Error ? err.message : String(err));
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const repoRoot = await resolveRepoRootForCreate();
+  // Purge exists to cut a leaked blob out of the REMOTE history — a repo with no
+  // origin remote has nothing to recall from, so this is a usage error, not a no-op.
+  if (!hasOriginRemote(repoRoot)) {
+    writeError('handoff purge requires an origin remote');
+    process.exit(USAGE_ERROR_EXIT);
+    return;
+  }
+  const result = purgeHandoffHistory(repoRoot, 'origin', {
+    visibility: resolveRepoVisibility(repoRoot),
+    allowPublicRemote: args['push-public'] === true,
+    op: 'command',
+  });
+  for (const w of result.warnings) writeError(w);
+  switch (result.status) {
+    case 'purged':
+    case 'nothing-to-purge': {
+      if (format === 'json') {
+        writeJson({ status: result.status, detail: result.detail, warnings: result.warnings });
+      } else if (result.status === 'purged') {
+        writeHuman(`Purged handoff baton ref history: ${result.detail}`);
+      } else {
+        writeHuman(`Nothing to purge — ${result.detail} (idempotent no-op).`);
+      }
+      warnPendingUnpushed(repoRoot);
+      return;
+    }
+    case 'public-remote-refused':
+      writeError(result.detail);
+      writeError('handoff purge: pass --push-public to opt in for a public/unknown remote.');
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    case 'scrub-refused':
+      writeError(result.detail);
+      process.exit(USAGE_ERROR_EXIT);
+      return;
+    case 'failed':
+      writeError(result.detail);
+      process.exit(1);
+      return;
+  }
+}
+
+const handoffPurge = defineCommand({
+  meta: {
+    name: 'purge',
+    description:
+      'Secret recall: rewrite the local baton ref history to a single root (current tip tree preserved) and lease-push it, cutting a leaked blob out of remote history. Requires an origin remote.',
+  },
+  args: {
+    'push-public': {
+      type: 'boolean',
+      description:
+        'Explicit opt-in to push the purged (rewritten) ref history to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published).',
+      default: false,
+    },
+    output: { type: 'string', description: 'Output format: human|json', default: 'human' },
+  },
+  run: runPurge,
+});
+
 export const handoffCommand = defineCommand({
   meta: {
     name: 'handoff',
     description:
-      'Handoff batons on the hidden ref (refs/ditto/handoffs). `write` commits a baton and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek. Multiple pending batons are listed by consume/show for disambiguation.',
+      'Handoff batons on the hidden ref (refs/ditto/handoffs). `write` commits a baton and auto-syncs; `consume [id]` delivers a body exactly once (first-consumer-wins, deletion commit); `show [id]` is a read-only peek; `purge` rewrites the ref history to a single root and lease-pushes it (secret recall). Multiple pending batons are listed by consume/show for disambiguation.',
   },
   // A PURE group: no parent `run`. citty 0.1.6 would ALSO run a parent `run` after a
   // matched subcommand (double-dispatch) and misreads a leading flag value as a
@@ -603,5 +680,6 @@ export const handoffCommand = defineCommand({
     write: handoffWrite,
     consume: handoffConsume,
     show: handoffShow,
+    purge: handoffPurge,
   },
 });

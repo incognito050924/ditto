@@ -199,7 +199,7 @@ function writeFlags(extra: Record<string, unknown> = {}): Record<string, unknown
 describe('ac-rewire: old two-tier surface is gone from this command', () => {
   test('no `list` subcommand is registered (disambiguation output replaces it)', () => {
     const names = Object.keys(subCommands()).sort();
-    expect(names).toEqual(['consume', 'show', 'write']);
+    expect(names).toEqual(['consume', 'purge', 'show', 'write']);
   });
 
   test('command source no longer touches the old file store (markers / remote routing / --remote)', () => {
@@ -431,6 +431,100 @@ describe('defect wi_2607220o1: consume/show fetch-first discovery of remote bato
     expect(res.exitCode).not.toBe(0);
     expect(res.err).toContain('missing leading frontmatter fence'); // the parse error, surfaced
     expect(refTip(repo)).toBe(tipBefore); // no deletion commit landed
+  });
+});
+
+describe('handoff purge: secret-recall history rewrite (wi_260723xh7)', () => {
+  test('purge rewrites local+remote history to a single root; pending batons survive (tip tree preserved); exit 0', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    // Two writes → multi-commit ref history on both local and origin.
+    await runCmd('write', writeFlags({ session: 'first' }));
+    const second = JSON.parse((await runCmd('write', writeFlags({ session: 'second' }))).out) as {
+      stem: string;
+    };
+    expect(Number(git(repo, ['rev-list', '--count', HANDOFF_REF]).stdout.trim())).toBeGreaterThan(
+      1,
+    );
+
+    const res = await runCmd('purge', { output: 'json', 'push-public': true });
+    expect(res.exitCode).toBe(0);
+    const parsed = JSON.parse(res.out) as { status: string; detail: string; warnings: string[] };
+    expect(parsed.status).toBe('purged');
+    expect(parsed.detail).toContain('single root');
+
+    // Local history is a single parentless root; remote tip agrees (lease-push landed).
+    const localTip = refTip(repo);
+    expect(localTip).not.toBeNull();
+    expect(git(repo, ['rev-list', '--count', HANDOFF_REF]).stdout.trim()).toBe('1');
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(localTip as string);
+    // Truncation never touches the tip TREE: the pending batons are still there.
+    const stems = new HandoffRefStore(repo).list().batons.map((b) => b.stem);
+    expect(stems).toContain(second.stem);
+    expect(stems).toHaveLength(2);
+  });
+
+  test('purge with an unborn ref → nothing-to-purge, exit 0 (idempotent no-op)', async () => {
+    const repo = await makeRepo(await makeBareOrigin());
+    process.chdir(repo);
+    const res = await runCmd('purge', { 'push-public': true });
+    expect(res.exitCode).toBe(0);
+    expect(res.out).toContain('Nothing to purge');
+  });
+
+  test('without --push-public on an unknown-visibility remote → refused, hint, exit 65', async () => {
+    const repo = await makeRepo(await makeBareOrigin());
+    process.chdir(repo);
+    new HandoffRefStore(repo).write(makeBaton('refused'));
+    const res = await runCmd('purge', {});
+    expect(res.exitCode).toBe(65);
+    expect(res.err).toContain('purge push refused');
+    expect(res.err).toContain('--push-public');
+    // Nothing was rewritten or pushed by the refused call.
+    expect(new HandoffRefStore(repo).list().batons).toHaveLength(1);
+  });
+
+  test('secret-shaped content in the tip tree → scrub-refused, exit 65, ref tip unchanged', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    // Plant a baton blob carrying a PAT-shaped token via plumbing (the store's
+    // write path scrubs, so a leaked-token state can only be planted this way).
+    const secret = `token ghp_${'aB3'.repeat(12)} leaked`;
+    const blob = gitStdin(repo, ['hash-object', '-w', '--stdin'], `${secret}\n`).stdout.trim();
+    const tree = gitStdin(
+      repo,
+      ['mktree', '-z'],
+      `100644 blob ${blob}\tsession__dirty__anon.md\0`,
+    ).stdout.trim();
+    const commit = git(repo, ['commit-tree', tree, '-m', 'plant dirty baton']).stdout.trim();
+    expect(git(repo, ['update-ref', HANDOFF_REF, commit]).exitCode).toBe(0);
+    const tipBefore = refTip(repo);
+
+    const res = await runCmd('purge', { 'push-public': true });
+    expect(res.exitCode).toBe(65);
+    expect(res.err).toContain('secret-shaped');
+    expect(refTip(repo)).toBe(tipBefore); // dirty tree was never purge-pushed
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+  });
+
+  test('unreachable origin → failed, exit 1 (purge requires the remote)', async () => {
+    const repo = await makeRepo(join(tmpdir(), `ditto-handoffcli-missing-${Date.now()}`));
+    process.chdir(repo);
+    new HandoffRefStore(repo).write(makeBaton('offline-purge'));
+    const res = await runCmd('purge', { 'push-public': true });
+    expect(res.exitCode).toBe(1);
+    expect(res.err).toContain('purge requires the remote');
+  });
+
+  test('no origin remote → usage error, exit 65', async () => {
+    const repo = await makeRepo(await makeBareOrigin());
+    expect(git(repo, ['remote', 'remove', 'origin']).exitCode).toBe(0);
+    process.chdir(repo);
+    const res = await runCmd('purge', { 'push-public': true });
+    expect(res.exitCode).toBe(65);
+    expect(res.err).toContain('handoff purge requires an origin remote');
   });
 });
 

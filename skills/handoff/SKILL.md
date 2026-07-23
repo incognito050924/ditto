@@ -60,7 +60,7 @@ Local operations always succeed. A failed push/fetch degrades to local success +
 
 ## Retention and recall
 
-Ref history is truncated at push time to max(7 days, 50 commits); truncation never touches the tip TREE, so pending batons always survive. For an undetected secret that already synced, the recall path (`purgeHandoffHistory`) rewrites history to a single root carrying the current tip tree and lease-pushes it, cutting the leaked blob out of remote history.
+Ref history is truncated at push time to max(7 days, 50 commits); truncation never touches the tip TREE, so pending batons always survive. For an undetected secret that already synced, the recall path (`ditto handoff purge`) rewrites history to a single root carrying the current tip tree and lease-pushes it, cutting the leaked blob out of remote history.
 
 ## Output contract
 
