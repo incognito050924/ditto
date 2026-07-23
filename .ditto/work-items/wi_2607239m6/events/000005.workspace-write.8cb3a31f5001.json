@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607239m6",
+  "seq": 5,
+  "actor": "workspace-write",
+  "event_id": "8cb3a31f5001ed3530a70b497d1fa7866578b931fe13b4de895a7d26e6fc13ae",
+  "ts": "2026-07-23T08:27:16.480Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-3",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "bash -c bun run build:plugin >/dev/null 2>&1 && bun run build:codex-plugin >/dev/null 2>&1 && grep -q \"process effect\" dist/plugin/skills/deep-interview/SKILL.md && grep -q \"close-ordering\" dist/codex-plugin/skills/verify/SKILL.md && echo \"both plugin outputs carry the new rules\"",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

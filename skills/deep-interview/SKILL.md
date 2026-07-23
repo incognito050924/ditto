@@ -242,4 +242,5 @@ Report to the user in one short block — narrowed goal; added / removed scope; 
 - Never lower the readiness threshold to escape the gate.
 - The artifacts in `.ditto/local/work-items/<wi>/` are the record — do not paste raw command output into the chat.
 - Every acceptance criterion is one the user validated; an unvalidated one is labelled an `assumption` answer in the interview, never a finalize `statement`.
+- An acceptance criterion states an observable property of the deliverable — never a **process effect** the completion path itself performs (issue close, PR merge, push, board move). Closure is an *effect* of `work done --close-issue`, not a condition: the done gate requires every criterion to pass **before** it closes the issue, so an AC like "issue #N is closed" can never pass and deadlocks the work item. Rewrite such a criterion to the substantive deliverable it stands for (the behavior, artifact, or evidence), and let the issue close as the tail of `done`.
 </content>

@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607239m6",
+  "seq": 4,
+  "actor": "workspace-write",
+  "event_id": "4394faca64dbd7630c195b5c819e92d191542895fcedf401ac15acc9533b7ae8",
+  "ts": "2026-07-23T08:27:11.164Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "grep -n close-ordering skills/verify/SKILL.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}

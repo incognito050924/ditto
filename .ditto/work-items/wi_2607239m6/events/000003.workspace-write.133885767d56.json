@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607239m6",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "133885767d56fdd553ac6f81f6a1eca8954443b1abc4818c75dc86252cd3e811",
+  "ts": "2026-07-23T08:27:11.007Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-1",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "command",
+        "command": "grep -n process effect skills/deep-interview/SKILL.md",
+        "summary": "exit 0"
+      }
+    ]
+  }
+}
