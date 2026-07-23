@@ -1,10 +1,13 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { Evidence } from '../schemas/evidence';
+import type { Verdict } from '../schemas/verdict';
 import {
   REBUILD_RECORD_SCHEMA_VERSION,
   isTerminalStatus,
   workItemRecord,
+  type ReEntry,
   type WorkItemRecord,
   type WorkItemStatus,
 } from '../schemas/work-item-record';
@@ -181,6 +184,159 @@ export async function transitionWorkItem(
   });
   await appendEvent(eventsDir(repoRoot, id), event);
   return event;
+}
+
+export class UnknownCriterionError extends Error {
+  constructor(id: string, criterionId: string) {
+    super(`work item ${id} has no acceptance criterion "${criterionId}"`);
+    this.name = 'UnknownCriterionError';
+  }
+}
+
+export interface RecordVerdictInput {
+  criterion_id: string;
+  verdict: Verdict;
+  evidence: Evidence[];
+  actor: string;
+}
+
+/** Record one criterion's outcome as an immutable event (view folds it). */
+export async function recordVerdict(
+  repoRoot: string,
+  id: string,
+  input: RecordVerdictInput,
+): Promise<WorkItemEvent> {
+  const { record, events } = await loadWorkItem(repoRoot, id);
+  const known = record.acceptance_criteria.some(
+    (c) => c.id === input.criterion_id,
+  );
+  if (!known) throw new UnknownCriterionError(id, input.criterion_id);
+  const event = createEvent({
+    work_item_id: id,
+    seq: nextSeq(events),
+    actor: input.actor,
+    ts: new Date().toISOString(),
+    kind: 'verdict',
+    payload: {
+      criterion_id: input.criterion_id,
+      verdict: input.verdict,
+      evidence: input.evidence,
+    },
+  });
+  await appendEvent(eventsDir(repoRoot, id), event);
+  return event;
+}
+
+export interface CriterionInput {
+  id: string;
+  statement: string;
+}
+
+/**
+ * Set the acceptance-criteria set. Provenance lock (goalpost may not move):
+ * before the first verdict the set is a placeholder and is replaced freely;
+ * from the first verdict on, criteria dropped from the proposal are KEPT and
+ * marked `superseded` — never erased — and only additions land as new rows.
+ */
+export async function setCriteria(
+  repoRoot: string,
+  id: string,
+  proposed: CriterionInput[],
+): Promise<WorkItemRecord> {
+  const { record, events } = await loadWorkItem(repoRoot, id);
+  const hasVerdict = events.some((e) => e.kind === 'verdict');
+  const proposedIds = new Set(proposed.map((c) => c.id));
+
+  const fresh = (c: CriterionInput) => ({
+    id: c.id,
+    statement: c.statement,
+    verdict: 'unverified' as const,
+    evidence: [],
+  });
+
+  const nextCriteria = hasVerdict
+    ? [
+        ...record.acceptance_criteria.map((existing) =>
+          proposedIds.has(existing.id) || existing.superseded
+            ? existing
+            : { ...existing, superseded: true },
+        ),
+        ...proposed
+          .filter(
+            (c) => !record.acceptance_criteria.some((e) => e.id === c.id),
+          )
+          .map(fresh),
+      ]
+    : proposed.map(fresh);
+
+  const next: WorkItemRecord = workItemRecord.parse({
+    ...record,
+    acceptance_criteria: nextCriteria,
+    updated_at: new Date().toISOString(),
+  });
+  await writeJson(recordPath(repoRoot, id), workItemRecord, next);
+  return next;
+}
+
+/** Closing statuses stamp closed_at; blocked parks the item but leaves it open. */
+const CLOSING_STATUSES: readonly WorkItemStatus[] = [
+  'done',
+  'abandoned',
+  'partial',
+  'unverified',
+];
+
+export interface FinalizeInput {
+  status: WorkItemStatus;
+  actor: string;
+  re_entry?: ReEntry;
+}
+
+/**
+ * Close the item: the boundary transition lands immediately as an event, and
+ * the authored details (folded verdicts, re_entry, timestamps) are batched
+ * into record.json in one write. The candidate record is validated BEFORE the
+ * event is appended, so a schema refusal (e.g. partial without re_entry)
+ * leaves both tiers untouched.
+ */
+export async function finalizeWorkItem(
+  repoRoot: string,
+  id: string,
+  input: FinalizeInput,
+): Promise<WorkItemRecord> {
+  const { record, events, reduced, view } = await loadWorkItem(repoRoot, id);
+  if (isTerminalStatus(view.status)) {
+    throw new TerminalStatusError(id, view.status);
+  }
+  const now = new Date().toISOString();
+  const closedAt = CLOSING_STATUSES.includes(input.status) ? now : null;
+
+  const candidate: unknown = {
+    ...record,
+    status: input.status,
+    ...(input.re_entry !== undefined ? { re_entry: input.re_entry } : {}),
+    acceptance_criteria: record.acceptance_criteria.map((criterion) => {
+      const folded = reduced.verdicts[criterion.id];
+      return folded
+        ? { ...criterion, verdict: folded.verdict, evidence: folded.evidence }
+        : criterion;
+    }),
+    updated_at: now,
+    closed_at: closedAt,
+  };
+  const validated = workItemRecord.parse(candidate);
+
+  const event = createEvent({
+    work_item_id: id,
+    seq: nextSeq(events),
+    actor: input.actor,
+    ts: now,
+    kind: 'status',
+    payload: { to: input.status, closed_at: closedAt },
+  });
+  await appendEvent(eventsDir(repoRoot, id), event);
+  await writeJson(recordPath(repoRoot, id), workItemRecord, validated);
+  return validated;
 }
 
 /** The one authorized terminal→non-terminal path. */
