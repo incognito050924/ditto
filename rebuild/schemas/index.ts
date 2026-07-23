@@ -6,6 +6,14 @@ export {
   ADR_TITLE_PREFIX_RE,
   adrIdFromFilename,
 } from './adr-id';
+export {
+  glossary,
+  glossaryEntry,
+  glossaryStatus,
+  type Glossary,
+  type GlossaryEntry,
+  type GlossaryStatus,
+} from './glossary';
 export { verdict, type Verdict } from './verdict';
 export { evidence, evidenceKind, type Evidence, type EvidenceKind } from './evidence';
 export {
