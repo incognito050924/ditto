@@ -1,3 +1,11 @@
+export {
+  ADR_FILENAME_RE,
+  ADR_ID_EXTRACT_RE,
+  ADR_ID_FULL_RE,
+  ADR_SLUG_RE,
+  ADR_TITLE_PREFIX_RE,
+  adrIdFromFilename,
+} from './adr-id';
 export { verdict, type Verdict } from './verdict';
 export { evidence, evidenceKind, type Evidence, type EvidenceKind } from './evidence';
 export {
