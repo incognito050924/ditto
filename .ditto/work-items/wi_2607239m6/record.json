@@ -42,17 +42,32 @@
       ]
     }
   ],
-  "status": "in_progress",
+  "status": "done",
   "owner_profile": "workspace-write",
   "child_ids": [],
-  "changed_files": [],
+  "changed_files": [
+    ".ditto/work-items/wi_2607239m6/events/000000.workspace-write.89120a853494.json",
+    ".ditto/work-items/wi_2607239m6/events/000001.workspace-write.597fcc6c2756.json",
+    ".ditto/work-items/wi_2607239m6/events/000002.workspace-write.a42b515d69a8.json",
+    ".ditto/work-items/wi_2607239m6/events/000003.workspace-write.133885767d56.json",
+    ".ditto/work-items/wi_2607239m6/events/000004.workspace-write.4394faca64db.json",
+    ".ditto/work-items/wi_2607239m6/events/000005.workspace-write.8cb3a31f5001.json",
+    ".ditto/work-items/wi_2607239m6/record.json",
+    "skills/deep-interview/SKILL.md",
+    "skills/verify/SKILL.md"
+  ],
   "worktrees": [],
   "github_issue": {
     "repo": "incognito050924/ditto",
     "number": 75,
     "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgzzsVs"
   },
-  "risks": [],
+  "risks": [
+    {
+      "description": "partial under-commit close justification (tree-dirt override): 이 WI의 변경(skills 2건+record)은 e00eca8로 이미 커밋됨. 잔여 dirt .ditto/work-items/wi_260722kom/record.json은 타 세션(#66 계열) 소유 외래 변경으로 이 WI와 무관 — 핸드오프에 '건드리지 말 것'으로 명시된 파일",
+      "severity": "low"
+    }
+  ],
   "runs": [],
   "started_at_sha": "a6f4ad6655fe071206d289a93093ec0f9df5d50f",
   "started_untracked_baseline": [
@@ -411,5 +426,6 @@
     "vb3.html"
   ],
   "created_at": "2026-07-23T08:21:31.054Z",
-  "updated_at": "2026-07-23T08:27:16.478Z"
+  "updated_at": "2026-07-23T08:27:53.605Z",
+  "closed_at": "2026-07-23T08:27:53.604Z"
 }
