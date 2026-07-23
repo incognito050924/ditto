@@ -308,3 +308,10 @@ lower-median(60)→keep(ΔD=40) · upper-median(100)→**insufficient-evidence**
 - 원시 산출물: `runs/`(비커밋·로컬) — attempt별 봉인 산출물과 tamper-evident
   원장(`ledger.jsonl`). 세션 digest는 원장 체인이 봉인하며 채점 종료 후
   재검증됐다(scoring-log §14).
+
+## 10. 최종 서명 (2026-07-23)
+
+**사용자 서명: keep 확정.** 기계 판정 keep(§3-3a)을 임계 경계 민감도(§3)·독해 분기
+4분면·소표본 한계(§4)를 인지한 상태에서 승인한다. 이 서명으로 #67(패리티 감사
+재진입)·#69(main flip)의 게이트 입력이 확정된다. 후속(모호형 과제 확대 측정·
+사전 등록 개선·`ditto setup` 훅 갭 확인)은 백로그로 물질화한다 — 이 감사 범위 밖.
