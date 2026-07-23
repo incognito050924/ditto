@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readHandoffPushConsent, writeHandoffPushConsent } from '../../core/ditto-config';
 import { HANDOFF_REF, HandoffRefStore } from '../../core/handoff-ref-store';
 import { type Handoff, handoff as handoffSchema } from '../../schemas/handoff';
-import { handoffCommand } from './handoff';
+import { __setRepoVisibilityForTest, deriveVisibilityProbeTarget, handoffCommand } from './handoff';
 
 /**
  * Red-first unit tests for the `ditto handoff` CLI rewritten onto the hidden-ref
@@ -45,6 +46,7 @@ const fixtures: string[] = [];
 const origCwd = process.cwd();
 
 afterEach(async () => {
+  __setRepoVisibilityForTest(null); // reset the hermetic visibility seam
   process.chdir(origCwd);
   while (fixtures.length > 0) {
     const dir = fixtures.pop();
@@ -587,5 +589,255 @@ describe('handoff show: read-only peek', () => {
     expect(res.out).toContain('# Handoff:');
     expect(refTip(repo)).toBe(tipBefore); // no deletion commit
     expect(store.list().batons.map((b) => b.stem)).toEqual([written.stem]); // still pending
+  });
+});
+
+/**
+ * wi_2607239vu — CLI wiring for the write-push consent (ac-3), the hermetic
+ * visibility seam, the un-pushed-write loud warning (C6), and operative-cue
+ * fidelity (ADR-20260713).
+ *
+ * WHY these tests exist (AC map + the landed-core reality they pin):
+ *  - The visibility seam (sandbox finding): resolveRepoVisibility spawns `gh`; a
+ *    unit test injects a fixed visibility via __setRepoVisibilityForTest so a
+ *    "public remote" is exercised with ZERO real gh/network. Every test below
+ *    depends on it — a public remote is otherwise unreachable hermetically.
+ *  - ac-3 write-push consent: WRITE-SCOPED, granted once per project via
+ *    `write --consent-push-remote` (origin-bound normalized URL, visibility-
+ *    stamped). Before a grant, a public write push stays refused exactly as
+ *    today; after the grant, subsequent writes auto-push. A consume needs NO
+ *    consent: the landed core auto-exempts a PURE deletion on a public remote
+ *    (identity-masked subset push — src/core/handoff-ref-sync.test.ts case (a)),
+ *    so wiring consent into consume would be redundant (pure deletion) or unsafe
+ *    (a companion un-pushed write must stay refused). A private→public
+ *    visibility flip forces a re-confirm before the grant applies again.
+ *  - C6 loud warning: a consume carrying a companion un-pushed write handoff is
+ *    refused on a public remote (the new body must never publish); the CLI
+ *    surfaces the re-consume window + the --push-public escape on that refusal
+ *    (buildSyncWarning attaches its consume NOTE to offline/auth but not to this
+ *    refusal class — the gap this fills at the CLI layer).
+ *  - Origin normalization: the consent reader compares origin_url verbatim, so a
+ *    `repo` vs `repo.git` mismatch must NOT split the grant — the CLI normalizes
+ *    both the write and the read side to the same key.
+ */
+describe('wi_2607239vu: write-push consent wiring (ac-3), visibility seam, C6, normalization', () => {
+  test('ac-1 (2 clones, public via injected visibility): a consume with NO consent propagates the deletion; a second clone finds it gone', async () => {
+    const origin = await makeBareOrigin();
+    const repoA = await makeRepo(origin);
+    process.chdir(repoA);
+    __setRepoVisibilityForTest('public');
+
+    // A new body needs the explicit opt-in to land on a public remote.
+    const written = JSON.parse((await runCmd('write', writeFlags())).out) as { stem: string };
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).exitCode).toBe(0);
+
+    // Consume with NO --push-public and NO consent anywhere: the pure deletion
+    // still propagates to the public remote (core exemption, identity-masked) —
+    // deletion propagation is consent-independent by design.
+    const consumed = await runCmd('consume', { id: written.stem, output: 'json' });
+    expect(consumed.exitCode).toBe(0);
+    // The deletion reached origin: the entry is gone from the remote tip.
+    const remoteTree = git(origin, ['ls-tree', '--name-only', HANDOFF_REF]).stdout.trim();
+    expect(remoteTree).not.toContain(written.stem);
+    // No consent was recorded by the consume path (consume has no consent surface).
+    expect(await readHandoffPushConsent(repoA, origin)).toBeUndefined();
+
+    // "Another PC": a fresh clone consuming the same stem finds it already gone.
+    const repoB = await makeClone(origin);
+    process.chdir(repoB);
+    __setRepoVisibilityForTest('public');
+    const late = await runCmd('consume', { id: written.stem });
+    // The deletion commit is on origin's history, so the fresh clone gets the
+    // DISTINCT already-consumed refusal (first-consumer-wins), never a live body.
+    expect(late.exitCode).toBe(0);
+    expect(late.out).toContain('already consumed');
+  });
+
+  test('ac-3 before a grant: a public write push is refused exactly as today (new body never egresses)', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    __setRepoVisibilityForTest('public');
+
+    // No --push-public, no recorded consent: the write auto-sync must be refused.
+    const res = await runCmd('write', writeFlags({ 'push-public': false }));
+    expect(res.exitCode).toBe(0); // local write survives; only the push is refused
+    expect(refTip(repo)).not.toBeNull();
+    // Nothing egressed: origin never received the new body.
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+  });
+
+  test('ac-3 grant + auto-push: `write --consent-push-remote` records the grant and pushes; a later plain write auto-pushes under it', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    __setRepoVisibilityForTest('public');
+
+    // Granting write: records the origin-bound consent AND this write's push proceeds.
+    const first = await runCmd(
+      'write',
+      writeFlags({ 'push-public': false, 'consent-push-remote': true, session: 'grant' }),
+    );
+    expect(first.exitCode).toBe(0);
+    const firstParsed = JSON.parse(first.out) as { stem: string };
+    expect(git(origin, ['ls-tree', '--name-only', HANDOFF_REF]).stdout).toContain(firstParsed.stem);
+    const consent = await readHandoffPushConsent(repo, origin);
+    expect(consent?.origin_url).toBe(origin);
+    expect(consent?.visibility_at_grant).toBe('public');
+
+    // A SUBSEQUENT plain write (no flag at all) auto-pushes under the standing
+    // grant, and the active consent is surfaced as an advisory.
+    const second = await runCmd(
+      'write',
+      writeFlags({ 'push-public': false, session: 'after-grant' }),
+    );
+    expect(second.exitCode).toBe(0);
+    const secondParsed = JSON.parse(second.out) as { stem: string };
+    expect(second.err).toContain('write-push consent is active');
+    expect(git(origin, ['ls-tree', '--name-only', HANDOFF_REF]).stdout).toContain(
+      secondParsed.stem,
+    );
+  });
+
+  test('ac-3 origin binding: a grant recorded for a DIFFERENT origin does not authorize this one (push still refused)', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    __setRepoVisibilityForTest('public');
+    // A grant pinned to some other remote — must not carry over.
+    await writeHandoffPushConsent(repo, {
+      origin_url: 'https://github.com/other/fork',
+      visibility_at_grant: 'public',
+      granted_at: new Date().toISOString(),
+    });
+
+    const res = await runCmd('write', writeFlags({ 'push-public': false }));
+    expect(res.exitCode).toBe(0);
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+  });
+
+  test('C6: a consume carrying a companion un-pushed write is refused on a public remote with the loud re-consume-window warning', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+    __setRepoVisibilityForTest('public');
+    // Land baton X on the public remote (opt-in), then write W WITHOUT pushing it.
+    const x = JSON.parse((await runCmd('write', writeFlags({ session: 'x' }))).out) as {
+      stem: string;
+    };
+    const store = new HandoffRefStore(repo);
+    store.write(makeBaton('w')); // un-pushed write baton → rides the consume transmit set
+
+    // Consume X: the reconciled transmit set now carries W's new body → refused.
+    const res = await runCmd('consume', { id: x.stem, output: 'json' });
+    expect(res.exitCode).toBe(0); // local consume succeeds; the push is what is refused
+    expect(res.err).toContain('was NOT pushed');
+    expect(res.err).toContain('re-consume window open');
+    expect(res.err).toContain('--push-public');
+    // The deletion did NOT propagate: X is still on the remote.
+    expect(git(origin, ['ls-tree', '--name-only', HANDOFF_REF]).stdout).toContain(x.stem);
+  });
+
+  test('origin URL normalization: a grant recorded under a `.git` remote is stored under the normalized (no-.git) key', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    // Re-point origin at the `.git` spelling of the SAME path (git echoes it verbatim).
+    expect(git(repo, ['remote', 'set-url', 'origin', `${origin}.git`]).exitCode).toBe(0);
+    process.chdir(repo);
+    __setRepoVisibilityForTest('public');
+
+    // The push targets the `.git` spelling of the same local path — irrelevant
+    // here; what matters is that the CLI stores the NORMALIZED consent key.
+    const res = await runCmd(
+      'write',
+      writeFlags({ 'push-public': false, 'consent-push-remote': true }),
+    );
+    expect(res.exitCode).toBe(0);
+    // Stored under the normalized origin (no trailing `.git`); the `.git` spelling
+    // does NOT match (verbatim compare) — proving both sides were normalized.
+    expect((await readHandoffPushConsent(repo, origin))?.origin_url).toBe(origin);
+    expect(await readHandoffPushConsent(repo, `${origin}.git`)).toBeUndefined();
+  });
+
+  test('private→public flip forces a re-confirm: a grant stamped `private` is NOT applied once the remote is public', async () => {
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    process.chdir(repo);
+
+    // Grant while PRIVATE (push authorized by visibility alone), stamped 'private'.
+    __setRepoVisibilityForTest('private');
+    const granted = await runCmd(
+      'write',
+      writeFlags({ 'push-public': false, 'consent-push-remote': true, session: 'when-private' }),
+    );
+    expect(granted.exitCode).toBe(0);
+    expect((await readHandoffPushConsent(repo, origin))?.visibility_at_grant).toBe('private');
+
+    // The remote is now PUBLIC: the private-time grant must not silently apply —
+    // the push is refused and the CLI asks for a re-confirm.
+    __setRepoVisibilityForTest('public');
+    const before = git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim();
+    const res = await runCmd(
+      'write',
+      writeFlags({ 'push-public': false, session: 'now-public', output: 'json' }),
+    );
+    expect(res.exitCode).toBe(0);
+    expect(res.err).toContain('re-confirm');
+    expect(res.err).not.toContain('write-push consent is active');
+    // Nothing new egressed: origin's ref tip did not move.
+    expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(before);
+  });
+
+  test("the visibility probe is PINNED to the origin remote, never gh's default repo (security finding)", () => {
+    // An argument-less `gh repo view` reads gh's configured DEFAULT repo: if that
+    // points at a private repo while origin was re-pointed at a public one, the
+    // gate would open on a wrong 'private' verdict. The probe target is derived
+    // from the origin URL; an un-derivable origin (e.g. a local path) resolves
+    // null → 'unknown' (fail-closed).
+    expect(deriveVisibilityProbeTarget('https://github.com/owner/repo.git')).toBe(
+      'github.com/owner/repo',
+    );
+    expect(deriveVisibilityProbeTarget('https://user@github.com/owner/repo/')).toBe(
+      'github.com/owner/repo',
+    );
+    expect(deriveVisibilityProbeTarget('git@github.com:owner/repo.git')).toBe(
+      'github.com/owner/repo',
+    );
+    expect(deriveVisibilityProbeTarget('ssh://git@ghe.corp.example/owner/repo.git')).toBe(
+      'ghe.corp.example/owner/repo',
+    );
+    expect(deriveVisibilityProbeTarget('/tmp/some/local/path')).toBeNull();
+    expect(deriveVisibilityProbeTarget('https://github.com/only-owner')).toBeNull();
+    // The production resolver actually passes the derived target as an argument.
+    const src = readFileSync(join(import.meta.dir, 'handoff.ts'), 'utf8');
+    expect(src).toContain("'gh', 'repo', 'view', target");
+  });
+
+  test('--consent-push-remote with NO origin remote is a loud no-op (grant not recorded, warning printed)', async () => {
+    const repo = await makeRepo(await makeBareOrigin());
+    expect(git(repo, ['remote', 'remove', 'origin']).exitCode).toBe(0);
+    process.chdir(repo);
+    __setRepoVisibilityForTest('public');
+
+    const res = await runCmd(
+      'write',
+      writeFlags({ 'push-public': false, 'consent-push-remote': true }),
+    );
+    expect(res.exitCode).toBe(0); // the local write itself still succeeds
+    expect(res.err).toContain('--consent-push-remote NOT recorded');
+    // No consent block was written into the personal config store.
+    expect(existsSync(join(repo, '.ditto', 'local', 'config.json'))).toBe(false);
+  });
+
+  test('consume has NO consent surface (redundant for a pure deletion, unsafe for a companion write)', () => {
+    const src = readFileSync(join(import.meta.dir, 'handoff.ts'), 'utf8');
+    expect(src).not.toContain('consent-delete-remote');
+    // The consent helpers are wired into the write path only.
+    const consumeSection = src.slice(
+      src.indexOf('async function runConsume'),
+      src.indexOf('const handoffConsume'),
+    );
+    expect(consumeSection).not.toContain('Consent');
+    expect(consumeSection).not.toContain('consent');
   });
 });

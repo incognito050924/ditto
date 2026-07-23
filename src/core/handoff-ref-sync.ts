@@ -99,6 +99,32 @@ const MAX_LOCAL_CAS = 3;
 /** Cap on history walked per entry when deciding write-vs-delete precedence. */
 const HISTORY_SCAN_CAP = 200;
 
+/**
+ * Deletion-only visibility exemption: message + MASKED identity for the single
+ * commit the exempt path publishes. The exempt push rebuilds one commit carrying
+ * the post-deletion tip tree onto the observed remote sha — collapsing any
+ * piggybacked ancestor commits and STRIPPING the real author/committer so a
+ * public remote never learns WHO consumed the baton. This is a NEW mask (the
+ * truncation/purge rebuild deliberately PRESERVES identity — not a mask precedent).
+ */
+const HANDOFF_DELETION_COMMIT_MSG = 'ditto handoff baton: consume (deletion-only, identity-masked)';
+const MASK_IDENTITY_ENV: Record<string, string> = {
+  GIT_AUTHOR_NAME: 'ditto handoff',
+  GIT_AUTHOR_EMAIL: 'handoff@ditto.invalid',
+  GIT_COMMITTER_NAME: 'ditto handoff',
+  GIT_COMMITTER_EMAIL: 'handoff@ditto.invalid',
+};
+
+/**
+ * The full env for a masked commit: identity constants + UTC-pinned dates. Left
+ * unmasked, the commit dates would carry the consumer's local timezone offset —
+ * a weak identity signal — onto a public remote.
+ */
+function maskIdentityEnv(now: Date = new Date()): Record<string, string> {
+  const utc = now.toISOString();
+  return { ...MASK_IDENTITY_ENV, GIT_AUTHOR_DATE: utc, GIT_COMMITTER_DATE: utc };
+}
+
 export type RemoteVisibility = 'private' | 'public' | 'unknown';
 export type SyncOp = 'write' | 'consume' | 'command';
 export type SyncFailureClass = 'auth' | 'non-ff' | 'offline' | 'other';
@@ -556,6 +582,108 @@ function scrubScan(cwd: string, tip: string, remoteSha: string | null): ScrubSca
   return { ok: true, findings };
 }
 
+// ─── deletion-only visibility exemption (object-set based) ────────────────────
+
+export interface DeletionOnlyDecision {
+  exempt: boolean;
+  /** Why it is / isn't exempt — surfaced in the refusal warning + jsonl log. */
+  reason: string;
+}
+
+/**
+ * Decide whether an unauthorized (public/unknown, no opt-in) push may proceed as
+ * a narrow DELETION-ONLY exemption, judged by the actual TRANSMIT OBJECT SET —
+ * NEVER by op==='consume': computeReconcileTarget re-applies unpushed local write
+ * batons onto the consume tip, so a "consume" can still carry new bodies. Called
+ * ONCE PER push attempt against the currently-observed remoteSha, so a re-merge
+ * that re-introduces a local-only baton flips a prior exemption to a refusal.
+ *
+ * Exempt iff the push publishes NO new readable content:
+ *  - remoteSha must be an ACTUALLY-observed published base — null (offline /
+ *    unborn remote) is fail-closed refused (nothing to delete against; a first
+ *    push would publish everything);
+ *  - every entry (name→blob sha) in the local tip tree is ALREADY present at the
+ *    observed remote tip — a strict subset, i.e. a pure deletion: no new blob AND
+ *    no new stem NAME crosses the wire (this catches the un-scannable tree-entry
+ *    name / session-id leak, not just blob bodies — scrubScan sees blobs only);
+ *  - defense in depth: the rev-list --objects enumeration of the local tip TREE
+ *    minus the remote tip TREE carries zero NEW blob objects (nested content
+ *    reachable only via a subtree). TREE-scoped on BOTH sides deliberately: the
+ *    exempt push transmits ONE rebuilt commit carrying the local tip tree, so
+ *    commit-history reachability is NOT the transmit surface — enumerating
+ *    history would drag in blobs of collapsed intermediate commits (e.g. a
+ *    handoff written AND consumed locally since the last push) that never cross
+ *    the wire, and refuse a genuinely pure net-deletion.
+ * Any enumeration error is fail-closed (not exempt). The only objects the exempt
+ * push then adds are the deletion commit + reduced root tree — the commit's
+ * identity is MASKED (MASK_IDENTITY_ENV) and the tree's entries are all already
+ * published.
+ */
+export function evaluateDeletionOnlyExemption(
+  cwd: string,
+  localTip: string,
+  remoteSha: string | null,
+): DeletionOnlyDecision {
+  if (remoteSha === null) {
+    return {
+      exempt: false,
+      reason: 'remote ref is unborn/unobserved — no published base to delete against',
+    };
+  }
+  let localEntries: TreeEntry[];
+  let remoteByName: Map<string, string>;
+  try {
+    localEntries = treeEntries(cwd, localTip);
+    remoteByName = new Map(treeEntries(cwd, remoteSha).map((e) => [e.name, e.sha]));
+  } catch (err) {
+    return {
+      exempt: false,
+      reason: `transmit tree enumeration failed (${err instanceof Error ? err.message : String(err)})`,
+    };
+  }
+  for (const e of localEntries) {
+    const remoteEntrySha = remoteByName.get(e.name);
+    if (remoteEntrySha === undefined || remoteEntrySha !== e.sha) {
+      return {
+        exempt: false,
+        reason: `transmit set adds or modifies '${e.name}' — not deletion-only`,
+      };
+    }
+  }
+  // TREE-scoped on both sides — the transmit surface of the exempt push is the
+  // local tip TREE (one rebuilt commit), never the local commit history.
+  const objs = gitLocal(cwd, [
+    'rev-list',
+    '--objects',
+    `${localTip}^{tree}`,
+    `^${remoteSha}^{tree}`,
+    '--',
+  ]);
+  if (objs.exitCode !== 0) {
+    return { exempt: false, reason: `transmit object enumeration failed (${objs.stderr.trim()})` };
+  }
+  for (const line of objs.stdout.split('\n')) {
+    if (line.length === 0) continue;
+    const sp = line.indexOf(' ');
+    if (sp === -1) continue; // commit / root tree — anonymous (no path)
+    const sha = line.slice(0, sp);
+    const type = gitLocal(cwd, ['cat-file', '-t', sha]);
+    if (type.exitCode !== 0) {
+      return { exempt: false, reason: `object type probe failed (${type.stderr.trim()})` };
+    }
+    if (type.stdout.trim() === 'blob') {
+      return {
+        exempt: false,
+        reason: `transmit set carries a new blob at '${line.slice(sp + 1)}'`,
+      };
+    }
+  }
+  return {
+    exempt: true,
+    reason: 'deletion-only: local tip tree is a subset of the published remote tip',
+  };
+}
+
 // ─── pending-unpushed bookkeeping ─────────────────────────────────────────────
 
 /**
@@ -881,6 +1009,23 @@ function scrubRefusal(
   return { status: 'scrub-refused', warnings, pushedStems: [], scrubFindings: scan.findings };
 }
 
+/** Fail-closed visibility refusal (a public/unknown remote that earned no
+ *  deletion-only exemption). `reason` names WHY the exemption was denied. */
+function publicRemoteRefused(
+  cwd: string,
+  remote: string,
+  op: SyncOp,
+  visibility: RemoteVisibility,
+  reason: string,
+  warnings: string[],
+): SyncResult {
+  warnings.push(
+    `handoff sync: auto-push to '${remote}' refused — remote visibility is '${visibility}'. Custom refs are advertised and fetchable by anyone who can read the repo, and pushed history cannot be un-published. ${reason}. Confirm the repo is private, or explicitly opt in.`,
+  );
+  appendSyncLog(cwd, { event: 'public-remote-refused', remote, visibility, op, reason });
+  return { status: 'public-remote-refused', warnings, pushedStems: [], scrubFindings: [] };
+}
+
 function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: string[]): SyncResult {
   const op = opts.op ?? 'command';
   const maxRetries = opts.maxRetries ?? SYNC_MAX_RETRIES;
@@ -888,20 +1033,14 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
   const offlineBackoffMs = opts.offlineBackoffMs ?? OFFLINE_RETRY_BACKOFF_MS;
   let offlineRetriesLeft = opts.offlineRetries ?? OFFLINE_PUSH_RETRIES;
 
-  // Visibility authorization boundary — fail-closed: only a PROVEN-private
-  // remote (or an explicit opt-in) may receive baton auto-pushes.
-  if (opts.visibility !== 'private' && opts.allowPublicRemote !== true) {
-    warnings.push(
-      `handoff sync: auto-push to '${remote}' refused — remote visibility is '${opts.visibility}'. Custom refs are advertised and fetchable by anyone who can read the repo, and pushed history cannot be un-published. Confirm the repo is private, or explicitly opt in.`,
-    );
-    appendSyncLog(cwd, {
-      event: 'public-remote-refused',
-      remote,
-      visibility: opts.visibility,
-      op,
-    });
-    return { status: 'public-remote-refused', warnings, pushedStems: [], scrubFindings: [] };
-  }
+  // Visibility authorization boundary — fail-closed: only a PROVEN-private remote
+  // (or an explicit opt-in) may receive an UNRESTRICTED baton auto-push. A
+  // public/unknown remote without opt-in is NOT refused outright here: the gate
+  // moved INTO the push retry loop below, where — per attempt, against the OBSERVED
+  // remote sha — a strictly deletion-only transmit set earns a narrow, identity-
+  // masked exemption (evaluateDeletionOnlyExemption). The decision needs the
+  // fetched remote sha, so it cannot live before the fetch.
+  const pushAuthorized = opts.visibility === 'private' || opts.allowPublicRemote === true;
 
   // Fetch-first: absorb remote batons and observe the remote sha (lease base).
   // When the caller already observed the remote in THIS command (knownRemoteSha
@@ -939,31 +1078,78 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
     let pushed = false;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Scrub gate before EVERY push attempt (the transmit delta changes as the
-      // remote moves): detect-and-refuse, fail-closed on scan failure.
+      // remote moves): detect-and-refuse, fail-closed on scan failure. Runs BEFORE
+      // the visibility gate below, so a secret blocks the push even on a public
+      // remote / an otherwise deletion-only delta.
       const scan = scrubScan(cwd, localTip, remoteSha);
       if (!scan.ok || scan.findings.length > 0) return scrubRefusal(cwd, remote, scan, warnings);
 
+      // Visibility gate, per attempt, against the observed remoteSha. Authorized
+      // (proven-private / opt-in) → the full local tip is pushed unchanged.
+      // Otherwise ONLY a strictly deletion-only transmit set proceeds — republished
+      // as an identity-masked single commit; anything that would publish new
+      // content (a new blob or a new stem name) is refused fail-closed.
+      let sourceTip = localTip;
+      let exemptThisPush = false;
+      if (!pushAuthorized) {
+        const decision = evaluateDeletionOnlyExemption(cwd, localTip, remoteSha);
+        if (!decision.exempt) {
+          return publicRemoteRefused(cwd, remote, op, opts.visibility, decision.reason, warnings);
+        }
+        // Rebuild ONE masked commit carrying the post-deletion tip tree onto the
+        // observed remote sha (collapses any piggybacked ancestor commits; the tree
+        // is a subset of the published remote, so no baton is lost or newly leaked).
+        sourceTip = commitTree(
+          cwd,
+          treeOf(cwd, localTip),
+          remoteSha,
+          HANDOFF_DELETION_COMMIT_MSG,
+          maskIdentityEnv(opts.now),
+        );
+        exemptThisPush = true;
+      }
+
+      const refspec = exemptThisPush ? `${sourceTip}:${HANDOFF_REF}` : HANDOFF_PUSH_REFSPEC;
       opts.hooks?.beforePush?.(attempt);
-      assertDittoPushRefspec(HANDOFF_PUSH_REFSPEC);
-      let push = runGitBounded(cwd, ['push', remote, '--', HANDOFF_PUSH_REFSPEC], timeoutMs);
+      assertDittoPushRefspec(refspec);
+      let push = runGitBounded(cwd, ['push', remote, '--', refspec], timeoutMs);
       if (!push.ok && !push.timedOut && offlineRetriesLeft > 0) {
         // Short in-command backoff for a transient offline blip (write-side contract).
         if (classifySyncFailure(`${push.stderr}\n${push.stdout}`) === 'offline') {
           offlineRetriesLeft -= 1;
           Bun.sleepSync(offlineBackoffMs);
-          push = runGitBounded(cwd, ['push', remote, '--', HANDOFF_PUSH_REFSPEC], timeoutMs);
+          push = runGitBounded(cwd, ['push', remote, '--', refspec], timeoutMs);
         }
       }
       if (push.ok) {
         pushed = true;
-        remoteSha = localTip;
-        recordPushed(cwd, localTip);
-        pushedStems = treeEntries(cwd, localTip)
+        if (exemptThisPush) {
+          // Flip the local ref to the masked commit (identical tip tree — no baton
+          // lost) so local and remote agree and pending clears.
+          const cas = gitLocal(cwd, ['update-ref', HANDOFF_REF, sourceTip, localTip]);
+          if (cas.exitCode !== 0) {
+            appendSyncLog(cwd, {
+              event: 'exempt-local-cas-lost',
+              remote,
+              detail: cas.stderr.trim(),
+            });
+          }
+        }
+        remoteSha = sourceTip;
+        localTip = sourceTip;
+        recordPushed(cwd, sourceTip);
+        pushedStems = treeEntries(cwd, sourceTip)
           .filter((e) => e.type === 'blob' && e.name.endsWith('.md'))
           .map((e) => e.name.replace(/\.md$/, ''));
         // Auto-push fires at a moment the user is not watching — record WHAT
         // was sent and where, durably.
-        appendSyncLog(cwd, { event: 'pushed', remote, tip: localTip, stems: pushedStems, op });
+        appendSyncLog(cwd, {
+          event: exemptThisPush ? 'pushed-deletion-exempt' : 'pushed',
+          remote,
+          tip: sourceTip,
+          stems: pushedStems,
+          op,
+        });
         break;
       }
       const out = `${push.stderr}\n${push.stdout}`.trim();
@@ -997,8 +1183,14 @@ function syncInner(cwd: string, remote: string, opts: SyncOptions, warnings: str
   }
 
   // Retention truncation at push time (fetch/push above established that the
-  // remote holds `remoteSha`; observed lease base = that sha).
-  if (remoteSha !== null && revParseQuiet(cwd, HANDOFF_REF) === remoteSha) {
+  // remote holds `remoteSha`; observed lease base = that sha). SKIPPED on an
+  // unauthorized (public/unknown, no opt-in) remote: rebuildTruncatedChain
+  // deliberately PRESERVES the original author/committer identity (for future-
+  // window correctness), which on a public remote would re-leak exactly the
+  // identity the deletion-only exemption just masked — and the force-push would
+  // itself be an unauthorized publication. Truncation runs only on a proven-
+  // private / opted-in remote.
+  if (pushAuthorized && remoteSha !== null && revParseQuiet(cwd, HANDOFF_REF) === remoteSha) {
     runRetention(cwd, remote, remoteSha, opts, warnings);
   }
   return { status, warnings, pushedStems, scrubFindings: [] };

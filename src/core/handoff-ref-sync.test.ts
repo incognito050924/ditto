@@ -13,6 +13,7 @@ import {
   buildSyncWarning,
   classifySyncFailure,
   detectSecretMatches,
+  evaluateDeletionOnlyExemption,
   fetchHandoffRef,
   pendingUnpushed,
   purgeHandoffHistory,
@@ -734,6 +735,242 @@ describe('syncHandoffRef with knownRemoteSha (fetch elision)', () => {
     expect(git(origin, ['rev-parse', HANDOFF_REF]).stdout.trim()).toBe(refTip(repo) ?? 'MISSING');
     expect(pendingUnpushed(repo).pending).toBe(false);
   });
+});
+
+// ─── deletion-only visibility exemption (object-set based) ────────────────────
+
+describe('deletion-only visibility exemption (public remote, no opt-in)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** Publish {X, Y} under a private sync, then return the two stems. */
+  async function seededPair(
+    repo: string,
+  ): Promise<{ store: HandoffRefStore; stemX: string; stemY: string }> {
+    const store = new HandoffRefStore(repo);
+    const stemX = store.write(makeHandoff('sess-x'), { author: 'alice' }).stem;
+    const stemY = store.write(makeHandoff('sess-y'), { author: 'alice' }).stem;
+    expect(syncHandoffRef(repo, 'origin', opts()).status).toBe('pushed');
+    return { store, stemX, stemY };
+  }
+
+  test('(a) a PURE deletion delta (zero new objects) is exempt and pushes an identity-masked commit', async () => {
+    // C1/C2: the transmit set of a consume-only delta carries no new blob and no
+    // new stem name (a strict subset of the published remote tip) — so a public
+    // remote with NO opt-in still accepts it (the deletion machinery leaks nothing
+    // the remote does not already hold). Judged on the OBJECT SET, never op.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const { store, stemX, stemY } = await seededPair(repo);
+    expect(store.consume(stemX).status).toBe('consumed');
+
+    const out = syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' }));
+    expect(out.status).toBe('pushed');
+    // the deletion landed on the public remote: X gone, Y survives.
+    expect(treeNames(origin, HANDOFF_REF)).toEqual([`${stemY}.md`]);
+    expect(pendingUnpushed(repo).pending).toBe(false);
+  });
+
+  test('(g) the exempt commit has a MASKED author/committer identity', async () => {
+    // C3: the deletion commit the exemption newly publishes must not leak WHO
+    // consumed the baton — its author/committer identity is masked (built fresh,
+    // NOT the identity-preserving truncation/purge path).
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const { store, stemX } = await seededPair(repo);
+    expect(store.consume(stemX).status).toBe('consumed');
+    expect(
+      syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' })).status,
+    ).toBe('pushed');
+
+    const ids = git(origin, ['log', '-1', '--format=%an%n%ae%n%cn%n%ce', HANDOFF_REF])
+      .stdout.trim()
+      .split('\n');
+    expect(ids).not.toContain('Fixture');
+    expect(ids).not.toContain('fixture@example.invalid');
+    expect(ids[0]).toBe('ditto handoff');
+    expect(ids[1]).toBe('handoff@ditto.invalid');
+    expect(ids[2]).toBe('ditto handoff');
+    expect(ids[3]).toBe('handoff@ditto.invalid');
+    // Dates are UTC-pinned: an unmasked date would leak the consumer's local
+    // timezone offset — a weak identity signal — onto the public remote.
+    const dates = git(origin, ['log', '-1', '--format=%ai%n%ci', HANDOFF_REF])
+      .stdout.trim()
+      .split('\n');
+    expect(dates).toHaveLength(2);
+    for (const d of dates) expect(d.endsWith('+0000')).toBe(true);
+  });
+
+  test('(b) a consume carrying an unpushed WRITE baton has new objects → refused (fail-closed)', async () => {
+    // C1: op==='consume' is NOT the signal — computeReconcileTarget re-applies the
+    // unpushed write baton, so the transmit set gains a NEW blob + NEW stem name.
+    // The exemption must refuse, protecting the un-published body.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const { store, stemX, stemY } = await seededPair(repo);
+    const stemW = store.write(makeHandoff('sess-w'), { author: 'alice' }).stem; // unpushed write
+    expect(store.consume(stemX).status).toBe('consumed');
+
+    const out = syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' }));
+    expect(out.status).toBe('public-remote-refused');
+    // nothing egressed: the remote tip still holds exactly {X, Y}, no W, X not deleted.
+    expect(treeNames(origin, HANDOFF_REF)).toEqual([`${stemX}.md`, `${stemY}.md`].sort());
+    expect(treeNames(origin, HANDOFF_REF)).not.toContain(`${stemW}.md`);
+  });
+
+  test('(i) a handoff written AND consumed locally since the last push does NOT block a pure net-deletion (tree-scoped enumeration)', async () => {
+    // Review finding (wi_2607239vu): the defense-in-depth enumeration must walk
+    // the TRANSMIT surface — the local tip TREE — not commit-history
+    // reachability. W's body blob lives only in collapsed intermediate commits
+    // that never cross the wire (the exempt push rebuilds ONE commit carrying
+    // the tip tree); enumerating history would drag W in and over-refuse a
+    // genuinely pure net-deletion, breaking ac-1's remote extinction.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const { store, stemX, stemY } = await seededPair(repo);
+    const stemW = store.write(makeHandoff('sess-w'), { author: 'alice' }).stem;
+    expect(store.consume(stemW).status).toBe('consumed'); // W retracted before any push
+    expect(store.consume(stemX).status).toBe('consumed');
+
+    const out = syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' }));
+    expect(out.status).toBe('pushed');
+    // The net-deletion landed: X gone, W never published, Y survives.
+    expect(treeNames(origin, HANDOFF_REF)).toEqual([`${stemY}.md`]);
+    // W's body never reached the remote object store in ANY reachable form.
+    expect(git(origin, ['rev-list', '--objects', '--all']).stdout).not.toContain(stemW);
+  });
+
+  test('(j) the recorded pushed-ref bookkeeping NEVER substitutes for an observed remote base', async () => {
+    // ac-2: after a successful push the local SYNC_PUSHED_REF records the pushed
+    // tip — but it is bookkeeping, not an observation. When the remote ref has
+    // since vanished (deleted/reset), the only OBSERVED base is null and the
+    // exemption must stay fail-closed refused, stale bookkeeping notwithstanding.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const { store, stemX } = await seededPair(repo); // records SYNC_PUSHED_REF
+    expect(git(repo, ['rev-parse', '--verify', '--quiet', SYNC_PUSHED_REF]).exitCode).toBe(0);
+    expect(git(origin, ['update-ref', '-d', HANDOFF_REF]).exitCode).toBe(0); // remote base gone
+    expect(store.consume(stemX).status).toBe('consumed');
+
+    const out = syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' }));
+    expect(out.status).toBe('public-remote-refused');
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+  });
+
+  test('(d) an unborn/unobserved remote base is fail-closed refused (no published base to delete against)', async () => {
+    // fail-closed: a first push to an unborn public remote would publish EVERYTHING,
+    // so a consume against it can never be a deletion-only exemption.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    new HandoffRefStore(repo).write(makeHandoff('sess-unborn'), { author: 'alice' });
+
+    const out = syncHandoffRef(repo, 'origin', opts({ visibility: 'public', op: 'consume' }));
+    expect(out.status).toBe('public-remote-refused');
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+  });
+
+  test('(f) the scrub gate runs BEFORE the visibility gate: a secret blob on a public remote → scrub-refused', async () => {
+    // Regression guard: the gate moved into the push loop AFTER scrub, so a
+    // secret-shaped body is caught (scrub-refused) even on a public remote — the
+    // visibility refusal never short-circuits the scrub.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    new HandoffRefStore(repo).write(makeHandoff('sess-clean'), { author: 'alice' });
+    plantRawEntry(repo, 'evil__mallory.md', `body ghp_${'Z'.repeat(24)} leaked`);
+
+    const out = syncHandoffRef(repo, 'origin', opts({ visibility: 'public' }));
+    expect(out.status).toBe('scrub-refused');
+    expect(out.scrubFindings.some((f) => f.entry === 'evil__mallory.md')).toBe(true);
+    expect(git(origin, ['rev-parse', '--verify', '--quiet', HANDOFF_REF]).exitCode).not.toBe(0);
+  });
+
+  test('(e) exemption is RE-EVALUATED per attempt: a re-merge that re-adds a local baton flips exempt → refused', async () => {
+    // C1: the decision is per push attempt against the CURRENT remoteSha. Attempt 0
+    // is deletion-only (exempt); a hook then moves the remote (non-FF) AND writes a
+    // fresh local baton, so the re-merge re-introduces a local-only body → attempt 1
+    // is no longer deletion-only → refused (the late write NEVER leaks).
+    const origin = await makeBareOrigin();
+    const a = await makeRepo(origin);
+    const b = await makeRepo(origin);
+    const store = new HandoffRefStore(a);
+    const stemX = store.write(makeHandoff('sess-x'), { author: 'alice' }).stem;
+    store.write(makeHandoff('sess-y'), { author: 'alice' });
+    expect(syncHandoffRef(a, 'origin', opts()).status).toBe('pushed');
+    expect(store.consume(stemX).status).toBe('consumed'); // attempt-0 delta: deletion-only
+
+    let fired = 0;
+    const out = syncHandoffRef(
+      a,
+      'origin',
+      opts({
+        visibility: 'public',
+        op: 'consume',
+        hooks: {
+          beforePush: () => {
+            if (fired > 0) return;
+            fired += 1;
+            otherPcPush(b, 'sess-race'); // remote moves → the exempt push is non-FF
+            new HandoffRefStore(a).write(makeHandoff('sess-late'), { author: 'alice' }); // new local body
+          },
+        },
+      }),
+    );
+    // per-attempt re-evaluation → the flip; a CACHED decision would instead push
+    // (leaking sess-late). The refusal proves the re-evaluation.
+    expect(fired).toBe(1);
+    expect(out.status).toBe('public-remote-refused');
+    expect(treeNames(origin, HANDOFF_REF).some((n) => n.includes('sess-late'))).toBe(false);
+    expect(treeNames(origin, HANDOFF_REF).some((n) => n.includes('sess-x'))).toBe(true); // X not deleted on the remote
+  });
+
+  test('(c/d) the predicate is fail-closed on an enumeration error and on a null base', async () => {
+    // Direct unit coverage of the fail-closed branches: (d) a null observed base
+    // is never exempt; (c) a base sha that is not a resolvable object makes the
+    // transmit-tree enumeration throw → not exempt (never "unknown → granted").
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    new HandoffRefStore(repo).write(makeHandoff('sess-fc'), { author: 'alice' });
+    const localTip = refTip(repo);
+    expect(localTip).not.toBeNull();
+
+    expect(evaluateDeletionOnlyExemption(repo, localTip as string, null).exempt).toBe(false);
+    const bogus = 'f'.repeat(40); // a well-formed sha that resolves to no object
+    const d = evaluateDeletionOnlyExemption(repo, localTip as string, bogus);
+    expect(d.exempt).toBe(false);
+    expect(d.reason.toLowerCase()).toContain('enumeration failed');
+  });
+
+  test('(h) retention truncation is SKIPPED on the exemption path (identity-preserving rebuild would re-leak)', async () => {
+    // C6 decision (FIXED here): retention rebuilds history with the ORIGINAL
+    // author/committer preserved; running it on the masked public exemption push
+    // would re-publish exactly the identity just masked. So truncation is skipped
+    // on an unauthorized remote — history stays un-truncated, no identity re-leak.
+    const origin = await makeBareOrigin();
+    const repo = await makeRepo(origin);
+    const store = new HandoffRefStore(repo);
+    for (let i = 0; i < 60; i++) {
+      store.write(makeHandoff(`sess-${String(i).padStart(3, '0')}`), { author: 'alice' });
+    }
+    expect(syncHandoffRef(repo, 'origin', opts()).status).toBe('pushed'); // private base, recent → no truncation
+    const baseCount = Number(git(origin, ['rev-list', '--count', HANDOFF_REF]).stdout.trim());
+    expect(baseCount).toBe(60);
+    const victim = store.list().batons[0]?.stem;
+    expect(victim).toBeDefined();
+    expect(store.consume(victim as string).status).toBe('consumed');
+
+    // now := +8 days → a NORMAL push would truncate to 50 (and re-leak identity).
+    const out = syncHandoffRef(
+      repo,
+      'origin',
+      opts({ visibility: 'public', op: 'consume', now: new Date(Date.now() + 8 * DAY) }),
+    );
+    expect(out.status).toBe('pushed');
+    // the deletion landed (one fewer baton) …
+    expect(treeNames(origin, HANDOFF_REF)).toHaveLength(59);
+    // … but retention did NOT run: history was not cut to 50 (skip proven).
+    expect(Number(git(origin, ['rev-list', '--count', HANDOFF_REF]).stdout.trim())).toBeGreaterThan(
+      50,
+    );
+  }, 120_000);
 });
 
 // ─── pending-unpushed bookkeeping ─────────────────────────────────────────────

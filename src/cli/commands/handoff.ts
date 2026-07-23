@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { defineCommand } from 'citty';
+import { readHandoffPushConsent, writeHandoffPushConsent } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
   HandoffRefStore,
@@ -32,7 +33,11 @@ import { USAGE_ERROR_EXIT, parseOutputFormat, writeError, writeHuman, writeJson 
  *    (`syncHandoffRef`, fetch-first + push) with the module's class-preserved
  *    warning surface. The sync visibility gate is FAIL-CLOSED: repo visibility is
  *    resolved via `gh repo view` (absent/unresolvable → 'unknown', which the gate
- *    refuses like public); `--push-public` is the explicit opt-in.
+ *    refuses like public); `--push-public` is the one-shot explicit opt-in, and
+ *    `--consent-push-remote` records a standing per-project consent (ac-3,
+ *    wi_2607239vu: origin-bound normalized URL + visibility stamp) under which
+ *    subsequent writes auto-push — a private→public visibility flip suspends the
+ *    grant until it is re-confirmed.
  *  - `consume [id]` is first-consumer-wins: the store returns the body ONLY after
  *    its update-ref CAS landed the deletion commit (a CAS loser re-reads and gets
  *    the DISTINCT `already_consumed` refusal — different message and exit from
@@ -100,13 +105,49 @@ function splitPair(raw: string, flag: string): [string, string] {
 }
 
 /**
- * Resolve the repo's actual visibility for the sync gate via `gh repo view`.
- * Graceful degrade: gh absent / not a GitHub remote / unparsable → 'unknown',
- * which the gate treats fail-closed (refuses auto-push unless --push-public).
+ * Test seam (plan wi_2607239vu, sandbox finding): the production visibility probe
+ * spawns `gh repo view`, so a hermetic unit test would otherwise hit the real gh
+ * CLI / network. A test injects a fixed visibility here and clears it afterwards;
+ * production leaves it null and keeps the gh path. Only the resolver is seamed —
+ * everything downstream (the gate, the consent stamp) reads the injected value.
+ */
+let injectedRepoVisibility: RemoteVisibility | null = null;
+export function __setRepoVisibilityForTest(v: RemoteVisibility | null): void {
+  injectedRepoVisibility = v;
+}
+
+/**
+ * Derive the `gh repo view` target (HOST/OWNER/REPO) from the origin URL so the
+ * visibility probe inspects the PUSH TARGET itself — an argument-less `gh repo
+ * view` reads gh's configured DEFAULT repo, which can point at a different
+ * (possibly private) repo while origin was re-pointed at a public one, flipping
+ * the gate open. https and ssh forge-style URLs are derivable; anything else
+ * (e.g. a local path) returns null and the caller resolves 'unknown'
+ * (fail-closed — same as an unresolvable gh probe).
+ */
+export function deriveVisibilityProbeTarget(originUrl: string): string | null {
+  const url = normalizeOriginUrl(originUrl);
+  const https = url.match(/^https?:\/\/(?:[^@/]+@)?([^/:]+)\/([^/]+)\/([^/]+)$/);
+  if (https?.[1] && https[2] && https[3]) return `${https[1]}/${https[2]}/${https[3]}`;
+  const ssh = url.match(/^(?:ssh:\/\/)?git@([^:/]+)[:/]([^/]+)\/([^/]+)$/);
+  if (ssh?.[1] && ssh[2] && ssh[3]) return `${ssh[1]}/${ssh[2]}/${ssh[3]}`;
+  return null;
+}
+
+/**
+ * Resolve the ORIGIN remote's actual visibility for the sync gate via `gh repo
+ * view <host/owner/repo>` — pinned to the push target, never gh's default repo.
+ * Graceful degrade: gh absent / no origin / not a forge-style remote /
+ * unparsable → 'unknown', which the gate treats fail-closed (refuses auto-push
+ * unless --push-public).
  */
 function resolveRepoVisibility(repoRoot: string): RemoteVisibility {
+  if (injectedRepoVisibility !== null) return injectedRepoVisibility;
+  const originUrl = resolveOriginUrl(repoRoot);
+  const target = originUrl === null ? null : deriveVisibilityProbeTarget(originUrl);
+  if (target === null) return 'unknown';
   try {
-    const proc = Bun.spawnSync(['gh', 'repo', 'view', '--json', 'visibility'], {
+    const proc = Bun.spawnSync(['gh', 'repo', 'view', target, '--json', 'visibility'], {
       cwd: repoRoot,
       stdout: 'pipe',
       stderr: 'pipe',
@@ -137,6 +178,39 @@ function hasOriginRemote(repoRoot: string): boolean {
 }
 
 /**
+ * Normalize an origin URL to the canonical form used as the write-push consent
+ * KEY. The consent reader compares the stored `origin_url` VERBATIM (core keeps
+ * that side dumb on purpose), so the CLI owns normalization and MUST apply the
+ * same transform on both the write and the read side — otherwise `repo` and
+ * `repo.git` (or a trailing slash) would be treated as different remotes and a
+ * legitimate grant would be silently refused. Strips trailing slashes, then one
+ * trailing `.git`, then any slash the `.git` strip exposed.
+ */
+function normalizeOriginUrl(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '');
+}
+
+/** The current origin URL in its normalized consent-key form (null when absent). */
+function resolveOriginUrl(repoRoot: string): string | null {
+  try {
+    const proc = Bun.spawnSync(['git', 'remote', 'get-url', 'origin'], {
+      cwd: repoRoot,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    if (proc.exitCode !== 0) return null;
+    const url = normalizeOriginUrl(proc.stdout?.toString() ?? '');
+    return url.length > 0 ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Auto-sync the hidden ref with origin (fetch-first + push). Null when there is
  * no origin remote — a purely local repo stays silent instead of warning forever.
  * All warnings (offline/auth/scrub/visibility, class-preserved) go to stderr.
@@ -148,10 +222,10 @@ function runAutoSync(
   repoRoot: string,
   op: SyncOp,
   allowPublicRemote: boolean,
+  visibility: RemoteVisibility,
   knownRemoteSha?: string | null,
 ): SyncResult | null {
   if (!hasOriginRemote(repoRoot)) return null;
-  const visibility = resolveRepoVisibility(repoRoot);
   const result = syncHandoffRef(repoRoot, 'origin', {
     visibility,
     allowPublicRemote,
@@ -161,7 +235,23 @@ function runAutoSync(
   });
   for (const w of result.warnings) writeError(w);
   if (result.status === 'public-remote-refused') {
-    writeError('handoff sync: pass --push-public to opt in for a public/unknown remote.');
+    if (op === 'consume') {
+      // C6: a consume is refused on a public/unknown remote when its transmit set
+      // is MORE than a pure deletion, when the remote base was unobservable, or on
+      // an enumeration failure — the module's refusal warning above names the
+      // exact cause (never re-asserted here: claiming a specific cause like "a
+      // companion un-pushed write" can be false and misdirect the user).
+      // buildSyncWarning attaches its re-consume-window NOTE to the offline/auth
+      // classes but NOT to this refusal, so surface the same window here — and
+      // state plainly what --push-public would publish, because on a public
+      // remote that includes every un-pushed body in the local ref, possibly
+      // content the user meant to retract by consuming it.
+      writeError(
+        "handoff sync: the consume deletion was NOT pushed to 'origin' — the delete-only exemption refused it (the warning above names why; a new handoff body must never reach a public/unknown remote). NOTE: the remote copy still exists, so another PC may still consume it (re-consume window open; at-most-duplicated, never lost). --push-public would push the FULL local ref — including any un-pushed handoff bodies — so pass it only if you intend to publish that content.",
+      );
+    } else {
+      writeError('handoff sync: pass --push-public to opt in for a public/unknown remote.');
+    }
   }
   return result;
 }
@@ -321,7 +411,13 @@ const writeArgs = {
   'push-public': {
     type: 'boolean',
     description:
-      'Explicit opt-in to auto-push the baton ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published).',
+      'One-shot explicit opt-in to auto-push the baton ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published). For a standing per-project grant use --consent-push-remote.',
+    default: false,
+  },
+  'consent-push-remote': {
+    type: 'boolean',
+    description:
+      'Record standing write-push consent for THIS origin: this and subsequent `handoff write` pushes to the public/unknown-visibility remote proceed without re-prompting. Origin-bound (a re-pointed origin needs a new grant) and visibility-stamped: a private→public flip suspends the grant until re-confirmed. A purge still needs the explicit --push-public opt-in.',
     default: false,
   },
   output: {
@@ -372,7 +468,50 @@ async function runWrite({ args }: { args: Record<string, unknown> }): Promise<vo
     process.exit(1);
     return;
   }
-  const sync = runAutoSync(repoRoot, 'write', args['push-public'] === true);
+  // ac-3 write-push consent (wi_2607239vu): a public/unknown remote refuses a new
+  // body unless (a) the one-shot --push-public opt-in, or (b) a standing per-
+  // project consent recorded for THIS origin (normalized URL, exact match).
+  // --consent-push-remote records the grant (visibility-stamped) and it applies
+  // from this write onward. A grant stamped while the remote was private/internal
+  // is NOT applied once the remote is public/unknown — the CLI asks for a
+  // re-confirm instead (the flip must be a conscious decision). A consume's pure
+  // deletion needs no consent at all: the sync core auto-exempts it.
+  const visibility = resolveRepoVisibility(repoRoot);
+  const originUrl = resolveOriginUrl(repoRoot);
+  if (args['consent-push-remote'] === true) {
+    if (originUrl === null) {
+      // Loud no-op: a grant is origin-bound, so with no origin there is nothing
+      // to bind it to — silently dropping the flag would look like it took.
+      writeError(
+        'handoff write: --consent-push-remote NOT recorded — no origin remote to bind the consent to.',
+      );
+    } else {
+      await writeHandoffPushConsent(repoRoot, {
+        origin_url: originUrl,
+        visibility_at_grant: visibility === 'private' ? 'private' : 'public',
+        granted_at: new Date().toISOString(),
+      });
+    }
+  }
+  let allowPublicRemote = args['push-public'] === true;
+  if (!allowPublicRemote && originUrl !== null && visibility !== 'private') {
+    const consent = await readHandoffPushConsent(repoRoot, originUrl);
+    if (consent !== undefined) {
+      const grantWasPrivate =
+        consent.visibility_at_grant === 'private' || consent.visibility_at_grant === 'internal';
+      if (grantWasPrivate) {
+        writeError(
+          `handoff sync: write-push consent for 'origin' was granted while the remote was '${consent.visibility_at_grant}' but it is now public/unknown — the consent is NOT applied until you re-confirm (re-run write with --consent-push-remote).`,
+        );
+      } else {
+        writeError(
+          "handoff: write-push consent is active for 'origin' — this write auto-pushes to the public/unknown remote under the standing per-project grant (a purge still needs the explicit --push-public opt-in).",
+        );
+        allowPublicRemote = true;
+      }
+    }
+  }
+  const sync = runAutoSync(repoRoot, 'write', allowPublicRemote, visibility);
   if (format === 'json') {
     writeJson({
       ref: res.ref,
@@ -505,9 +644,21 @@ async function runConsume({ args }: { args: Record<string, unknown> }): Promise<
   // pre-resolution fetch's observation feeds knownRemoteSha ('fetched' → the
   // sha, 'remote-unborn' → null) so the sync skips its initial fetch;
   // 'fetch-failed' / no origin → undefined keeps fetch-first behavior.
+  // NOTE deliberately NO grant surface here (wi_2607239vu, ac-3): a PURE deletion
+  // needs none — the sync core auto-exempts it on a public/unknown remote
+  // (identity-masked, a strict subset of the published remote tip) — and a
+  // companion un-pushed write body must stay behind the explicit --push-public
+  // opt-in, never behind a recorded standing grant.
+  const visibility = resolveRepoVisibility(repoRoot);
   const knownRemoteSha =
     preFetch === null || preFetch.status === 'fetch-failed' ? undefined : preFetch.sha;
-  const sync = runAutoSync(repoRoot, 'consume', args['push-public'] === true, knownRemoteSha);
+  const sync = runAutoSync(
+    repoRoot,
+    'consume',
+    args['push-public'] === true,
+    visibility,
+    knownRemoteSha,
+  );
   if (format === 'json') {
     writeJson({
       id: stem,
@@ -542,7 +693,7 @@ const handoffConsume = defineCommand({
     'push-public': {
       type: 'boolean',
       description:
-        'Explicit opt-in to push the deletion commit to a public/unknown-visibility remote.',
+        'Explicit opt-in to push the FULL consume transmit set — including any companion un-pushed write body — to a public/unknown-visibility remote (pushed history cannot be un-published). A PURE deletion already propagates identity-masked without this.',
       default: false,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },

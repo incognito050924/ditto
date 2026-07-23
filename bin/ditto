@@ -15753,7 +15753,7 @@ var init_cleanup_index = __esm(() => {
 });
 
 // src/core/cleanup-store.ts
-import { mkdir as mkdir6, rename as rename3, stat as stat5 } from "fs/promises";
+import { mkdir as mkdir6, rename as rename4, stat as stat5 } from "fs/promises";
 import { isAbsolute as isAbsolute6, join as join39, relative as relative11, resolve as resolve9 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
@@ -15840,7 +15840,7 @@ class CleanupStore {
     const owningRepo = owning === null ? null : toRepoRel(this.repoRoot, owning) || ".";
     const destAbs = join39(this.runDir(runId2), input.action, name);
     await ensureDir(join39(this.runDir(runId2), input.action));
-    await rename3(abs, destAbs);
+    await rename4(abs, destAbs);
     const entry = {
       name,
       original_path: repoRel,
@@ -15869,7 +15869,7 @@ class CleanupStore {
     const stagedAbs = join39(this.repoRoot, entry.staged_path);
     const originalAbs = join39(this.repoRoot, entry.original_path);
     await ensureDir(join39(originalAbs, ".."));
-    await rename3(stagedAbs, originalAbs);
+    await rename4(stagedAbs, originalAbs);
     return entry;
   }
   async exists(runId2) {
@@ -29965,9 +29965,54 @@ function assembleRelevanceVerdicts(judgments, refutes = []) {
 }
 
 // src/core/ditto-config.ts
-import { mkdir as mkdir3 } from "fs/promises";
+init_zod();
+import { mkdir as mkdir3, rename as rename3, writeFile as writeFile3 } from "fs/promises";
 import { dirname as dirname8 } from "path";
 init_ditto_paths();
+var dittoConfigHandoffPushConsent = exports_external.object({
+  origin_url: exports_external.string().min(1),
+  visibility_at_grant: exports_external.enum(["public", "private", "internal"]),
+  granted_at: exports_external.string().min(1)
+}).describe("Handoff write-push consent \u2014 origin-bound + visibility-stamped");
+async function readHandoffPushConsent(repoRoot, currentOriginUrl) {
+  const file = Bun.file(localDir(repoRoot, "config.json"));
+  if (!await file.exists())
+    return;
+  let raw;
+  try {
+    raw = JSON.parse(await file.text());
+  } catch {
+    return;
+  }
+  if (raw === null || typeof raw !== "object")
+    return;
+  const block = raw.handoff_push_consent;
+  const parsed = dittoConfigHandoffPushConsent.safeParse(block);
+  if (!parsed.success)
+    return;
+  if (parsed.data.origin_url !== currentOriginUrl)
+    return;
+  return parsed.data;
+}
+async function writeHandoffPushConsent(repoRoot, consent) {
+  const path = localDir(repoRoot, "config.json");
+  let existing = {};
+  const file = Bun.file(path);
+  if (await file.exists()) {
+    try {
+      const raw = JSON.parse(await file.text());
+      if (dittoConfig.safeParse(raw).success && raw !== null && typeof raw === "object") {
+        existing = raw;
+      }
+    } catch {}
+  }
+  const next = { ...existing, handoff_push_consent: consent };
+  await mkdir3(dirname8(path), { recursive: true });
+  const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile3(tmp, `${JSON.stringify(next, null, 2)}
+`);
+  await rename3(tmp, path);
+}
 async function readDeepInterviewConfigDefaults(repoRoot, onMalformed) {
   const file = Bun.file(localDir(repoRoot, "config.json"));
   if (!await file.exists())
@@ -30281,7 +30326,7 @@ import { join as join34 } from "path";
 
 // src/core/e2e/browser.ts
 import { createHash as createHash9 } from "crypto";
-import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
+import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile4 } from "fs/promises";
 import { homedir as homedir6 } from "os";
 import { dirname as dirname9, join as join33, relative as relative9, sep as sep5 } from "path";
 import { fileURLToPath } from "url";
@@ -30491,7 +30536,7 @@ async function runJourney(repoRoot, runId2, spec) {
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir4(runDir, { recursive: true });
   const configAbs = join33(runDir, "runner-config.json");
-  await writeFile3(configAbs, JSON.stringify({
+  await writeFile4(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
     executablePath: probe.executablePath,
     url: spec.url,
@@ -48412,6 +48457,17 @@ var SYNC_LOG_FILE = "handoff-sync.jsonl";
 var ZERO_SHA2 = "0".repeat(40);
 var MAX_LOCAL_CAS = 3;
 var HISTORY_SCAN_CAP = 200;
+var HANDOFF_DELETION_COMMIT_MSG = "ditto handoff baton: consume (deletion-only, identity-masked)";
+var MASK_IDENTITY_ENV = {
+  GIT_AUTHOR_NAME: "ditto handoff",
+  GIT_AUTHOR_EMAIL: "handoff@ditto.invalid",
+  GIT_COMMITTER_NAME: "ditto handoff",
+  GIT_COMMITTER_EMAIL: "handoff@ditto.invalid"
+};
+function maskIdentityEnv(now = new Date) {
+  const utc = now.toISOString();
+  return { ...MASK_IDENTITY_ENV, GIT_AUTHOR_DATE: utc, GIT_COMMITTER_DATE: utc };
+}
 function assertDittoPushRefspec(refspec) {
   if (refspec.startsWith("+")) {
     throw new Error(`handoff-ref-sync: force-marker refspec refused: ${refspec}`);
@@ -48657,6 +48713,67 @@ function scrubScan(cwd, tip, remoteSha) {
   }
   return { ok: true, findings };
 }
+function evaluateDeletionOnlyExemption(cwd, localTip, remoteSha) {
+  if (remoteSha === null) {
+    return {
+      exempt: false,
+      reason: "remote ref is unborn/unobserved \u2014 no published base to delete against"
+    };
+  }
+  let localEntries;
+  let remoteByName;
+  try {
+    localEntries = treeEntries(cwd, localTip);
+    remoteByName = new Map(treeEntries(cwd, remoteSha).map((e2) => [e2.name, e2.sha]));
+  } catch (err) {
+    return {
+      exempt: false,
+      reason: `transmit tree enumeration failed (${err instanceof Error ? err.message : String(err)})`
+    };
+  }
+  for (const e2 of localEntries) {
+    const remoteEntrySha = remoteByName.get(e2.name);
+    if (remoteEntrySha === undefined || remoteEntrySha !== e2.sha) {
+      return {
+        exempt: false,
+        reason: `transmit set adds or modifies '${e2.name}' \u2014 not deletion-only`
+      };
+    }
+  }
+  const objs = gitLocal(cwd, [
+    "rev-list",
+    "--objects",
+    `${localTip}^{tree}`,
+    `^${remoteSha}^{tree}`,
+    "--"
+  ]);
+  if (objs.exitCode !== 0) {
+    return { exempt: false, reason: `transmit object enumeration failed (${objs.stderr.trim()})` };
+  }
+  for (const line of objs.stdout.split(`
+`)) {
+    if (line.length === 0)
+      continue;
+    const sp = line.indexOf(" ");
+    if (sp === -1)
+      continue;
+    const sha = line.slice(0, sp);
+    const type = gitLocal(cwd, ["cat-file", "-t", sha]);
+    if (type.exitCode !== 0) {
+      return { exempt: false, reason: `object type probe failed (${type.stderr.trim()})` };
+    }
+    if (type.stdout.trim() === "blob") {
+      return {
+        exempt: false,
+        reason: `transmit set carries a new blob at '${line.slice(sp + 1)}'`
+      };
+    }
+  }
+  return {
+    exempt: true,
+    reason: "deletion-only: local tip tree is a subset of the published remote tip"
+  };
+}
 function pendingUnpushed(cwd) {
   const localTip = revParseQuiet(cwd, HANDOFF_REF);
   const lastPushed = revParseQuiet(cwd, SYNC_PUSHED_REF);
@@ -48867,22 +48984,18 @@ function scrubRefusal(cwd, remote, scan, warnings) {
   });
   return { status: "scrub-refused", warnings, pushedStems: [], scrubFindings: scan.findings };
 }
+function publicRemoteRefused(cwd, remote, op, visibility, reason, warnings) {
+  warnings.push(`handoff sync: auto-push to '${remote}' refused \u2014 remote visibility is '${visibility}'. Custom refs are advertised and fetchable by anyone who can read the repo, and pushed history cannot be un-published. ${reason}. Confirm the repo is private, or explicitly opt in.`);
+  appendSyncLog(cwd, { event: "public-remote-refused", remote, visibility, op, reason });
+  return { status: "public-remote-refused", warnings, pushedStems: [], scrubFindings: [] };
+}
 function syncInner(cwd, remote, opts, warnings) {
   const op = opts.op ?? "command";
   const maxRetries = opts.maxRetries ?? SYNC_MAX_RETRIES;
   const timeoutMs = opts.timeoutMs ?? SYNC_TIMEOUT_MS;
   const offlineBackoffMs = opts.offlineBackoffMs ?? OFFLINE_RETRY_BACKOFF_MS;
   let offlineRetriesLeft = opts.offlineRetries ?? OFFLINE_PUSH_RETRIES;
-  if (opts.visibility !== "private" && opts.allowPublicRemote !== true) {
-    warnings.push(`handoff sync: auto-push to '${remote}' refused \u2014 remote visibility is '${opts.visibility}'. Custom refs are advertised and fetchable by anyone who can read the repo, and pushed history cannot be un-published. Confirm the repo is private, or explicitly opt in.`);
-    appendSyncLog(cwd, {
-      event: "public-remote-refused",
-      remote,
-      visibility: opts.visibility,
-      op
-    });
-    return { status: "public-remote-refused", warnings, pushedStems: [], scrubFindings: [] };
-  }
+  const pushAuthorized = opts.visibility === "private" || opts.allowPublicRemote === true;
   let remoteSha;
   if (opts.knownRemoteSha !== undefined) {
     remoteSha = opts.knownRemoteSha;
@@ -48916,23 +49029,51 @@ function syncInner(cwd, remote, opts, warnings) {
       const scan = scrubScan(cwd, localTip, remoteSha);
       if (!scan.ok || scan.findings.length > 0)
         return scrubRefusal(cwd, remote, scan, warnings);
+      let sourceTip = localTip;
+      let exemptThisPush = false;
+      if (!pushAuthorized) {
+        const decision = evaluateDeletionOnlyExemption(cwd, localTip, remoteSha);
+        if (!decision.exempt) {
+          return publicRemoteRefused(cwd, remote, op, opts.visibility, decision.reason, warnings);
+        }
+        sourceTip = commitTree(cwd, treeOf(cwd, localTip), remoteSha, HANDOFF_DELETION_COMMIT_MSG, maskIdentityEnv(opts.now));
+        exemptThisPush = true;
+      }
+      const refspec = exemptThisPush ? `${sourceTip}:${HANDOFF_REF}` : HANDOFF_PUSH_REFSPEC;
       opts.hooks?.beforePush?.(attempt);
-      assertDittoPushRefspec(HANDOFF_PUSH_REFSPEC);
-      let push = runGitBounded(cwd, ["push", remote, "--", HANDOFF_PUSH_REFSPEC], timeoutMs);
+      assertDittoPushRefspec(refspec);
+      let push = runGitBounded(cwd, ["push", remote, "--", refspec], timeoutMs);
       if (!push.ok && !push.timedOut && offlineRetriesLeft > 0) {
         if (classifySyncFailure(`${push.stderr}
 ${push.stdout}`) === "offline") {
           offlineRetriesLeft -= 1;
           Bun.sleepSync(offlineBackoffMs);
-          push = runGitBounded(cwd, ["push", remote, "--", HANDOFF_PUSH_REFSPEC], timeoutMs);
+          push = runGitBounded(cwd, ["push", remote, "--", refspec], timeoutMs);
         }
       }
       if (push.ok) {
         pushed = true;
-        remoteSha = localTip;
-        recordPushed(cwd, localTip);
-        pushedStems = treeEntries(cwd, localTip).filter((e2) => e2.type === "blob" && e2.name.endsWith(".md")).map((e2) => e2.name.replace(/\.md$/, ""));
-        appendSyncLog(cwd, { event: "pushed", remote, tip: localTip, stems: pushedStems, op });
+        if (exemptThisPush) {
+          const cas = gitLocal(cwd, ["update-ref", HANDOFF_REF, sourceTip, localTip]);
+          if (cas.exitCode !== 0) {
+            appendSyncLog(cwd, {
+              event: "exempt-local-cas-lost",
+              remote,
+              detail: cas.stderr.trim()
+            });
+          }
+        }
+        remoteSha = sourceTip;
+        localTip = sourceTip;
+        recordPushed(cwd, sourceTip);
+        pushedStems = treeEntries(cwd, sourceTip).filter((e2) => e2.type === "blob" && e2.name.endsWith(".md")).map((e2) => e2.name.replace(/\.md$/, ""));
+        appendSyncLog(cwd, {
+          event: exemptThisPush ? "pushed-deletion-exempt" : "pushed",
+          remote,
+          tip: sourceTip,
+          stems: pushedStems,
+          op
+        });
         break;
       }
       const out = `${push.stderr}
@@ -48966,7 +49107,7 @@ ${push.stdout}`.trim();
   } else {
     recordPushed(cwd, localTip);
   }
-  if (remoteSha !== null && revParseQuiet(cwd, HANDOFF_REF) === remoteSha) {
+  if (pushAuthorized && remoteSha !== null && revParseQuiet(cwd, HANDOFF_REF) === remoteSha) {
     runRetention(cwd, remote, remoteSha, opts, warnings);
   }
   return { status, warnings, pushedStems, scrubFindings: [] };
@@ -49072,9 +49213,26 @@ function splitPair(raw, flag) {
   }
   return [left, right];
 }
+var injectedRepoVisibility = null;
+function deriveVisibilityProbeTarget(originUrl) {
+  const url = normalizeOriginUrl(originUrl);
+  const https = url.match(/^https?:\/\/(?:[^@/]+@)?([^/:]+)\/([^/]+)\/([^/]+)$/);
+  if (https?.[1] && https[2] && https[3])
+    return `${https[1]}/${https[2]}/${https[3]}`;
+  const ssh = url.match(/^(?:ssh:\/\/)?git@([^:/]+)[:/]([^/]+)\/([^/]+)$/);
+  if (ssh?.[1] && ssh[2] && ssh[3])
+    return `${ssh[1]}/${ssh[2]}/${ssh[3]}`;
+  return null;
+}
 function resolveRepoVisibility(repoRoot) {
+  if (injectedRepoVisibility !== null)
+    return injectedRepoVisibility;
+  const originUrl = resolveOriginUrl(repoRoot);
+  const target = originUrl === null ? null : deriveVisibilityProbeTarget(originUrl);
+  if (target === null)
+    return "unknown";
   try {
-    const proc = Bun.spawnSync(["gh", "repo", "view", "--json", "visibility"], {
+    const proc = Bun.spawnSync(["gh", "repo", "view", target, "--json", "visibility"], {
       cwd: repoRoot,
       stdout: "pipe",
       stderr: "pipe"
@@ -49103,10 +49261,27 @@ function hasOriginRemote(repoRoot) {
     return false;
   }
 }
-function runAutoSync(repoRoot, op, allowPublicRemote, knownRemoteSha) {
+function normalizeOriginUrl(raw) {
+  return raw.trim().replace(/\/+$/, "").replace(/\.git$/, "").replace(/\/+$/, "");
+}
+function resolveOriginUrl(repoRoot) {
+  try {
+    const proc = Bun.spawnSync(["git", "remote", "get-url", "origin"], {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe"
+    });
+    if (proc.exitCode !== 0)
+      return null;
+    const url = normalizeOriginUrl(proc.stdout?.toString() ?? "");
+    return url.length > 0 ? url : null;
+  } catch {
+    return null;
+  }
+}
+function runAutoSync(repoRoot, op, allowPublicRemote, visibility, knownRemoteSha) {
   if (!hasOriginRemote(repoRoot))
     return null;
-  const visibility = resolveRepoVisibility(repoRoot);
   const result2 = syncHandoffRef(repoRoot, "origin", {
     visibility,
     allowPublicRemote,
@@ -49116,7 +49291,11 @@ function runAutoSync(repoRoot, op, allowPublicRemote, knownRemoteSha) {
   for (const w2 of result2.warnings)
     writeError(w2);
   if (result2.status === "public-remote-refused") {
-    writeError("handoff sync: pass --push-public to opt in for a public/unknown remote.");
+    if (op === "consume") {
+      writeError("handoff sync: the consume deletion was NOT pushed to 'origin' \u2014 the delete-only exemption refused it (the warning above names why; a new handoff body must never reach a public/unknown remote). NOTE: the remote copy still exists, so another PC may still consume it (re-consume window open; at-most-duplicated, never lost). --push-public would push the FULL local ref \u2014 including any un-pushed handoff bodies \u2014 so pass it only if you intend to publish that content.");
+    } else {
+      writeError("handoff sync: pass --push-public to opt in for a public/unknown remote.");
+    }
   }
   return result2;
 }
@@ -49245,7 +49424,12 @@ var writeArgs = {
   },
   "push-public": {
     type: "boolean",
-    description: "Explicit opt-in to auto-push the baton ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published).",
+    description: "One-shot explicit opt-in to auto-push the baton ref to a public/unknown-visibility remote (the gate is fail-closed otherwise; pushed history cannot be un-published). For a standing per-project grant use --consent-push-remote.",
+    default: false
+  },
+  "consent-push-remote": {
+    type: "boolean",
+    description: "Record standing write-push consent for THIS origin: this and subsequent `handoff write` pushes to the public/unknown-visibility remote proceed without re-prompting. Origin-bound (a re-pointed origin needs a new grant) and visibility-stamped: a private\u2192public flip suspends the grant until re-confirmed. A purge still needs the explicit --push-public opt-in.",
     default: false
   },
   output: {
@@ -49292,7 +49476,33 @@ async function runWrite({ args }) {
     process.exit(1);
     return;
   }
-  const sync = runAutoSync(repoRoot, "write", args["push-public"] === true);
+  const visibility = resolveRepoVisibility(repoRoot);
+  const originUrl = resolveOriginUrl(repoRoot);
+  if (args["consent-push-remote"] === true) {
+    if (originUrl === null) {
+      writeError("handoff write: --consent-push-remote NOT recorded \u2014 no origin remote to bind the consent to.");
+    } else {
+      await writeHandoffPushConsent(repoRoot, {
+        origin_url: originUrl,
+        visibility_at_grant: visibility === "private" ? "private" : "public",
+        granted_at: new Date().toISOString()
+      });
+    }
+  }
+  let allowPublicRemote = args["push-public"] === true;
+  if (!allowPublicRemote && originUrl !== null && visibility !== "private") {
+    const consent = await readHandoffPushConsent(repoRoot, originUrl);
+    if (consent !== undefined) {
+      const grantWasPrivate = consent.visibility_at_grant === "private" || consent.visibility_at_grant === "internal";
+      if (grantWasPrivate) {
+        writeError(`handoff sync: write-push consent for 'origin' was granted while the remote was '${consent.visibility_at_grant}' but it is now public/unknown \u2014 the consent is NOT applied until you re-confirm (re-run write with --consent-push-remote).`);
+      } else {
+        writeError("handoff: write-push consent is active for 'origin' \u2014 this write auto-pushes to the public/unknown remote under the standing per-project grant (a purge still needs the explicit --push-public opt-in).");
+        allowPublicRemote = true;
+      }
+    }
+  }
+  const sync = runAutoSync(repoRoot, "write", allowPublicRemote, visibility);
   if (format === "json") {
     writeJson2({
       ref: res.ref,
@@ -49398,8 +49608,9 @@ async function runConsume({ args }) {
     warnPendingUnpushed(repoRoot);
     return;
   }
+  const visibility = resolveRepoVisibility(repoRoot);
   const knownRemoteSha = preFetch === null || preFetch.status === "fetch-failed" ? undefined : preFetch.sha;
-  const sync = runAutoSync(repoRoot, "consume", args["push-public"] === true, knownRemoteSha);
+  const sync = runAutoSync(repoRoot, "consume", args["push-public"] === true, visibility, knownRemoteSha);
   if (format === "json") {
     writeJson2({
       id: stem,
@@ -49429,7 +49640,7 @@ var handoffConsume = defineCommand({
     },
     "push-public": {
       type: "boolean",
-      description: "Explicit opt-in to push the deletion commit to a public/unknown-visibility remote.",
+      description: "Explicit opt-in to push the FULL consume transmit set \u2014 including any companion un-pushed write body \u2014 to a public/unknown-visibility remote (pushed history cannot be un-published). A PURE deletion already propagates identity-masked without this.",
       default: false
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
@@ -53800,7 +54011,7 @@ var journeyAuthorCommand = defineCommand({
 });
 
 // src/cli/commands/knowledge.ts
-import { readdir as readdir24, writeFile as writeFile4 } from "fs/promises";
+import { readdir as readdir24, writeFile as writeFile5 } from "fs/promises";
 import { join as join82 } from "path";
 init_zod();
 init_fs();
@@ -53912,7 +54123,7 @@ async function createAdrSkeleton(opts) {
   if (await fileExists(path)) {
     throw new Error(`refusing to overwrite existing ADR: ${path}`);
   }
-  await writeFile4(path, adrSkeletonBody(id, ymdDashed(now)), "utf8");
+  await writeFile5(path, adrSkeletonBody(id, ymdDashed(now)), "utf8");
   return { id, path };
 }
 async function checkAdrConsistency(repoRoot) {
@@ -57779,7 +57990,7 @@ init_git();
 init_common();
 init_fs();
 init_git();
-import { stat as stat10, writeFile as writeFile5 } from "fs/promises";
+import { stat as stat10, writeFile as writeFile6 } from "fs/promises";
 import { dirname as dirname17, join as join89, relative as relative23, resolve as resolve26, sep as sep10 } from "path";
 init_work_item_store();
 init_worktree();
@@ -57856,7 +58067,7 @@ function parseRunnableProvider(provider) {
 async function streamToFile(stream, path) {
   await ensureDir(dirname17(path));
   const bytes = await new Response(stream).arrayBuffer();
-  await writeFile5(path, new Uint8Array(bytes));
+  await writeFile6(path, new Uint8Array(bytes));
 }
 async function captureArtifacts(runRoot, runStore, runId2, adapterProcess) {
   const stdoutPath = runStore.pathFor(runId2, "stdout.log");
@@ -57882,7 +58093,7 @@ async function captureArtifacts(runRoot, runStore, runId2, adapterProcess) {
     };
     unverified.push("adapter completion promise rejected; this is a HostAdapter contract bug");
   }
-  await writeFile5(diffPath, captureGitDiff(runRoot), "utf8");
+  await writeFile6(diffPath, captureGitDiff(runRoot), "utf8");
   return { completion, unverified };
 }
 async function runWithProvider(repoRoot, input) {
@@ -58014,7 +58225,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
   const logRelative = repoRelative2(repoRoot, logAbsolute);
   await ensureDir(dirname17(logAbsolute));
   if (tokens2.length === 0) {
-    await writeFile5(logAbsolute, "", "utf8");
+    await writeFile6(logAbsolute, "", "utf8");
     const entry2 = {
       command,
       exit_code: -1,
@@ -58051,7 +58262,7 @@ async function runVerifyStep(repoRoot, runRoot, runStore, runId2, rawCommand) {
 ` : `${stdoutText}${stderrText.length > 0 ? `
 --- stderr ---
 ${stderrText}` : ""}`;
-  await writeFile5(logAbsolute, body, "utf8");
+  await writeFile6(logAbsolute, body, "utf8");
   const entry = {
     command,
     exit_code,
@@ -59081,7 +59292,7 @@ function defaultRegistry() {
 
 // src/core/setup.ts
 import { execFileSync as execFileSync7 } from "child_process";
-import { chmod, cp, readFile as readFile21, rename as rename4, rm as rm4, writeFile as writeFile6 } from "fs/promises";
+import { chmod, cp, readFile as readFile21, rename as rename5, rm as rm4, writeFile as writeFile7 } from "fs/promises";
 import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute17, join as join94, resolve as resolve27 } from "path";
 
 // src/core/charter-region.ts
@@ -59269,7 +59480,7 @@ async function rewriteCodexTextFile(path, dittoCommand) {
   const before = await readFile21(path, "utf8");
   const after = rewriteCodexDittoReferences(before, dittoCommand);
   if (after !== before)
-    await writeFile6(path, after);
+    await writeFile7(path, after);
 }
 function rewriteCodexAgentTomlReferences(text, dittoCommand) {
   return text.replace(/(\bdeveloper_instructions\s*=\s*""")([\s\S]*?)("""\s*)/, (_match, open3, body, close) => `${open3}${rewriteCodexDittoReferences(body, dittoCommand)}${close}`);
@@ -59278,7 +59489,7 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
   const before = await readFile21(path, "utf8");
   const after = rewriteCodexAgentTomlReferences(before, dittoCommand);
   if (after !== before)
-    await writeFile6(path, after);
+    await writeFile7(path, after);
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
@@ -59467,7 +59678,7 @@ async function installPushGateHook(opts) {
       message: `${hookPath} is a non-ditto pre-push hook and ${backupPath} already exists \u2014 refusing to overwrite either. Remove/merge them manually, or pipe stdin into \`ditto push-gate\` from your existing hook.`
     };
   }
-  await rename4(hookPath, backupPath);
+  await rename5(hookPath, backupPath);
   await writeHookFile(hookPath, template);
   return { status: "backed-up", hookPath, backupPath, message: null };
 }
@@ -59481,7 +59692,7 @@ function bakeWorkspaceRoot(template, workspaceRoot) {
   return baked;
 }
 async function writeHookFile(hookPath, body) {
-  await writeFile6(hookPath, body);
+  await writeFile7(hookPath, body);
   await chmod(hookPath, 493);
 }
 async function setup(opts) {
@@ -60290,7 +60501,7 @@ init_fs();
 init_shared();
 import { execFileSync as execFileSync8 } from "child_process";
 import { existsSync as existsSync17, lstatSync, realpathSync as realpathSync2 } from "fs";
-import { readFile as readFile23, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
+import { readFile as readFile23, readdir as readdir27, rm as rm7, writeFile as writeFile8 } from "fs/promises";
 import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute18, join as join99, relative as relative24, resolve as resolve31 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
@@ -60408,7 +60619,7 @@ async function addToParentGitignore(workspaceRoot, dir) {
 ` : `${cur}
 ${entry}
 `;
-  await writeFile7(giPath, next);
+  await writeFile8(giPath, next);
 }
 async function cloneRepoEntry(inp) {
   const { workspaceRoot, dir, url, hookTemplatePath, allowLocal, env: env2 } = inp;
@@ -60942,4 +61153,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=963d64a681fbe4d5ca5fafffb7aa3ae505a21a42e53548b7a4da6aa4dda0a041
+//# ditto-src-stamp=745aa531a22d62d63801897a8c52e39dbd81d00e19ebdb2a54387ebb1d428aeb
