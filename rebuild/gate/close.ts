@@ -52,8 +52,12 @@ export class MissingReEntryError extends Error {
 export interface CloseInputs {
   actor: string;
   mode: GateMode;
-  /** Per-AC oracles — the completion currency (ADR-0024). */
-  oracles: AcOracle[];
+  /**
+   * Per-AC oracles — the completion currency (ADR-0024). Optional: when
+   * omitted, the oracles landed on the record by the intent lock are used;
+   * explicit entries override the record's per criterion_id.
+   */
+  oracles?: AcOracle[];
   /** Barrier run result; running it is the caller's job (engine judges only). */
   barrier: BarrierRun;
   /** Conflicts as judged by the host LLM (the gate only routes/discloses). */
@@ -92,7 +96,15 @@ export async function closeWorkItemWithGates(
   const activeCriteria = view.acceptance_criteria.filter(
     (c) => c.superseded !== true,
   );
-  const oracleById = new Map(inputs.oracles.map((o) => [o.criterion_id, o]));
+  const oracleById = new Map<string, AcOracle>();
+  for (const criterion of view.acceptance_criteria) {
+    if (criterion.oracle !== undefined) {
+      oracleById.set(criterion.id, criterion.oracle);
+    }
+  }
+  for (const oracle of inputs.oracles ?? []) {
+    oracleById.set(oracle.criterion_id, oracle);
+  }
   const oracleResults: Record<string, GateResult> = {};
   for (const criterion of activeCriteria) {
     const oracle = oracleById.get(criterion.id);
