@@ -19,6 +19,7 @@ import {
   listEvents,
   type WorkItemEvent,
 } from './events';
+import { assertNotLegacyRecord } from './legacy';
 import { reduceEvents, type ReducedState } from './reduce';
 
 /**
@@ -139,6 +140,7 @@ export async function loadWorkItem(
     () => false,
   );
   if (!exists) throw new WorkItemNotFoundError(id);
+  await assertNotLegacyRecord(path, id); // old generation: explicit refusal
 
   const record = await readJson(path, workItemRecord);
   const events = await listEvents(eventsDir(repoRoot, id));
