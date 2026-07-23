@@ -1,0 +1,127 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_2607222uc",
+  "seq": 3,
+  "actor": "workspace-write",
+  "event_id": "1b37af0ab1c487de0e1ecb6f51e8286ba9d99b19c5f9d8b1f69dc90a11127467",
+  "ts": "2026-07-23T03:36:37.097Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-2",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/runs/wi_2607222uc/plan-dialog.md",
+        "summary": "19카테고리 coverage 스윕 종결 대화록"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/work-items/wi_2607222uc/coverage.json",
+        "summary": "카테고리별 close_reason·axis 판정 전체"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/gates.ts",
+        "lines": {
+          "start": 993,
+          "end": 1022
+        },
+        "summary": "decisionConflictGate/RequiresApproval — 해소 인식 부재 확인"
+      },
+      {
+        "kind": "file",
+        "path": "src/hooks/stop.ts",
+        "lines": {
+          "start": 487,
+          "end": 507
+        },
+        "summary": "공유 wrapper — 무조건 차단 확인"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/autopilot-loop.ts",
+        "lines": {
+          "start": 3169,
+          "end": 3190
+        },
+        "summary": "캐리어 writer — 클리어 경로 부재 확인"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_2607222uc/coverage.json",
+        "summary": "pre-mortem coverage sweep artifact (plan-stage close)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/core/autopilot-loop.decision-conflict.test.ts",
+        "summary": "red 7 fail → green 14 pass / 0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "전체 394 pass / 0 fail, 36 files, exit 0 (형제 노드 랜딩 포함)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/work-items/wi_2607222uc/reviewer-output.json",
+        "summary": "리뷰 원장(verdict=partial, findings 5)"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "리뷰어 독립 실행 394 pass / 0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "399 pass / 0 fail / 1314 expects, exit 0 (verifier 직접 실행)"
+      },
+      {
+        "kind": "command",
+        "command": "DITTO_HOOKS_LEGACY=1 bun test src/hooks/stop.characterization.test.ts",
+        "summary": "30 pass, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck && bun run typecheck:rebuild",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/core/autopilot-loop.decision-conflict.test.ts",
+        "summary": "red 3 fail(AC 단정) → 19 pass / 0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "399 pass / 0 fail, exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run typecheck",
+        "summary": "exit 0 (2회)"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/work-items/wi_2607222uc/reviewer-output.json",
+        "summary": "재확인 verdict=pass"
+      },
+      {
+        "kind": "artifact",
+        "path": ".ditto/local/work-items/wi_2607222uc/acg-review.json",
+        "summary": "0 high-risk without evidence"
+      },
+      {
+        "kind": "command",
+        "command": "bun test",
+        "summary": "리뷰어 직접 실행 399 pass / 0 fail"
+      }
+    ]
+  }
+}

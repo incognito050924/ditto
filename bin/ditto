@@ -15281,8 +15281,8 @@ var init_evidence_log = __esm(() => {
 });
 
 // src/core/evidence-store.ts
-import { createHash as createHash4 } from "crypto";
-import { join as join24 } from "path";
+import { createHash as createHash5 } from "crypto";
+import { join as join26 } from "path";
 
 class EvidenceStore {
   repoRoot;
@@ -15293,13 +15293,13 @@ class EvidenceStore {
     return localDir(this.repoRoot, "work-items", workItemId2);
   }
   evidenceDir(workItemId2) {
-    return join24(this.workItemDir(workItemId2), "evidence");
+    return join26(this.workItemDir(workItemId2), "evidence");
   }
   commandsPath(workItemId2) {
-    return join24(this.evidenceDir(workItemId2), "commands.jsonl");
+    return join26(this.evidenceDir(workItemId2), "commands.jsonl");
   }
   evidenceIndexPath(workItemId2) {
-    return join24(this.workItemDir(workItemId2), "evidence-index.json");
+    return join26(this.workItemDir(workItemId2), "evidence-index.json");
   }
   async appendCommand(workItemId2, entry) {
     const parsed = commandLogEntry.parse(entry);
@@ -15350,7 +15350,7 @@ class EvidenceStore {
   }
 }
 function sha256Hex(content) {
-  const hash = createHash4("sha256");
+  const hash = createHash5("sha256");
   hash.update(content);
   return hash.digest("hex");
 }
@@ -15362,8 +15362,8 @@ var init_evidence_store = __esm(() => {
 });
 
 // src/core/memory-store.ts
-import { open as open2, readdir as readdir9 } from "fs/promises";
-import { dirname as dirname5, join as join25 } from "path";
+import { open as open2, readdir as readdir10 } from "fs/promises";
+import { dirname as dirname5, join as join27 } from "path";
 
 class MemorySourceStore {
   repoRoot;
@@ -15371,10 +15371,10 @@ class MemorySourceStore {
     this.repoRoot = repoRoot;
   }
   dir() {
-    return join25(dittoDir(this.repoRoot), "memory", "sources");
+    return join27(dittoDir(this.repoRoot), "memory", "sources");
   }
   path(id) {
-    return join25(this.dir(), `${id}.json`);
+    return join27(this.dir(), `${id}.json`);
   }
   async exists(id) {
     return Bun.file(this.path(id)).exists();
@@ -15388,7 +15388,7 @@ class MemorySourceStore {
   async list() {
     let entries;
     try {
-      entries = await readdir9(this.dir());
+      entries = await readdir10(this.dir());
     } catch {
       return [];
     }
@@ -15397,7 +15397,7 @@ class MemorySourceStore {
       if (!name.endsWith(".json"))
         continue;
       try {
-        out.push(await readJson(join25(this.dir(), name), memorySource));
+        out.push(await readJson(join27(this.dir(), name), memorySource));
       } catch {}
     }
     return out;
@@ -15410,10 +15410,10 @@ class MemoryEventStore {
     this.repoRoot = repoRoot;
   }
   dir() {
-    return join25(dittoDir(this.repoRoot), "memory", "events");
+    return join27(dittoDir(this.repoRoot), "memory", "events");
   }
   path(id) {
-    return join25(this.dir(), `${id}.json`);
+    return join27(this.dir(), `${id}.json`);
   }
   async append(event) {
     const validated = memoryEvent.parse(event);
@@ -15442,7 +15442,7 @@ class MemoryEventStore {
   async list() {
     let entries;
     try {
-      entries = await readdir9(this.dir());
+      entries = await readdir10(this.dir());
     } catch {
       return [];
     }
@@ -15451,7 +15451,7 @@ class MemoryEventStore {
       if (!name.endsWith(".json"))
         continue;
       try {
-        out.push(await readJson(join25(this.dir(), name), memoryEvent));
+        out.push(await readJson(join27(this.dir(), name), memoryEvent));
       } catch {}
     }
     out.sort((a2, b2) => {
@@ -15490,13 +15490,13 @@ class MemoryProjectionStore {
     return localDir(this.repoRoot, "memory", "projections");
   }
   manifestPath() {
-    return join25(this.dir(), "manifest.json");
+    return join27(this.dir(), "manifest.json");
   }
   servingPath() {
-    return join25(this.dir(), "graph.json");
+    return join27(this.dir(), "graph.json");
   }
   wikiDir() {
-    return join25(this.dir(), "wiki");
+    return join27(this.dir(), "wiki");
   }
   async readManifest() {
     if (!await Bun.file(this.manifestPath()).exists())
@@ -15517,7 +15517,7 @@ class MemoryProjectionStore {
     return JSON.parse(await Bun.file(this.servingPath()).text());
   }
   async writeWiki(name, markdown) {
-    await atomicWriteText(join25(this.wikiDir(), name), markdown);
+    await atomicWriteText(join27(this.wikiDir(), name), markdown);
   }
 }
 var MemoryEventExistsError;
@@ -15540,8 +15540,8 @@ var init_memory_store = __esm(() => {
 });
 
 // src/core/memory-scan.ts
-import { readdir as readdir10 } from "fs/promises";
-import { isAbsolute as isAbsolute2, join as join26, relative as relative7, resolve as resolve3, sep as sep3 } from "path";
+import { readdir as readdir11 } from "fs/promises";
+import { isAbsolute as isAbsolute2, join as join28, relative as relative7, resolve as resolve3, sep as sep3 } from "path";
 function classifyType(name) {
   const dot = name.lastIndexOf(".");
   if (dot < 0)
@@ -15566,7 +15566,7 @@ async function findOwningRepo(absPath, rootingRoot) {
   let current = resolve3(absPath);
   const root = resolve3(rootingRoot);
   while (true) {
-    if (await fileExists(join26(current, ".git")))
+    if (await fileExists(join28(current, ".git")))
       return current;
     if (current === root)
       return null;
@@ -15585,12 +15585,12 @@ async function walkFiles(root, maxDepth = 12) {
       return;
     let entries;
     try {
-      entries = await readdir10(dir, { withFileTypes: true });
+      entries = await readdir11(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e2 of entries) {
-      const full = join26(dir, e2.name);
+      const full = join28(dir, e2.name);
       if (e2.isDirectory()) {
         if (!SKIP_DIRS2.has(e2.name))
           await walk(full, depth + 1);
@@ -15605,7 +15605,7 @@ async function walkFiles(root, maxDepth = 12) {
 }
 async function scanSources(repoRoot, options = {}) {
   const root = resolve3(repoRoot);
-  const sourceRoot = resolve3(options.sourceRoot && isAbsolute2(options.sourceRoot) ? options.sourceRoot : join26(root, options.sourceRoot ?? "."));
+  const sourceRoot = resolve3(options.sourceRoot && isAbsolute2(options.sourceRoot) ? options.sourceRoot : join28(root, options.sourceRoot ?? "."));
   const now = (options.now ?? new Date).toISOString();
   const store = new MemorySourceStore(root);
   const existing = new Map;
@@ -15754,7 +15754,7 @@ var init_cleanup_index = __esm(() => {
 
 // src/core/cleanup-store.ts
 import { mkdir as mkdir6, rename as rename3, stat as stat5 } from "fs/promises";
-import { isAbsolute as isAbsolute6, join as join37, relative as relative11, resolve as resolve9 } from "path";
+import { isAbsolute as isAbsolute6, join as join39, relative as relative11, resolve as resolve9 } from "path";
 function isProtectedBasename(base) {
   if (base === "CLAUDE.md" || base === "AGENTS.md")
     return true;
@@ -15790,7 +15790,7 @@ class CleanupStore {
     return localDir(this.repoRoot, "cleanup", runId2);
   }
   indexPath(runId2) {
-    return join37(this.runDir(runId2), "index.json");
+    return join39(this.runDir(runId2), "index.json");
   }
   async createRun(params, now = new Date) {
     const stamp = runStamp(now);
@@ -15809,7 +15809,7 @@ class CleanupStore {
       }
     }
     for (const action of CLEANUP_ACTIONS) {
-      await ensureDir(join37(this.runDir(runId2), action));
+      await ensureDir(join39(this.runDir(runId2), action));
     }
     const index = {
       schema_version: "0.1.0",
@@ -15838,8 +15838,8 @@ class CleanupStore {
     const name = input.name ?? repoRel.split("/").pop() ?? repoRel;
     const owning = await findOwningRepo(abs, this.repoRoot);
     const owningRepo = owning === null ? null : toRepoRel(this.repoRoot, owning) || ".";
-    const destAbs = join37(this.runDir(runId2), input.action, name);
-    await ensureDir(join37(this.runDir(runId2), input.action));
+    const destAbs = join39(this.runDir(runId2), input.action, name);
+    await ensureDir(join39(this.runDir(runId2), input.action));
     await rename3(abs, destAbs);
     const entry = {
       name,
@@ -15866,9 +15866,9 @@ class CleanupStore {
     if (entry === undefined) {
       throw new Error(`no staged entry for original_path: ${originalPath}`);
     }
-    const stagedAbs = join37(this.repoRoot, entry.staged_path);
-    const originalAbs = join37(this.repoRoot, entry.original_path);
-    await ensureDir(join37(originalAbs, ".."));
+    const stagedAbs = join39(this.repoRoot, entry.staged_path);
+    const originalAbs = join39(this.repoRoot, entry.original_path);
+    await ensureDir(join39(originalAbs, ".."));
     await rename3(stagedAbs, originalAbs);
     return entry;
   }
@@ -15904,9 +15904,9 @@ var init_cleanup_store = __esm(() => {
 });
 
 // src/core/cleanup-archive.ts
-import { execFileSync as execFileSync4 } from "child_process";
+import { execFileSync as execFileSync5 } from "child_process";
 import { mkdir as mkdir7, rm as rm2, stat as stat6 } from "fs/promises";
-import { dirname as dirname10, isAbsolute as isAbsolute7, join as join38, resolve as resolve10 } from "path";
+import { dirname as dirname10, isAbsolute as isAbsolute7, join as join40, resolve as resolve10 } from "path";
 function runDir(repoRoot, runId2) {
   return localDir(repoRoot, "cleanup", runId2);
 }
@@ -15929,7 +15929,7 @@ async function archiveRun(repoRoot, runId2) {
   const zip = archiveZipPath(repoRoot, runId2);
   await mkdir7(dirname10(zip), { recursive: true });
   await rm2(zip, { force: true });
-  execFileSync4("zip", ["-r", "-q", "-y", zip, runId2], {
+  execFileSync5("zip", ["-r", "-q", "-y", zip, runId2], {
     cwd: localDir(repoRoot, "cleanup"),
     stdio: ["ignore", "ignore", "pipe"]
   });
@@ -15957,12 +15957,12 @@ async function deleteRun(repoRoot, runId2, confirm) {
 function subRepoAbs(repoRoot, owningRepo) {
   if (owningRepo === null || owningRepo === ".")
     return resolve10(repoRoot);
-  return isAbsolute7(owningRepo) ? owningRepo : join38(repoRoot, owningRepo);
+  return isAbsolute7(owningRepo) ? owningRepo : join40(repoRoot, owningRepo);
 }
 function unrelatedDirt(cwd, allowed) {
   let status = "";
   try {
-    status = execFileSync4("git", ["status", "--porcelain", "--untracked-files=all"], {
+    status = execFileSync5("git", ["status", "--porcelain", "--untracked-files=all"], {
       cwd,
       encoding: "utf8"
     });
@@ -15993,16 +15993,16 @@ function commitPerSubRepo(repoRoot, pathsByRepo, message) {
   for (const [repo, paths] of pathsByRepo) {
     const abs = subRepoAbs(repoRoot, repo);
     for (const p of paths) {
-      execFileSync4("git", ["add", "--all", "--", p], { cwd: abs, stdio: "pipe" });
+      execFileSync5("git", ["add", "--all", "--", p], { cwd: abs, stdio: "pipe" });
     }
-    const staged = execFileSync4("git", ["diff", "--cached", "--name-only", "--", ...paths], {
+    const staged = execFileSync5("git", ["diff", "--cached", "--name-only", "--", ...paths], {
       cwd: abs,
       encoding: "utf8"
     }).trim();
     if (staged === "")
       continue;
-    execFileSync4("git", ["commit", "-m", message, "--", ...paths], { cwd: abs, stdio: "pipe" });
-    const sha = execFileSync4("git", ["rev-parse", "HEAD"], { cwd: abs, encoding: "utf8" }).trim();
+    execFileSync5("git", ["commit", "-m", message, "--", ...paths], { cwd: abs, stdio: "pipe" });
+    const sha = execFileSync5("git", ["rev-parse", "HEAD"], { cwd: abs, encoding: "utf8" }).trim();
     commits.push({ repo, sha, paths: [...paths] });
   }
   return commits;
@@ -16020,7 +16020,7 @@ function commitCleanup(repoRoot, index, message) {
   return { commits: commitPerSubRepo(repoRoot, byRepo, message) };
 }
 function relForRepo(repoRoot, repoAbs, workspaceRelPath) {
-  const abs = join38(repoRoot, workspaceRelPath);
+  const abs = join40(repoRoot, workspaceRelPath);
   const rel = abs.startsWith(`${repoAbs}/`) ? abs.slice(repoAbs.length + 1) : workspaceRelPath;
   return rel.replace(/\\/g, "/");
 }
@@ -19456,8 +19456,8 @@ var architectureCommand = defineCommand({
 });
 
 // src/cli/commands/autopilot.ts
-import { readFile as readFile10, readdir as readdir14 } from "fs/promises";
-import { join as join40 } from "path";
+import { readFile as readFile10, readdir as readdir15 } from "fs/promises";
+import { join as join42 } from "path";
 
 // src/core/autopilot-approval.ts
 function requirePending(gate, action) {
@@ -21320,6 +21320,66 @@ function decisionConflictGate(conflicts, mode) {
 function decisionConflictRequiresApproval(conflicts) {
   return conflicts.some((c3) => c3.kind !== "prefer" && c3.level === "intent");
 }
+function splitResolvedConflicts(conflicts, readAdrAtHead) {
+  const blocking = [];
+  const failures = [];
+  const resolved = [];
+  for (const conflict of conflicts) {
+    const resolution = conflict.resolution;
+    if (resolution === undefined) {
+      blocking.push(conflict);
+      continue;
+    }
+    let read;
+    try {
+      read = readAdrAtHead(conflict.adr_id);
+    } catch {
+      read = { status: "absent" };
+    }
+    const branch = classifyResolutionRead(read, resolution);
+    if (branch === null) {
+      resolved.push({ conflict, resolution });
+      continue;
+    }
+    blocking.push(conflict);
+    failures.push({
+      conflict,
+      branch,
+      message: resolutionFailureMessage(branch, conflict, resolution, read)
+    });
+  }
+  return { blocking, failures, resolved };
+}
+function classifyResolutionRead(read, resolution) {
+  if (read.status === "absent")
+    return "file_absent";
+  if (read.status === "ambiguous")
+    return "ambiguous";
+  if (read.status === "malformed")
+    return "parse_failed";
+  if (!read.adr_status.toLowerCase().startsWith("superseded"))
+    return "not_superseded";
+  if (read.superseded_by !== undefined && read.superseded_by !== resolution.superseded_by) {
+    return "successor_mismatch";
+  }
+  return null;
+}
+function resolutionFailureMessage(branch, conflict, resolution, read) {
+  switch (branch) {
+    case "file_absent":
+      return `\uD574\uC18C \uAC80\uC99D \uC2E4\uD328(ADR \uD30C\uC77C \uBD80\uC7AC) \u2014 HEAD \uCEE4\uBC0B\uC5D0\uC11C ${conflict.adr_id} \uD30C\uC77C\uC744 \uCC3E\uC9C0 \uBABB\uD568; \uD574\uB2F9 ADR\uC758 supersede\uAC00 \uC2E4\uC81C\uB85C \uB79C\uB529(\uCEE4\uBC0B)\uB418\uC5C8\uB294\uC9C0 \uD655\uC778\uC774 \uD544\uC694\uD568`;
+    case "ambiguous":
+      return `\uD574\uC18C \uAC80\uC99D \uC2E4\uD328(ADR \uD30C\uC77C \uB2E4\uC911 \uC77C\uCE58) \u2014 HEAD \uCEE4\uBC0B\uC5D0\uC11C ${conflict.adr_id}\uC5D0 \uD574\uB2F9\uD558\uB294 \uD30C\uC77C\uC774 \uC5EC\uB7EC \uAC1C\uB77C \uC5B4\uB290 \uAC83\uB3C4 \uCC44\uD0DD\uD558\uC9C0 \uC54A\uC74C(fail-closed); \uC5B4\uB290 \uD30C\uC77C\uC774 \uC774 ADR\uC778\uC9C0 \uC815\uB9AC\uAC00 \uD544\uC694\uD568`;
+    case "parse_failed":
+      return `\uD574\uC18C \uAC80\uC99D \uC2E4\uD328(\uC0C1\uD0DC\uC904 \uD30C\uC2F1 \uC2E4\uD328) \u2014 ${conflict.adr_id}\uC758 '- \uC0C1\uD0DC:' \uC0C1\uD0DC\uC904\uC744 \uC77D\uC9C0 \uBABB\uD568; \uC0C1\uD0DC\uC904 \uD615\uC2DD \uD655\uC778\uC774 \uD544\uC694\uD568`;
+    case "successor_mismatch": {
+      const named = read.status === "ok" ? read.superseded_by ?? "?" : "?";
+      return `\uD574\uC18C \uAC80\uC99D \uC2E4\uD328(superseded_by \uBD88\uC77C\uCE58) \u2014 \uC0C1\uD0DC\uC904\uC774 \uAC00\uB9AC\uD0A4\uB294 \uD6C4\uC18D ADR(${named})\uACFC \uD574\uC18C \uAE30\uB85D\uC758 superseded_by(${resolution.superseded_by})\uAC00 \uB2E4\uB984; \uD574\uC18C \uAE30\uB85D\uC744 \uC218\uC815\uD574\uC57C \uD568`;
+    }
+    case "not_superseded":
+      return `\uD574\uC18C \uAC80\uC99D \uC2E4\uD328(\uC544\uC9C1 superseded \uC544\uB2D8) \u2014 ${conflict.adr_id} \uC0C1\uD0DC\uAC00 HEAD\uC5D0\uC11C superseded\uB85C \uD655\uC778\uB418\uC9C0 \uC54A\uC74C(supersede \uBBF8\uB79C\uB529\uC774\uAC70\uB098 \uC0C1\uD0DC\uC904 \uBBF8flip); fetch\uB85C \uCD5C\uC2E0 \uCEE4\uBC0B\uC744 \uBC1B\uC558\uB294\uC9C0, \uC0C1\uD0DC\uC904 flip\uC774 \uB79C\uB529\uB418\uC5C8\uB294\uC9C0 \uD655\uC778\uC774 \uD544\uC694\uD568`;
+  }
+}
 function idSet(items) {
   return new Set(items.map((i2) => i2.id));
 }
@@ -22278,9 +22338,9 @@ function reconcileDecisionDisclosure(decisions) {
 
 // src/core/autopilot-loop.ts
 init_zod();
-import { createHash as createHash7 } from "crypto";
+import { createHash as createHash8 } from "crypto";
 import { readFile as readFile3, rm } from "fs/promises";
-import { join as join29 } from "path";
+import { join as join31 } from "path";
 
 // src/acg/tidy/classifier.ts
 init_ditto_paths();
@@ -22855,7 +22915,11 @@ var decisionConflict = exports_external.object({
   adr_id: exports_external.string().regex(ADR_ID_FULL_RE, "adr_id must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)"),
   kind: exports_external.enum(["forbid", "require", "prefer"]),
   level: exports_external.enum(["intent", "method"]),
-  basis: exports_external.string().min(1).describe("Evidence: what the ADR says and how the current work touches it")
+  basis: exports_external.string().min(1).describe("Evidence: what the ADR says and how the current work touches it"),
+  resolution: exports_external.object({
+    superseded_by: exports_external.string().regex(ADR_ID_FULL_RE, "superseded_by must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)").describe("The successor ADR the conflicting decision was superseded by"),
+    basis: exports_external.string().min(1).describe("Re-collation evidence: why/how the conflict was resolved with the user")
+  }).optional().describe("Claimed resolution of this conflict; demotes the block only after HEAD verification")
 });
 var decisionConflictCarrier = exports_external.object({
   schema_version: schemaVersion,
@@ -25026,6 +25090,495 @@ class IntentStore {
   }
 }
 
+// src/core/knowledge-bridge.ts
+init_zod();
+import { execFileSync as execFileSync4 } from "child_process";
+import { readdir as readdir9 } from "fs/promises";
+import { join as join25 } from "path";
+init_fs();
+
+// src/core/instruction-bridge.ts
+import { createHash as createHash4 } from "crypto";
+import { join as join24 } from "path";
+var MANAGED_END = "<!-- ditto:managed:end -->";
+var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
+var DELEGATION_CLAUSE_ANCHOR = "\uC704\uC784\uC73C\uB85C \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uC9C0\uD0A8\uB2E4";
+var CHARTER_IDENTITY_MARKER = "Agent Behavior Charter";
+function normalizeInstructionText(text) {
+  return text.replace(/\r\n/g, `
+`).replace(/\r/g, `
+`).split(`
+`).map((line) => line.replace(/[ \t]+$/g, "")).join(`
+`);
+}
+function normalizedSha256(text) {
+  return createHash4("sha256").update(normalizeInstructionText(text)).digest("hex");
+}
+function sourceFromSurface(surface) {
+  if (surface.role !== "source") {
+    return { kind: "missing", path: join24(surface.path, "..", "AGENTS.md") };
+  }
+  if (!surface.exists || surface.content === undefined)
+    return { kind: "missing", path: surface.path };
+  return {
+    path: surface.path,
+    content: surface.content,
+    normalizedSha256: normalizedSha256(surface.content)
+  };
+}
+function projectionFromSurface(surface) {
+  if (surface.role !== "projection" || !surface.exists || surface.content === undefined) {
+    return { kind: "missing", path: surface.path };
+  }
+  const content = surface.content;
+  const matches = [...content.matchAll(MANAGED_BLOCK_RE_G)];
+  if (matches.length === 0)
+    return { kind: "no_marker", path: surface.path, content };
+  if (matches.length > 1)
+    return { kind: "multiple_markers", path: surface.path, content, count: matches.length };
+  const match = matches[0];
+  if (!match || match.index === undefined)
+    return { kind: "no_marker", path: surface.path, content };
+  const markerSource = match[1] ?? "";
+  const markerSha256 = match[2] ?? "";
+  const managedBlock = match[3] ?? "";
+  return {
+    kind: "ok",
+    path: surface.path,
+    content,
+    managedBlock,
+    markerSource,
+    markerSha256,
+    actualSha256: normalizedSha256(managedBlock),
+    startIndex: match.index,
+    endIndex: match.index + match[0].length
+  };
+}
+async function loadSource(repoRoot) {
+  return sourceFromSurface(await getHostAdapter("codex").loadInstructions(repoRoot));
+}
+async function loadProjection(repoRoot) {
+  return projectionFromSurface(await getHostAdapter("claude-code").loadInstructions(repoRoot));
+}
+function checkCodexInstructions(source) {
+  if ("kind" in source) {
+    return [
+      {
+        host: "codex",
+        path: source.path,
+        kind: "source_missing",
+        message: "AGENTS.md is missing"
+      }
+    ];
+  }
+  const markerCount = [...source.content.matchAll(MANAGED_BLOCK_RE_G)].length;
+  if (markerCount > 1) {
+    return [
+      {
+        host: "codex",
+        path: source.path,
+        kind: "multiple_markers",
+        message: `AGENTS.md contains ${markerCount} ditto managed blocks; expected at most 1`,
+        sourceSha256: source.normalizedSha256
+      }
+    ];
+  }
+  return [];
+}
+function checkRequiredClauses(source) {
+  if ("kind" in source)
+    return [];
+  if (!source.content.includes(CHARTER_IDENTITY_MARKER))
+    return [];
+  if (source.content.includes(DELEGATION_CLAUSE_ANCHOR))
+    return [];
+  return [
+    {
+      host: "codex",
+      path: source.path,
+      kind: "clause_missing",
+      message: `charter source is missing the delegation-discipline clause (\xA74-9 "${DELEGATION_CLAUSE_ANCHOR}")`,
+      sourceSha256: source.normalizedSha256
+    }
+  ];
+}
+function compareClaudeProjection(source, projection) {
+  if ("kind" in source) {
+    return [
+      {
+        host: "claude-code",
+        path: source.path,
+        kind: "source_missing",
+        message: "AGENTS.md is missing"
+      }
+    ];
+  }
+  if (projection.kind === "missing") {
+    return [
+      {
+        host: "claude-code",
+        path: projection.path,
+        kind: "projection_missing",
+        message: "CLAUDE.md projection is missing",
+        sourceSha256: source.normalizedSha256
+      }
+    ];
+  }
+  if (projection.kind === "no_marker") {
+    return [
+      {
+        host: "claude-code",
+        path: projection.path,
+        kind: "marker_missing",
+        message: "CLAUDE.md does not contain a ditto managed block",
+        sourceSha256: source.normalizedSha256
+      }
+    ];
+  }
+  if (projection.kind === "multiple_markers") {
+    return [
+      {
+        host: "claude-code",
+        path: projection.path,
+        kind: "multiple_markers",
+        message: `CLAUDE.md contains ${projection.count} ditto managed blocks; expected exactly 1`,
+        sourceSha256: source.normalizedSha256
+      }
+    ];
+  }
+  const findings = [];
+  if (projection.markerSource !== "AGENTS.md") {
+    findings.push({
+      host: "claude-code",
+      path: projection.path,
+      kind: "source_mismatch",
+      message: `managed block source is ${projection.markerSource}, expected AGENTS.md`,
+      markerSource: projection.markerSource,
+      markerSha256: projection.markerSha256,
+      actualSha256: projection.actualSha256,
+      sourceSha256: source.normalizedSha256
+    });
+  }
+  if (projection.markerSha256 !== source.normalizedSha256) {
+    findings.push({
+      host: "claude-code",
+      path: projection.path,
+      kind: "sha256_mismatch",
+      message: "managed block marker sha256 does not match AGENTS.md",
+      markerSource: projection.markerSource,
+      markerSha256: projection.markerSha256,
+      actualSha256: projection.actualSha256,
+      sourceSha256: source.normalizedSha256
+    });
+  }
+  if (projection.actualSha256 !== source.normalizedSha256) {
+    findings.push({
+      host: "claude-code",
+      path: projection.path,
+      kind: "content_mismatch",
+      message: "managed block content does not match AGENTS.md",
+      markerSource: projection.markerSource,
+      markerSha256: projection.markerSha256,
+      actualSha256: projection.actualSha256,
+      sourceSha256: source.normalizedSha256
+    });
+  }
+  return findings;
+}
+function resultStatus(findings) {
+  return findings.length === 0 ? "ok" : "drift";
+}
+function codexInstructionResult(source) {
+  const findings = [...checkCodexInstructions(source), ...checkRequiredClauses(source)];
+  return {
+    host: "codex",
+    path: source.path,
+    status: resultStatus(findings),
+    ..."normalizedSha256" in source ? { sourceSha256: source.normalizedSha256 } : {},
+    findings
+  };
+}
+function claudeInstructionResult(source, projection) {
+  const findings = compareClaudeProjection(source, projection);
+  const sourceSha256 = "normalizedSha256" in source ? source.normalizedSha256 : undefined;
+  return {
+    host: "claude-code",
+    path: projection.path,
+    status: resultStatus(findings),
+    ...projection.kind === "ok" ? {
+      markerSource: projection.markerSource,
+      markerSha256: projection.markerSha256,
+      actualSha256: projection.actualSha256
+    } : {},
+    ...sourceSha256 ? { sourceSha256 } : {},
+    findings
+  };
+}
+async function checkInstructionsForHosts(hosts, repoRoot) {
+  return checkInstructionsForAdapters(hosts.map((host) => getHostAdapter(host)), repoRoot);
+}
+async function checkInstructionsForAdapters(adapters, repoRoot) {
+  const surfaces = await Promise.all(adapters.map((adapter) => adapter.loadInstructions(repoRoot)));
+  let sourceSurface = surfaces.find((surface) => surface.role === "source");
+  if (!sourceSurface) {
+    const registeredAdapters = listHostAdapters().filter((adapter) => !adapters.includes(adapter));
+    const registered = await Promise.all(registeredAdapters.map((adapter) => adapter.loadInstructions(repoRoot)));
+    sourceSurface = registered.find((surface) => surface.role === "source");
+  }
+  if (!sourceSurface) {
+    const sourcePath = join24(repoRoot, "AGENTS.md");
+    sourceSurface = { role: "source", host: "codex", path: sourcePath, exists: false };
+  }
+  const source = sourceFromSurface(sourceSurface);
+  const results = [];
+  for (const surface of surfaces) {
+    if (surface.host === "codex" && surface.role === "source") {
+      results.push(codexInstructionResult(source));
+    }
+    if (surface.host === "claude-code" && surface.role === "projection") {
+      results.push(claudeInstructionResult(source, projectionFromSurface(surface)));
+    }
+  }
+  const findings = results.flatMap((result2) => result2.findings);
+  return {
+    findings,
+    results,
+    sourceSha256: "normalizedSha256" in source ? source.normalizedSha256 : null
+  };
+}
+
+// src/core/knowledge-bridge.ts
+var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
+var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
+var glossarySummarySchema = exports_external.object({
+  entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
+});
+var glossaryVocabSchema = exports_external.object({
+  entries: exports_external.array(exports_external.object({ forbidden_abbreviations: exports_external.array(exports_external.string()).default([]) })).default([])
+});
+var KNOWLEDGE_DIR = join25(".ditto", "knowledge");
+var ADR_STATUS_LINE_KO_RE = /^\s*(?:[-*]\s+)?\uC0C1\uD0DC:\s*(.+)$/m;
+var ADR_STATUS_LINE_EN_RE = /^\s*(?:[-*]\s+)?status:\s*(.+)$/im;
+function parseAdrStatusLine(body) {
+  const value = body.match(ADR_STATUS_LINE_KO_RE)?.[1] ?? body.match(ADR_STATUS_LINE_EN_RE)?.[1];
+  if (value === undefined)
+    return null;
+  const status = value.trim();
+  if (status.length === 0)
+    return null;
+  const after = status.match(/superseded by\s+(.+)$/i)?.[1];
+  const supersededBy = after?.match(ADR_ID_EXTRACT_RE)?.[0];
+  return { status, ...supersededBy !== undefined ? { supersededBy } : {} };
+}
+var ADR_DIR_AT_HEAD = ".ditto/knowledge/adr";
+function readAdrStatusAtHead(repoRoot, adrId) {
+  try {
+    const listed = execFileSync4("git", ["ls-tree", "-r", "--name-only", "HEAD", "--", ADR_DIR_AT_HEAD], { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const names = listed.split(`
+`).map((l2) => l2.trim()).filter((l2) => l2.length > 0);
+    const matches = names.filter((path) => {
+      const name = path.slice(path.lastIndexOf("/") + 1);
+      return name === `${adrId}.md` || name.startsWith(`${adrId}-`) && name.endsWith(".md");
+    }).sort();
+    const first = matches[0];
+    if (first === undefined)
+      return { status: "absent" };
+    if (matches.length > 1)
+      return { status: "ambiguous", matches };
+    const body = execFileSync4("git", ["show", `HEAD:${first}`], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    const parsed = parseAdrStatusLine(body);
+    if (parsed === null)
+      return { status: "malformed" };
+    return {
+      status: "ok",
+      adr_status: parsed.status,
+      ...parsed.supersededBy !== undefined ? { superseded_by: parsed.supersededBy } : {}
+    };
+  } catch {
+    return { status: "absent" };
+  }
+}
+function adrHeadline(filename, body) {
+  const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
+  const titleLine = body.split(`
+`).find((l2) => l2.startsWith("# "));
+  const title = titleLine ? titleLine.replace(/^#\s*/, "").trim() : "";
+  const status = parseAdrStatusLine(body)?.status.split(/\s+/)[0] ?? "";
+  const parts = [id];
+  if (status)
+    parts.push(status);
+  if (title)
+    parts.push(title.replace(ADR_TITLE_PREFIX_RE, ""));
+  return parts.join(" \xB7 ");
+}
+async function loadKnowledgeSources(repoRoot) {
+  const dir = join25(repoRoot, KNOWLEDGE_DIR);
+  const contextPath = join25(KNOWLEDGE_DIR, "CONTEXT.md");
+  const glossaryPath = join25(KNOWLEDGE_DIR, "glossary.json");
+  const adrDir = join25(KNOWLEDGE_DIR, "adr");
+  let termHeadlines = [];
+  const glossaryFile = Bun.file(join25(dir, "glossary.json"));
+  if (await glossaryFile.exists()) {
+    const parsed = glossarySummarySchema.safeParse(JSON.parse(await glossaryFile.text()));
+    if (parsed.success) {
+      termHeadlines = parsed.data.entries.map((e2) => e2.status && e2.status !== "agreed" ? `${e2.term} (${e2.status})` : e2.term).sort();
+    }
+  }
+  const adrHeadlines = [];
+  const adrPath = join25(dir, "adr");
+  let adrEntries = [];
+  try {
+    adrEntries = (await readdir9(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
+  } catch {
+    adrEntries = [];
+  }
+  for (const rel of adrEntries) {
+    const body = await Bun.file(join25(adrPath, rel)).text();
+    adrHeadlines.push(adrHeadline(rel, body));
+  }
+  adrHeadlines.sort();
+  return { contextPath, glossaryPath, adrDir, adrHeadlines, termHeadlines };
+}
+async function loadGlossaryVocab(repoRoot, onMalformed) {
+  const file = Bun.file(join25(repoRoot, KNOWLEDGE_DIR, "glossary.json"));
+  if (!await file.exists())
+    return [];
+  try {
+    const parsed = glossaryVocabSchema.safeParse(JSON.parse(await file.text()));
+    if (!parsed.success) {
+      onMalformed?.();
+      return [];
+    }
+    return parsed.data.entries.flatMap((e2) => e2.forbidden_abbreviations).map((s2) => s2.trim()).filter((s2) => s2.length > 0);
+  } catch {
+    onMalformed?.();
+    return [];
+  }
+}
+function warnMalformedGlossary(repoRoot) {
+  console.warn(`ditto: malformed ${join25(repoRoot, KNOWLEDGE_DIR, "glossary.json")} \u2014 ignoring glossary-sourced opaque vocabulary and applying only the built-in floor (fix the file to re-enable it)`);
+}
+function renderKnowledgeSummary(sources) {
+  const lines = [];
+  lines.push("# DITTO Knowledge (projected \u2014 do not edit by hand)");
+  lines.push("");
+  lines.push("Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.");
+  lines.push("");
+  lines.push(`- context: \`${sources.contextPath}\``);
+  lines.push(`- glossary: \`${sources.glossaryPath}\``);
+  lines.push(`- decisions: \`${sources.adrDir}/\``);
+  lines.push("");
+  lines.push("## Glossary terms");
+  if (sources.termHeadlines.length === 0)
+    lines.push("- (none)");
+  for (const t2 of sources.termHeadlines)
+    lines.push(`- ${t2}`);
+  lines.push("");
+  lines.push("## Architecture decisions");
+  if (sources.adrHeadlines.length === 0)
+    lines.push("- (none)");
+  for (const a2 of sources.adrHeadlines)
+    lines.push(`- ${a2}`);
+  lines.push("");
+  return normalizeInstructionText(lines.join(`
+`));
+}
+function knowledgeSummarySha256(summary) {
+  return normalizedSha256(summary);
+}
+function knowledgeBlock(summary, sha2562) {
+  return `<!-- ditto:knowledge:start sha256=${sha2562} -->
+${summary}
+${KNOWLEDGE_END}`;
+}
+function loadKnowledgeProjection(content) {
+  if (content === null)
+    return { kind: "missing" };
+  const matches = [...content.matchAll(KNOWLEDGE_BLOCK_RE_G)];
+  if (matches.length === 0)
+    return { kind: "no_marker", content };
+  if (matches.length > 1)
+    return { kind: "multiple_markers", content, count: matches.length };
+  const match = matches[0];
+  if (!match || match.index === undefined)
+    return { kind: "no_marker", content };
+  const body = match[2] ?? "";
+  return {
+    kind: "ok",
+    content,
+    markerSha256: match[1] ?? "",
+    actualSha256: normalizedSha256(body),
+    startIndex: match.index,
+    endIndex: match.index + match[0].length
+  };
+}
+async function syncKnowledgeProjection(repoRoot, options = {}) {
+  const sources = await loadKnowledgeSources(repoRoot);
+  const summary = renderKnowledgeSummary(sources);
+  const sha2562 = knowledgeSummarySha256(summary);
+  const block = knowledgeBlock(summary, sha2562);
+  const path = join25(repoRoot, "CLAUDE.md");
+  const check = options.check === true;
+  const file = Bun.file(path);
+  const existing = await file.exists() ? await file.text() : null;
+  const projection = loadKnowledgeProjection(existing);
+  if (projection.kind === "missing") {
+    if (!check)
+      await atomicWriteText(path, `${block}
+`);
+    return {
+      path,
+      action: check ? "would-create" : "created",
+      oldSha256: null,
+      newSha256: sha2562,
+      message: "created new knowledge block"
+    };
+  }
+  if (projection.kind === "no_marker") {
+    const base = projection.content ?? "";
+    const separator = base.endsWith(`
+`) ? `
+` : `
+
+`;
+    const next2 = `${base}${separator}${block}
+`;
+    if (!check)
+      await atomicWriteText(path, next2);
+    return {
+      path,
+      action: check ? "would-update" : "updated",
+      oldSha256: null,
+      newSha256: sha2562,
+      message: "appended new knowledge block"
+    };
+  }
+  if (projection.kind === "multiple_markers") {
+    return {
+      path,
+      action: "refused-multiple-markers",
+      oldSha256: null,
+      newSha256: sha2562,
+      message: `CLAUDE.md contains ${projection.count} ditto:knowledge blocks; clean up to exactly one before re-running`
+    };
+  }
+  const content = projection.content ?? "";
+  const next = `${content.slice(0, projection.startIndex)}${block}${content.slice(projection.endIndex)}`;
+  const unchanged = next === content;
+  if (!unchanged && !check)
+    await atomicWriteText(path, next);
+  return {
+    path,
+    action: unchanged ? check ? "would-be-unchanged" : "unchanged" : check ? "would-update" : "updated",
+    oldSha256: projection.markerSha256 ?? null,
+    newSha256: sha2562
+  };
+}
+
 // src/core/autopilot-loop.ts
 init_memory_store();
 
@@ -25068,7 +25621,7 @@ function artifactNodeId(path) {
 }
 
 // src/core/memory-reduce.ts
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash6 } from "crypto";
 function reduceEvents(events) {
   const byTarget = new Map;
   for (const e2 of events) {
@@ -25096,7 +25649,7 @@ function reduceEvents(events) {
       supersededIds.add(e2.supersedes);
   }
   const approvedHeads = events.filter((e2) => !supersededIds.has(e2.event_id) && e2.status === "approved").sort((a2, b2) => a2.event_id < b2.event_id ? -1 : a2.event_id > b2.event_id ? 1 : 0);
-  const setHash = createHash5("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
+  const setHash = createHash6("sha256").update(approvedHeads.map((e2) => e2.event_id).join(`
 `)).digest("hex");
   return { approvedHeads, setHash };
 }
@@ -25565,7 +26118,7 @@ async function memoryStatus(repoRoot) {
 
 // src/core/memory-query.ts
 import { appendFile as appendFile2, readFile as readFile2 } from "fs/promises";
-import { basename as basename2, dirname as dirname6, isAbsolute as isAbsolute3, join as join27 } from "path";
+import { basename as basename2, dirname as dirname6, isAbsolute as isAbsolute3, join as join29 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -25826,7 +26379,7 @@ async function loadGoverningDecisions(repoRoot) {
     let body = e2.text;
     if (rel) {
       try {
-        body = await readFile2(isAbsolute3(rel) ? rel : join27(repoRoot, rel), "utf8");
+        body = await readFile2(isAbsolute3(rel) ? rel : join29(repoRoot, rel), "utf8");
       } catch {}
     }
     byNodeId.set(`decision:${e2.event_id}`, {
@@ -25940,7 +26493,7 @@ class MemoryAuditLogStore {
     this.repoRoot = repoRoot;
   }
   path() {
-    return join27(dittoDir(this.repoRoot), "memory", "audit-log.jsonl");
+    return join29(dittoDir(this.repoRoot), "memory", "audit-log.jsonl");
   }
   async append(entry) {
     const p = this.path();
@@ -26109,7 +26662,7 @@ async function warmStartMemoryContext(repoRoot, node2, workItem2, options = {}) 
 
 // src/core/recipe/load.ts
 init_ditto_paths();
-import { join as join28 } from "path";
+import { join as join30 } from "path";
 
 // src/core/recipe/parse.ts
 init_dist2();
@@ -26240,7 +26793,7 @@ async function loadRecipeFile(path, source, onMalformed) {
   return result2.recipe;
 }
 async function loadResolvedRecipe(repoRoot, cliPath, onMalformed) {
-  const project = await loadRecipeFile(join28(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m2) => onMalformed?.("project", m2));
+  const project = await loadRecipeFile(join30(repoRoot, PROJECT_RECIPE_FILENAME), "discovered", (m2) => onMalformed?.("project", m2));
   const personal = await loadRecipeFile(localDir(repoRoot, "recipe.yaml"), "discovered", (m2) => onMalformed?.("personal", m2));
   const cli = cliPath === undefined ? undefined : await loadRecipeFile(cliPath, "explicit");
   return resolveRecipe({ cli, personal, project, builtinDefault: BUILTIN_DEFAULT_RECIPE });
@@ -26445,7 +26998,7 @@ class RetroMetricLedger {
 }
 
 // src/core/spec-doc.ts
-import { createHash as createHash6 } from "crypto";
+import { createHash as createHash7 } from "crypto";
 var SPEC_SECTIONS = [
   { id: "feature", title: "\uAE30\uB2A5" },
   { id: "summary", title: "\uC694\uC57D" },
@@ -26521,7 +27074,7 @@ function parseSpecSections(markdown) {
 }
 function computeSpecDigest(markdown) {
   const { sections } = parseSpecSections(markdown);
-  const hash = createHash6("sha256");
+  const hash = createHash7("sha256");
   for (const id of COMPILE_INPUT_SECTIONS) {
     hash.update(`${id}
 ${sections.get(id) ?? ""}\x00`);
@@ -26765,7 +27318,7 @@ async function specDigestStale(repoRoot, workItemId2) {
   const { doc_path, sha256: sha2562 } = intent.source_digest;
   let doc;
   try {
-    doc = await readFile3(join29(repoRoot, doc_path), "utf8");
+    doc = await readFile3(join31(repoRoot, doc_path), "utf8");
   } catch {
     doc = null;
   }
@@ -26920,7 +27473,7 @@ function progressReportPath(repoRoot, workItemId2, band) {
   return localDir(repoRoot, "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function progressReportRelPath(workItemId2, band) {
-  return join29(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
+  return join31(".ditto", "local", "runs", workItemId2, `progress-report-band-${band}.json`);
 }
 function fenceProgressReport(report, band) {
   const body = [
@@ -27015,7 +27568,7 @@ function planBarrierRuns(recipe2, changedFiles, workspaceRoot, worktrees = []) {
   const runs = affectedBarrierDirs(changedFiles, recipe2).map((dir) => {
     const repoKey = dir === "" ? "." : dir;
     const wt = worktrees.find((w2) => norm(w2.owning_repo) === repoKey);
-    const cwd = wt ? join29(workspaceRoot, wt.worktree_path) : dir === "" ? workspaceRoot : join29(workspaceRoot, dir);
+    const cwd = wt ? join31(workspaceRoot, wt.worktree_path) : dir === "" ? workspaceRoot : join31(workspaceRoot, dir);
     return { dir, command: resolveBarrierCommand(recipe2, dir), cwd };
   });
   if (runs.length > 1)
@@ -27132,7 +27685,7 @@ async function nextNode(repoRoot, workItemId2) {
     const rolledBack = graph.nodes.filter((n2) => n2.status === "running").map((n2) => n2.id);
     const authoredPaths = authoredTestPaths(graph.approval_gate);
     for (const p of authoredPaths) {
-      await rm(join29(repoRoot, p), { force: true }).catch(() => {});
+      await rm(join31(repoRoot, p), { force: true }).catch(() => {});
     }
     const nodes = rb.nodes.map((n2) => n2.kind === "test-author" && n2.status === "passed" ? { ...n2, status: nodeTransition("passed", "reopen") } : n2);
     let approval_gate = graph.approval_gate;
@@ -27325,7 +27878,7 @@ async function nextNode(repoRoot, workItemId2) {
       const markdown = renderApprovalArtifact(graph.approval_gate, acById);
       const approvalDir = localDir(repoRoot, "work-items", workItemId2, "approval");
       await ensureDir(approvalDir);
-      await atomicWriteText(join29(approvalDir, "plan-approval.md"), markdown);
+      await atomicWriteText(join31(approvalDir, "plan-approval.md"), markdown);
       const artifactRel = `.ditto/local/work-items/${workItemId2}/approval/plan-approval.md`;
       return { action: "present_plan", reason: gate2.reason, artifact_path: artifactRel };
     }
@@ -27485,7 +28038,7 @@ var recordResultPayload = exports_external.object({
     })
   }).optional().describe("A plan-stage (design/planner) node's pre-mortem coverage brief + tier inputs. On a " + "contentful design pass it populates approval_gate.{plan_brief,change_surface,status} " + "via producePlanGate (brief hard-gate, \xA77.2). Ignored for non-design nodes."),
   test_spec: planTestSpec.optional(),
-  decision_conflicts: exports_external.array(decisionConflict).optional().describe("The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " + "pass a non-empty list is written to the decision-conflict carrier so an intent " + "conflict front-loads the approval gate (prevention) and the Stop hook re-checks it " + "(catch). Absent/empty \u21D2 no carrier written (backward compat). Ignored for non-design."),
+  decision_conflicts: exports_external.array(decisionConflict).optional().describe("The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " + "pass a non-empty list is written to the decision-conflict carrier (merged by adr_id \u2014 " + "an existing entry\u2019s resolution record survives) so an intent conflict front-loads " + "the approval gate (prevention) and the Stop hook re-checks it (catch). An EXPLICIT [] " + "means judged-none: method/prefer entries are cleared from a pre-existing carrier " + "(logged), intent-level entries persist (user-owned resolution only; the file is " + "removed when nothing remains). Absent (undefined) means no judgment: the carrier is " + "left untouched. Ignored for non-design."),
   ac_oracles: exports_external.array(exports_external.object({
     criterion_id: exports_external.string().min(1),
     oracle: acOracle
@@ -27574,7 +28127,7 @@ async function surfaceLspDiagnostics(repoRoot, workItemId2, changedFiles) {
   const surfaced = [];
   for (let i2 = 0;i2 < checked.length; i2 += GATE_CONCURRENCY) {
     const batch = await Promise.all(checked.slice(i2, i2 + GATE_CONCURRENCY).map(async ({ file, language }) => {
-      const diags = await getDiagnostics(join29(repoRoot, file), {
+      const diags = await getDiagnostics(join31(repoRoot, file), {
         language,
         timeoutMs: GATE_TIMEOUT_MS
       });
@@ -27607,10 +28160,116 @@ async function planRequiresDecisionApproval(repoRoot, workItemId2) {
   }
   try {
     const parsed = decisionConflictCarrier.safeParse(JSON.parse(text));
-    return parsed.success && decisionConflictRequiresApproval(parsed.data.conflicts);
+    if (!parsed.success)
+      return false;
+    const effective = splitResolvedConflicts(parsed.data.conflicts, (adrId) => readAdrStatusAtHead(repoRoot, adrId));
+    return decisionConflictRequiresApproval(effective.blocking);
   } catch {
     return false;
   }
+}
+var DECISION_CONFLICT_CLEARED_MARKER = "decision-conflict-cleared";
+function decisionConflictCarrierPath(repoRoot, workItemId2) {
+  return localDir(repoRoot, "work-items", workItemId2, "decision-conflict.json");
+}
+function isUserOwnedIntentEntry(entry) {
+  return entry.level === "intent" && entry.kind !== "prefer";
+}
+async function readRawCarrier(path) {
+  let text;
+  try {
+    text = await readFile3(path, "utf8");
+  } catch {
+    return { state: "absent" };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null)
+      return { state: "malformed" };
+    const shell = parsed;
+    const conflicts = shell.conflicts;
+    if (!Array.isArray(conflicts))
+      return { state: "malformed" };
+    if (conflicts.some((c3) => typeof c3 !== "object" || c3 === null))
+      return { state: "malformed" };
+    return { state: "ok", shell, entries: conflicts };
+  } catch {
+    return { state: "malformed" };
+  }
+}
+async function writeRawCarrier(path, shell, entries) {
+  await atomicWriteText(path, `${JSON.stringify({ ...shell, conflicts: entries }, null, 2)}
+`);
+}
+async function applyDecisionConflictDeclaration(args) {
+  if (args.declared === undefined)
+    return;
+  const path = decisionConflictCarrierPath(args.repoRoot, args.workItemId);
+  const existing = await readRawCarrier(path);
+  if (Array.isArray(args.declared) && args.declared.length === 0) {
+    if (existing.state !== "ok")
+      return;
+    const kept = existing.entries.filter(isUserOwnedIntentEntry);
+    const removed = existing.entries.filter((e2) => !isUserOwnedIntentEntry(e2));
+    const removeFile = kept.length === 0;
+    if (removed.length === 0 && !removeFile)
+      return;
+    if (removeFile) {
+      await rm(path, { force: true });
+    } else {
+      await writeRawCarrier(path, existing.shell, kept);
+    }
+    const removedIds = removed.map((e2) => String(e2.adr_id ?? "unknown-adr"));
+    await args.appendDecision({
+      ts: args.now.toISOString(),
+      node_id: args.nodeId,
+      decision: "surface",
+      resolvability: "decision_or_adr_conflict",
+      reason: `${DECISION_CONFLICT_CLEARED_MARKER}: design pass declared decision_conflicts=[] (judged-none) \u2014 ` + `removed ${removed.length} method/prefer entr${removed.length === 1 ? "y" : "ies"}` + `${removedIds.length > 0 ? ` (${removedIds.join(", ")})` : ""}; ` + `${kept.length} intent-level entr${kept.length === 1 ? "y" : "ies"} preserved (user-owned resolution only)` + `${removeFile ? "; no entries remain \u2014 carrier file removed" : ""}`
+    });
+    return;
+  }
+  const priorByAdrId = new Map(existing.state === "ok" ? existing.entries.filter((e2) => typeof e2.adr_id === "string").map((e2) => [e2.adr_id, e2]) : []);
+  const merged = args.declared.map((c3) => {
+    const prior = priorByAdrId.get(c3.adr_id);
+    return prior !== undefined && prior.resolution !== undefined ? { ...c3, resolution: prior.resolution } : { ...c3 };
+  });
+  await ensureDir(localDir(args.repoRoot, "work-items", args.workItemId));
+  const shell = existing.state === "ok" ? existing.shell : { schema_version: "0.1.0", mode: "autopilot" };
+  await writeRawCarrier(path, shell, merged);
+}
+async function intentConflictPassCloseBlocker(repoRoot, workItemId2) {
+  const path = decisionConflictCarrierPath(repoRoot, workItemId2);
+  const carrier = await readRawCarrier(path);
+  if (carrier.state === "absent")
+    return null;
+  if (carrier.state === "malformed") {
+    return `decision-conflict carrier (.ditto/local/work-items/${workItemId2}/decision-conflict.json) is malformed \u2014 fail-closed. Restore/repair the carrier, then re-run.`;
+  }
+  const intentEntries = carrier.entries.filter(isUserOwnedIntentEntry);
+  if (intentEntries.length === 0)
+    return null;
+  const verifiable = [];
+  const unparseable = [];
+  for (const entry of intentEntries) {
+    const parsed = decisionConflict.safeParse(entry);
+    if (parsed.success)
+      verifiable.push(parsed.data);
+    else
+      unparseable.push(entry);
+  }
+  const split = splitResolvedConflicts(verifiable, (adrId) => readAdrStatusAtHead(repoRoot, adrId));
+  if (split.blocking.length === 0 && unparseable.length === 0)
+    return null;
+  const failureOf = new Map(split.failures.map((f3) => [f3.conflict, f3.message]));
+  const named = [
+    ...split.blocking.map((c3) => {
+      const failure = failureOf.get(c3);
+      return `${c3.adr_id} (${c3.kind}: ${c3.basis})${failure !== undefined ? ` \u2014 ${failure}` : ""}`;
+    }),
+    ...unparseable.map((e2) => `${String(e2.adr_id ?? "unknown-adr")} (${String(e2.kind)}: ${String(e2.basis ?? "no basis recorded")})`)
+  ].join("; ");
+  return `unresolved intent-level decision conflict(s) \u2014 ${named}. These are user-owned: either record a verified supersede resolution on the conflict entry (the ADR was superseded and the conflict re-judged against the successor), or give the work up (\`ditto work abandon ${workItemId2}\`).`;
 }
 var ORACLE_UNSATISFIED_MARKER = "oracle-unsatisfied";
 var PROGRESS_CONTINUATION_MARKER = "progress-continuation";
@@ -27802,8 +28461,8 @@ async function directPostDecisions(repoRoot, workItemId2) {
 }
 async function hashAuthoredTest(repoRoot, testPath) {
   try {
-    const bytes = await readFile3(join29(repoRoot, testPath));
-    return createHash7("sha256").update(bytes).digest("hex");
+    const bytes = await readFile3(join31(repoRoot, testPath));
+    return createHash8("sha256").update(bytes).digest("hex");
   } catch {
     return;
   }
@@ -27880,7 +28539,7 @@ async function recordResultCore(repoRoot, input) {
         failureClass = "fixable";
         guardReason = ownerGuard.reason;
       } else {
-        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join29(repoRoot, p), "utf8"));
+        const artifactGuard = await guardEnvelopeArtifact(input.payload.envelope, (p) => readFile3(join31(repoRoot, p), "utf8"));
         if (!artifactGuard.contentful) {
           contentful = false;
           outcome = "fail";
@@ -28050,12 +28709,14 @@ async function recordResultCore(repoRoot, input) {
         });
       }
     }
-    if (node2.kind === "design" && input.payload.decision_conflicts !== undefined && input.payload.decision_conflicts.length > 0) {
-      await ensureDir(localDir(repoRoot, "work-items", input.workItemId));
-      await writeJson(localDir(repoRoot, "work-items", input.workItemId, "decision-conflict.json"), decisionConflictCarrier, {
-        schema_version: "0.1.0",
-        mode: "autopilot",
-        conflicts: input.payload.decision_conflicts
+    if (node2.kind === "design") {
+      await applyDecisionConflictDeclaration({
+        repoRoot,
+        workItemId: input.workItemId,
+        nodeId: node2.id,
+        declared: input.payload.decision_conflicts,
+        appendDecision: (d2) => aps.appendDecision(input.workItemId, d2),
+        now: input.now ?? new Date
       });
     }
     if ((node2.kind === "review" || node2.kind === "security") && input.payload.has_findings === true) {
@@ -28714,8 +29375,8 @@ async function recordResultCore(repoRoot, input) {
 
 // src/core/cite-gate.ts
 init_ditto_paths();
-import { readFile as readFile4, readdir as readdir11 } from "fs/promises";
-import { join as join30 } from "path";
+import { readFile as readFile4, readdir as readdir12 } from "fs/promises";
+import { join as join32 } from "path";
 var CITE_RE = /\bdecision:|\bADR-\d/i;
 var ABSTAIN_RE = /\babstain|none\s+(?:of\s+the\s+)?(?:governing\s+)?decisions?\s+apply|none\s+apply/i;
 function evidenceText(node2) {
@@ -28787,14 +29448,14 @@ function citeNeedsReproposalMeasurement(verdict2) {
   return verdict2 === "pass";
 }
 async function loadAdrBodies(repoRoot) {
-  const adrDir = join30(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join32(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
-    names = (await readdir11(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
+    names = (await readdir12(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     return [];
   }
-  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join30(adrDir, n2), "utf8") })));
+  return Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile4(join32(adrDir, n2), "utf8") })));
 }
 async function detectActiveConflicts(repoRoot, input) {
   const report = await readUsageReport(repoRoot, input.workItemId);
@@ -29384,7 +30045,7 @@ async function seedGithubConfigIfAbsent(repoRoot, github, onMalformed) {
 init_ditto_paths();
 
 // src/core/e2e/completion-gate.ts
-import { join as join36 } from "path";
+import { join as join38 } from "path";
 
 // src/schemas/e2e-regression-gate.ts
 init_zod();
@@ -29485,7 +30146,7 @@ var regressionGateRecord = exports_external.object({
 
 // src/core/e2e/regression-gate.ts
 import { readFile as readFile9 } from "fs/promises";
-import { join as join34, resolve as resolve8 } from "path";
+import { join as join36, resolve as resolve8 } from "path";
 init_ditto_paths();
 init_fs();
 
@@ -29616,13 +30277,13 @@ function renderFailureLines(failure, journeyName) {
 init_ditto_paths();
 init_fs();
 import { mkdir as mkdir5, readFile as readFile7 } from "fs/promises";
-import { join as join32 } from "path";
+import { join as join34 } from "path";
 
 // src/core/e2e/browser.ts
-import { createHash as createHash8 } from "crypto";
-import { mkdir as mkdir4, readFile as readFile5, readdir as readdir12, writeFile as writeFile3 } from "fs/promises";
+import { createHash as createHash9 } from "crypto";
+import { mkdir as mkdir4, readFile as readFile5, readdir as readdir13, writeFile as writeFile3 } from "fs/promises";
 import { homedir as homedir6 } from "os";
-import { dirname as dirname9, join as join31, relative as relative9, sep as sep5 } from "path";
+import { dirname as dirname9, join as join33, relative as relative9, sep as sep5 } from "path";
 import { fileURLToPath } from "url";
 
 // src/schemas/e2e-journey.ts
@@ -29705,20 +30366,20 @@ var e2eJourney = exports_external.object({
 init_ditto_paths();
 init_shared();
 function runnerScriptPath() {
-  return join31(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
+  return join33(dirname9(fileURLToPath(import.meta.url)), "playwright-runner.mjs");
 }
 async function resolvePlaywrightCore() {
-  const bunInstall = process.env.BUN_INSTALL ?? join31(homedir6(), ".bun");
-  const cacheDir = join31(bunInstall, "install", "cache");
+  const bunInstall = process.env.BUN_INSTALL ?? join33(homedir6(), ".bun");
+  const cacheDir = join33(bunInstall, "install", "cache");
   let entries;
   try {
-    entries = await readdir12(cacheDir);
+    entries = await readdir13(cacheDir);
   } catch {
     return null;
   }
   const versions = entries.filter((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2)).sort((a2, b2) => compareSemver(b2.split("@")[1], a2.split("@")[1]));
   for (const v2 of versions) {
-    const mjs = join31(cacheDir, v2, "index.mjs");
+    const mjs = join33(cacheDir, v2, "index.mjs");
     if (await fileExists(mjs))
       return mjs;
   }
@@ -29734,10 +30395,10 @@ function compareSemver(a2, b2) {
   return 0;
 }
 async function findCachedChromium() {
-  const cacheRoot = join31(homedir6(), "Library", "Caches", "ms-playwright");
+  const cacheRoot = join33(homedir6(), "Library", "Caches", "ms-playwright");
   let entries;
   try {
-    entries = await readdir12(cacheRoot);
+    entries = await readdir13(cacheRoot);
   } catch {
     return null;
   }
@@ -29748,7 +30409,7 @@ async function findCachedChromium() {
   ];
   for (const dir of chromiumDirs) {
     for (const rel of candidates) {
-      const abs = join31(cacheRoot, dir, rel);
+      const abs = join33(cacheRoot, dir, rel);
       if (await fileExists(abs))
         return abs;
     }
@@ -29760,7 +30421,7 @@ function repoRelative(repoRoot, path) {
 }
 async function sha256OfFile(path) {
   const bytes = await readFile5(path);
-  return createHash8("sha256").update(bytes).digest("hex");
+  return createHash9("sha256").update(bytes).digest("hex");
 }
 async function probePlaywright(repoRoot) {
   let proc;
@@ -29829,7 +30490,7 @@ async function runJourney(repoRoot, runId2, spec) {
   }
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir4(runDir, { recursive: true });
-  const configAbs = join31(runDir, "runner-config.json");
+  const configAbs = join33(runDir, "runner-config.json");
   await writeFile3(configAbs, JSON.stringify({
     playwrightCore: probe.playwrightCore,
     executablePath: probe.executablePath,
@@ -29862,10 +30523,10 @@ async function runJourney(repoRoot, runId2, spec) {
       probe
     };
   }
-  const screenshotAbs = join31(runDir, "journey.png");
-  const traceAbs = join31(runDir, "trace.zip");
-  const consoleAbs = join31(runDir, "console.log");
-  const networkAbs = join31(runDir, "network.log");
+  const screenshotAbs = join33(runDir, "journey.png");
+  const traceAbs = join33(runDir, "trace.zip");
+  const consoleAbs = join33(runDir, "console.log");
+  const networkAbs = join33(runDir, "network.log");
   const screenshots = [];
   if (await fileExists(screenshotAbs)) {
     screenshots.push({
@@ -29876,7 +30537,7 @@ async function runJourney(repoRoot, runId2, spec) {
   const trace = await fileExists(traceAbs) ? { path: repoRelative(repoRoot, traceAbs) } : null;
   const consoleArtifact = await fileExists(consoleAbs) ? { path: repoRelative(repoRoot, consoleAbs) } : null;
   const network = await fileExists(networkAbs) ? { path: repoRelative(repoRoot, networkAbs) } : null;
-  const outcomeAbs = join31(runDir, "outcome.json");
+  const outcomeAbs = join33(runDir, "outcome.json");
   if (!await fileExists(outcomeAbs)) {
     return {
       journey: blockedJourney(spec, "Playwright present but no capture outcome was produced; treating as blocked rather than asserting an unobserved pass"),
@@ -29923,7 +30584,7 @@ async function withBrowserGuard(repoRoot, action, options = {}) {
 // src/core/e2e/journey-digest.ts
 init_dist2();
 init_shared();
-import { createHash as createHash9 } from "crypto";
+import { createHash as createHash10 } from "crypto";
 import { readFile as readFile6 } from "fs/promises";
 
 // src/core/e2e/journey-dsl.ts
@@ -30041,7 +30702,7 @@ function parseBlockDoc(text) {
 
 // src/core/e2e/journey-digest.ts
 function sha256Hex2(bytes) {
-  return createHash9("sha256").update(bytes).digest("hex");
+  return createHash10("sha256").update(bytes).digest("hex");
 }
 function canonicalDigestText(text) {
   const split = splitFrontMatter(text);
@@ -30241,7 +30902,7 @@ function passedCount(output) {
 async function anyFallbackUnverified(repoRoot, files) {
   for (const file of files) {
     try {
-      if (isFallbackUnverified(await readFile7(join32(repoRoot, file), "utf8")))
+      if (isFallbackUnverified(await readFile7(join34(repoRoot, file), "utf8")))
         return true;
     } catch {}
   }
@@ -30251,7 +30912,7 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
   const runner = options.runner ?? runPlaywrightTests;
   const runDir = localDir(repoRoot, "runs", runId2);
   await mkdir5(runDir, { recursive: true });
-  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join32(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
+  const outcome = await withBrowserGuard(repoRoot, () => runner(repoRoot, files, join34(runDir, "playwright-report.json")), options.probe ? { probe: options.probe } : {});
   const verified_at = new Date().toISOString();
   let record;
   if (outcome.result === "blocked") {
@@ -30292,15 +30953,15 @@ async function verifyGenerated(repoRoot, runId2, files, options = {}) {
       verified_at
     };
   }
-  await atomicWriteText(join32(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
+  await atomicWriteText(join34(runDir, "generated-verify.json"), `${JSON.stringify(record, null, 2)}
 `);
   return record;
 }
 
 // src/core/e2e/regression-select.ts
 init_shared();
-import { readFile as readFile8, readdir as readdir13, stat as stat4 } from "fs/promises";
-import { join as join33, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
+import { readFile as readFile8, readdir as readdir14, stat as stat4 } from "fs/promises";
+import { join as join35, relative as relative10, resolve as resolve7, sep as sep6 } from "path";
 var COMPONENT_PREFIX = "component:";
 function matchesComponentPattern(pattern, path) {
   if (!pattern.includes("*")) {
@@ -30355,14 +31016,14 @@ async function loadJourneyEntries(journeysDir) {
   const generatedDir = resolve7(journeysAbs, "..", "generated");
   let names;
   try {
-    names = (await readdir13(journeysAbs)).filter((n2) => n2.endsWith(".journey.md")).sort();
+    names = (await readdir14(journeysAbs)).filter((n2) => n2.endsWith(".journey.md")).sort();
   } catch {
     return { entries: [], invalid: [] };
   }
   const entries = [];
   const invalid = [];
   for (const name of names) {
-    const fileAbs = join33(journeysAbs, name);
+    const fileAbs = join35(journeysAbs, name);
     const fileRel = toPosix(relative10(repoRoot, fileAbs));
     const text = await readFile8(fileAbs, "utf8");
     const parsed = parseJourneyDoc(text);
@@ -30371,7 +31032,7 @@ async function loadJourneyEntries(journeysDir) {
       continue;
     }
     const slug = name.slice(0, -".journey.md".length);
-    const specAbs = join33(generatedDir, `${slug}.spec.ts`);
+    const specAbs = join35(generatedDir, `${slug}.spec.ts`);
     entries.push({
       id: parsed.frontMatter.id,
       name: parsed.frontMatter.name,
@@ -30416,10 +31077,10 @@ async function selectImpactedJourneys(journeysDir, changedPaths) {
 
 // src/core/e2e/regression-gate.ts
 function regressionGatePath(repoRoot, workItemId2) {
-  return join34(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
+  return join36(localDir(repoRoot, "work-items", workItemId2), "regression-gate.json");
 }
 async function mapRunFailures(repoRoot, runId2, selected) {
-  const reportFile = Bun.file(join34(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
+  const reportFile = Bun.file(join36(localDir(repoRoot, "runs", runId2), "playwright-report.json"));
   if (!await reportFile.exists())
     return [];
   let reporter;
@@ -30446,7 +31107,7 @@ async function mapRunFailures(repoRoot, runId2, selected) {
   }));
 }
 async function runRegressionGate(repoRoot, input, options = {}) {
-  const journeysDir = join34(repoRoot, "e2e", "journeys");
+  const journeysDir = join36(repoRoot, "e2e", "journeys");
   const selection = await selectImpactedJourneys(journeysDir, input.changedPaths);
   let selected;
   if (input.journeyIds !== undefined) {
@@ -30534,7 +31195,7 @@ async function runRegressionGate(repoRoot, input, options = {}) {
 
 // src/core/e2e/applicability.ts
 import { existsSync as existsSync5, readFileSync as readFileSync2 } from "fs";
-import { join as join35 } from "path";
+import { join as join37 } from "path";
 var WEB_FRAMEWORKS = [
   "react",
   "react-dom",
@@ -30589,7 +31250,7 @@ function dependencyNames(pkg) {
 var UI_EXTENSIONS = [".tsx", ".jsx", ".vue", ".svelte", ".html"];
 function defaultReadPackageJson(repoRoot) {
   return () => {
-    const path = join35(repoRoot, "package.json");
+    const path = join37(repoRoot, "package.json");
     if (!existsSync5(path))
       return null;
     try {
@@ -30602,7 +31263,7 @@ function defaultReadPackageJson(repoRoot) {
 }
 function defaultCountUiFiles(repoRoot) {
   return () => {
-    const srcDir = join35(repoRoot, "src");
+    const srcDir = join37(repoRoot, "src");
     if (!existsSync5(srcDir))
       return 0;
     const glob = new Bun.Glob(`**/*{${UI_EXTENSIONS.join(",")}}`);
@@ -30694,7 +31355,7 @@ async function checkE2eCompletionGate(repoRoot, input) {
       });
     }
   }
-  const selection = await selectImpactedJourneys(join36(repoRoot, "e2e", "journeys"), input.changedFiles);
+  const selection = await selectImpactedJourneys(join38(repoRoot, "e2e", "journeys"), input.changedFiles);
   const impacted = selection.journeys.length > 0 || selection.invalid_journeys.length > 0;
   if (!impacted)
     return violations;
@@ -30921,13 +31582,13 @@ function reflectAutopilotTermination(deps, input) {
 // src/core/land-commit.ts
 init_cleanup_archive();
 init_memory_scan();
-import { execFileSync as execFileSync5 } from "child_process";
-import { join as join39, relative as relative12, resolve as resolve11 } from "path";
+import { execFileSync as execFileSync6 } from "child_process";
+import { join as join41, relative as relative12, resolve as resolve11 } from "path";
 var RUN_ARTIFACT_PREFIX = ".ditto/local/runs/";
 var BYPRODUCT_PREFIXES = [".ditto/memory/"];
 function isGitIgnoredInRepo(repoAbs, rel) {
   try {
-    execFileSync5("git", ["check-ignore", "-q", "--", rel], { cwd: repoAbs, stdio: "pipe" });
+    execFileSync6("git", ["check-ignore", "-q", "--", rel], { cwd: repoAbs, stdio: "pipe" });
     return true;
   } catch {
     return false;
@@ -30936,7 +31597,7 @@ function isGitIgnoredInRepo(repoAbs, rel) {
 function dirtyByproducts(root) {
   let status = "";
   try {
-    status = execFileSync5("git", ["status", "--porcelain", "--untracked-files=all"], {
+    status = execFileSync6("git", ["status", "--porcelain", "--untracked-files=all"], {
       cwd: root,
       encoding: "utf8"
     });
@@ -30958,7 +31619,7 @@ function dirtyByproducts(root) {
 }
 function isDetachedHead(cwd) {
   try {
-    execFileSync5("git", ["symbolic-ref", "-q", "HEAD"], { cwd, stdio: "pipe" });
+    execFileSync6("git", ["symbolic-ref", "-q", "HEAD"], { cwd, stdio: "pipe" });
     return false;
   } catch {
     return true;
@@ -30974,7 +31635,7 @@ async function landCommit(repoRoot, changedFiles, message) {
   }
   const byRepo = new Map;
   for (const p of landable) {
-    const abs = join39(root, p);
+    const abs = join41(root, p);
     const owningAbs = await findOwningRepo(abs, root);
     const key = owningAbs === null ? "." : relative12(root, owningAbs).replace(/\\/g, "/") || ".";
     const repoAbs = subRepoAbs(root, key);
@@ -32583,6 +33244,12 @@ var workDone = defineCommand({
         process.exit(USAGE_ERROR_EXIT);
         return;
       }
+      const conflictBlock = await intentConflictPassCloseBlocker(repoRoot, args.workId);
+      if (conflictBlock !== null) {
+        writeError(`work ${args.workId} cannot close: ${conflictBlock}`);
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
       const existingCompletion = await completions.exists(args.workId) ? await completions.get(args.workId) : null;
       if (existingCompletion === null || existingCompletion.final_verdict !== "pass") {
         const placeholders = item.acceptance_criteria.filter((c3) => c3.statement === PLACEHOLDER_AC_STATEMENT);
@@ -33918,14 +34585,14 @@ var autopilotRecordResult = defineCommand({
   }
 });
 async function measureReproposalForCompletion(repoRoot) {
-  const adrDir = join40(dittoDir(repoRoot), "knowledge", "adr");
+  const adrDir = join42(dittoDir(repoRoot), "knowledge", "adr");
   let names;
   try {
-    names = (await readdir14(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
+    names = (await readdir15(adrDir)).filter((n2) => n2.endsWith(".md")).sort();
   } catch {
     names = [];
   }
-  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join40(adrDir, n2), "utf8") })));
+  const adrs = await Promise.all(names.map(async (n2) => ({ id: n2, body: await readFile10(join42(adrDir, n2), "utf8") })));
   return measureHallucination(adrs, []);
 }
 var autopilotComplete = defineCommand({
@@ -35103,7 +35770,7 @@ var autopilotCommand = defineCommand({
 });
 
 // src/cli/commands/boundary.ts
-import { join as join41 } from "path";
+import { join as join43 } from "path";
 init_fs();
 function violationsToReviewGraph(violations) {
   return acgReviewGraph.parse({
@@ -35178,7 +35845,7 @@ var boundaryCommand = defineCommand({
           }
           const changedFiles = String(args.file).split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
           const language = args.language ?? "javascript";
-          const sourceRoot = args["source-root"] ?? join41(repoRoot, "src");
+          const sourceRoot = args["source-root"] ?? join43(repoRoot, "src");
           const guard = await runInternalPackagesGuard({
             language,
             entries: spec.internal_packages,
@@ -35232,257 +35899,7 @@ var boundaryCommand = defineCommand({
 
 // src/core/bridge-sync.ts
 init_fs();
-import { join as join43 } from "path";
-
-// src/core/instruction-bridge.ts
-import { createHash as createHash10 } from "crypto";
-import { join as join42 } from "path";
-var MANAGED_END = "<!-- ditto:managed:end -->";
-var MANAGED_BLOCK_RE_G = /<!--\s*ditto:managed:start\s+source=([^\s]+)\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:managed:end\s*-->/g;
-var DELEGATION_CLAUSE_ANCHOR = "\uC704\uC784\uC73C\uB85C \uCEE8\uD14D\uC2A4\uD2B8\uB97C \uC9C0\uD0A8\uB2E4";
-var CHARTER_IDENTITY_MARKER = "Agent Behavior Charter";
-function normalizeInstructionText(text) {
-  return text.replace(/\r\n/g, `
-`).replace(/\r/g, `
-`).split(`
-`).map((line) => line.replace(/[ \t]+$/g, "")).join(`
-`);
-}
-function normalizedSha256(text) {
-  return createHash10("sha256").update(normalizeInstructionText(text)).digest("hex");
-}
-function sourceFromSurface(surface) {
-  if (surface.role !== "source") {
-    return { kind: "missing", path: join42(surface.path, "..", "AGENTS.md") };
-  }
-  if (!surface.exists || surface.content === undefined)
-    return { kind: "missing", path: surface.path };
-  return {
-    path: surface.path,
-    content: surface.content,
-    normalizedSha256: normalizedSha256(surface.content)
-  };
-}
-function projectionFromSurface(surface) {
-  if (surface.role !== "projection" || !surface.exists || surface.content === undefined) {
-    return { kind: "missing", path: surface.path };
-  }
-  const content = surface.content;
-  const matches = [...content.matchAll(MANAGED_BLOCK_RE_G)];
-  if (matches.length === 0)
-    return { kind: "no_marker", path: surface.path, content };
-  if (matches.length > 1)
-    return { kind: "multiple_markers", path: surface.path, content, count: matches.length };
-  const match = matches[0];
-  if (!match || match.index === undefined)
-    return { kind: "no_marker", path: surface.path, content };
-  const markerSource = match[1] ?? "";
-  const markerSha256 = match[2] ?? "";
-  const managedBlock = match[3] ?? "";
-  return {
-    kind: "ok",
-    path: surface.path,
-    content,
-    managedBlock,
-    markerSource,
-    markerSha256,
-    actualSha256: normalizedSha256(managedBlock),
-    startIndex: match.index,
-    endIndex: match.index + match[0].length
-  };
-}
-async function loadSource(repoRoot) {
-  return sourceFromSurface(await getHostAdapter("codex").loadInstructions(repoRoot));
-}
-async function loadProjection(repoRoot) {
-  return projectionFromSurface(await getHostAdapter("claude-code").loadInstructions(repoRoot));
-}
-function checkCodexInstructions(source) {
-  if ("kind" in source) {
-    return [
-      {
-        host: "codex",
-        path: source.path,
-        kind: "source_missing",
-        message: "AGENTS.md is missing"
-      }
-    ];
-  }
-  const markerCount = [...source.content.matchAll(MANAGED_BLOCK_RE_G)].length;
-  if (markerCount > 1) {
-    return [
-      {
-        host: "codex",
-        path: source.path,
-        kind: "multiple_markers",
-        message: `AGENTS.md contains ${markerCount} ditto managed blocks; expected at most 1`,
-        sourceSha256: source.normalizedSha256
-      }
-    ];
-  }
-  return [];
-}
-function checkRequiredClauses(source) {
-  if ("kind" in source)
-    return [];
-  if (!source.content.includes(CHARTER_IDENTITY_MARKER))
-    return [];
-  if (source.content.includes(DELEGATION_CLAUSE_ANCHOR))
-    return [];
-  return [
-    {
-      host: "codex",
-      path: source.path,
-      kind: "clause_missing",
-      message: `charter source is missing the delegation-discipline clause (\xA74-9 "${DELEGATION_CLAUSE_ANCHOR}")`,
-      sourceSha256: source.normalizedSha256
-    }
-  ];
-}
-function compareClaudeProjection(source, projection) {
-  if ("kind" in source) {
-    return [
-      {
-        host: "claude-code",
-        path: source.path,
-        kind: "source_missing",
-        message: "AGENTS.md is missing"
-      }
-    ];
-  }
-  if (projection.kind === "missing") {
-    return [
-      {
-        host: "claude-code",
-        path: projection.path,
-        kind: "projection_missing",
-        message: "CLAUDE.md projection is missing",
-        sourceSha256: source.normalizedSha256
-      }
-    ];
-  }
-  if (projection.kind === "no_marker") {
-    return [
-      {
-        host: "claude-code",
-        path: projection.path,
-        kind: "marker_missing",
-        message: "CLAUDE.md does not contain a ditto managed block",
-        sourceSha256: source.normalizedSha256
-      }
-    ];
-  }
-  if (projection.kind === "multiple_markers") {
-    return [
-      {
-        host: "claude-code",
-        path: projection.path,
-        kind: "multiple_markers",
-        message: `CLAUDE.md contains ${projection.count} ditto managed blocks; expected exactly 1`,
-        sourceSha256: source.normalizedSha256
-      }
-    ];
-  }
-  const findings = [];
-  if (projection.markerSource !== "AGENTS.md") {
-    findings.push({
-      host: "claude-code",
-      path: projection.path,
-      kind: "source_mismatch",
-      message: `managed block source is ${projection.markerSource}, expected AGENTS.md`,
-      markerSource: projection.markerSource,
-      markerSha256: projection.markerSha256,
-      actualSha256: projection.actualSha256,
-      sourceSha256: source.normalizedSha256
-    });
-  }
-  if (projection.markerSha256 !== source.normalizedSha256) {
-    findings.push({
-      host: "claude-code",
-      path: projection.path,
-      kind: "sha256_mismatch",
-      message: "managed block marker sha256 does not match AGENTS.md",
-      markerSource: projection.markerSource,
-      markerSha256: projection.markerSha256,
-      actualSha256: projection.actualSha256,
-      sourceSha256: source.normalizedSha256
-    });
-  }
-  if (projection.actualSha256 !== source.normalizedSha256) {
-    findings.push({
-      host: "claude-code",
-      path: projection.path,
-      kind: "content_mismatch",
-      message: "managed block content does not match AGENTS.md",
-      markerSource: projection.markerSource,
-      markerSha256: projection.markerSha256,
-      actualSha256: projection.actualSha256,
-      sourceSha256: source.normalizedSha256
-    });
-  }
-  return findings;
-}
-function resultStatus(findings) {
-  return findings.length === 0 ? "ok" : "drift";
-}
-function codexInstructionResult(source) {
-  const findings = [...checkCodexInstructions(source), ...checkRequiredClauses(source)];
-  return {
-    host: "codex",
-    path: source.path,
-    status: resultStatus(findings),
-    ..."normalizedSha256" in source ? { sourceSha256: source.normalizedSha256 } : {},
-    findings
-  };
-}
-function claudeInstructionResult(source, projection) {
-  const findings = compareClaudeProjection(source, projection);
-  const sourceSha256 = "normalizedSha256" in source ? source.normalizedSha256 : undefined;
-  return {
-    host: "claude-code",
-    path: projection.path,
-    status: resultStatus(findings),
-    ...projection.kind === "ok" ? {
-      markerSource: projection.markerSource,
-      markerSha256: projection.markerSha256,
-      actualSha256: projection.actualSha256
-    } : {},
-    ...sourceSha256 ? { sourceSha256 } : {},
-    findings
-  };
-}
-async function checkInstructionsForHosts(hosts, repoRoot) {
-  return checkInstructionsForAdapters(hosts.map((host) => getHostAdapter(host)), repoRoot);
-}
-async function checkInstructionsForAdapters(adapters, repoRoot) {
-  const surfaces = await Promise.all(adapters.map((adapter) => adapter.loadInstructions(repoRoot)));
-  let sourceSurface = surfaces.find((surface) => surface.role === "source");
-  if (!sourceSurface) {
-    const registeredAdapters = listHostAdapters().filter((adapter) => !adapters.includes(adapter));
-    const registered = await Promise.all(registeredAdapters.map((adapter) => adapter.loadInstructions(repoRoot)));
-    sourceSurface = registered.find((surface) => surface.role === "source");
-  }
-  if (!sourceSurface) {
-    const sourcePath = join42(repoRoot, "AGENTS.md");
-    sourceSurface = { role: "source", host: "codex", path: sourcePath, exists: false };
-  }
-  const source = sourceFromSurface(sourceSurface);
-  const results = [];
-  for (const surface of surfaces) {
-    if (surface.host === "codex" && surface.role === "source") {
-      results.push(codexInstructionResult(source));
-    }
-    if (surface.host === "claude-code" && surface.role === "projection") {
-      results.push(claudeInstructionResult(source, projectionFromSurface(surface)));
-    }
-  }
-  const findings = results.flatMap((result2) => result2.findings);
-  return {
-    findings,
-    results,
-    sourceSha256: "normalizedSha256" in source ? source.normalizedSha256 : null
-  };
-}
+import { join as join44 } from "path";
 
 // src/core/managed-resource.ts
 init_fs();
@@ -35605,7 +36022,7 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
   const source = await loadSource(repoRoot);
   if ("kind" in source)
     throw new Error("AGENTS.md is missing; cannot sync Claude projection");
-  const path = join43(repoRoot, "CLAUDE.md");
+  const path = join44(repoRoot, "CLAUDE.md");
   const projection = await loadProjection(repoRoot);
   const block = buildManagedBlock(source.content);
   const check = options.check === true;
@@ -35662,199 +36079,6 @@ async function syncClaudeCodeProjection(repoRoot, options = {}) {
 
 // src/cli/commands/bridge.ts
 init_fs();
-
-// src/core/knowledge-bridge.ts
-init_zod();
-import { readdir as readdir15 } from "fs/promises";
-import { join as join44 } from "path";
-init_fs();
-var KNOWLEDGE_END = "<!-- ditto:knowledge:end -->";
-var KNOWLEDGE_BLOCK_RE_G = /<!--\s*ditto:knowledge:start\s+sha256=([a-f0-9]{64})\s*-->\n?([\s\S]*?)<!--\s*ditto:knowledge:end\s*-->/g;
-var glossarySummarySchema = exports_external.object({
-  entries: exports_external.array(exports_external.object({ term: exports_external.string(), status: exports_external.string().optional() })).default([])
-});
-var glossaryVocabSchema = exports_external.object({
-  entries: exports_external.array(exports_external.object({ forbidden_abbreviations: exports_external.array(exports_external.string()).default([]) })).default([])
-});
-var KNOWLEDGE_DIR = join44(".ditto", "knowledge");
-function adrHeadline(filename, body) {
-  const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
-  const titleLine = body.split(`
-`).find((l2) => l2.startsWith("# "));
-  const title = titleLine ? titleLine.replace(/^#\s*/, "").trim() : "";
-  const status = body.match(/\uC0C1\uD0DC:\s*(\S+)/)?.[1] ?? body.match(/status:\s*(\S+)/i)?.[1] ?? "";
-  const parts = [id];
-  if (status)
-    parts.push(status);
-  if (title)
-    parts.push(title.replace(ADR_TITLE_PREFIX_RE, ""));
-  return parts.join(" \xB7 ");
-}
-async function loadKnowledgeSources(repoRoot) {
-  const dir = join44(repoRoot, KNOWLEDGE_DIR);
-  const contextPath = join44(KNOWLEDGE_DIR, "CONTEXT.md");
-  const glossaryPath = join44(KNOWLEDGE_DIR, "glossary.json");
-  const adrDir = join44(KNOWLEDGE_DIR, "adr");
-  let termHeadlines = [];
-  const glossaryFile = Bun.file(join44(dir, "glossary.json"));
-  if (await glossaryFile.exists()) {
-    const parsed = glossarySummarySchema.safeParse(JSON.parse(await glossaryFile.text()));
-    if (parsed.success) {
-      termHeadlines = parsed.data.entries.map((e2) => e2.status && e2.status !== "agreed" ? `${e2.term} (${e2.status})` : e2.term).sort();
-    }
-  }
-  const adrHeadlines = [];
-  const adrPath = join44(dir, "adr");
-  let adrEntries = [];
-  try {
-    adrEntries = (await readdir15(adrPath)).filter((f3) => /^ADR-\d{4}.*\.md$/.test(f3));
-  } catch {
-    adrEntries = [];
-  }
-  for (const rel of adrEntries) {
-    const body = await Bun.file(join44(adrPath, rel)).text();
-    adrHeadlines.push(adrHeadline(rel, body));
-  }
-  adrHeadlines.sort();
-  return { contextPath, glossaryPath, adrDir, adrHeadlines, termHeadlines };
-}
-async function loadGlossaryVocab(repoRoot, onMalformed) {
-  const file = Bun.file(join44(repoRoot, KNOWLEDGE_DIR, "glossary.json"));
-  if (!await file.exists())
-    return [];
-  try {
-    const parsed = glossaryVocabSchema.safeParse(JSON.parse(await file.text()));
-    if (!parsed.success) {
-      onMalformed?.();
-      return [];
-    }
-    return parsed.data.entries.flatMap((e2) => e2.forbidden_abbreviations).map((s2) => s2.trim()).filter((s2) => s2.length > 0);
-  } catch {
-    onMalformed?.();
-    return [];
-  }
-}
-function warnMalformedGlossary(repoRoot) {
-  console.warn(`ditto: malformed ${join44(repoRoot, KNOWLEDGE_DIR, "glossary.json")} \u2014 ignoring glossary-sourced opaque vocabulary and applying only the built-in floor (fix the file to re-enable it)`);
-}
-function renderKnowledgeSummary(sources) {
-  const lines = [];
-  lines.push("# DITTO Knowledge (projected \u2014 do not edit by hand)");
-  lines.push("");
-  lines.push("Durable project knowledge. Bodies live under `.ditto/knowledge/`; this is a summary.");
-  lines.push("");
-  lines.push(`- context: \`${sources.contextPath}\``);
-  lines.push(`- glossary: \`${sources.glossaryPath}\``);
-  lines.push(`- decisions: \`${sources.adrDir}/\``);
-  lines.push("");
-  lines.push("## Glossary terms");
-  if (sources.termHeadlines.length === 0)
-    lines.push("- (none)");
-  for (const t2 of sources.termHeadlines)
-    lines.push(`- ${t2}`);
-  lines.push("");
-  lines.push("## Architecture decisions");
-  if (sources.adrHeadlines.length === 0)
-    lines.push("- (none)");
-  for (const a2 of sources.adrHeadlines)
-    lines.push(`- ${a2}`);
-  lines.push("");
-  return normalizeInstructionText(lines.join(`
-`));
-}
-function knowledgeSummarySha256(summary) {
-  return normalizedSha256(summary);
-}
-function knowledgeBlock(summary, sha2562) {
-  return `<!-- ditto:knowledge:start sha256=${sha2562} -->
-${summary}
-${KNOWLEDGE_END}`;
-}
-function loadKnowledgeProjection(content) {
-  if (content === null)
-    return { kind: "missing" };
-  const matches = [...content.matchAll(KNOWLEDGE_BLOCK_RE_G)];
-  if (matches.length === 0)
-    return { kind: "no_marker", content };
-  if (matches.length > 1)
-    return { kind: "multiple_markers", content, count: matches.length };
-  const match = matches[0];
-  if (!match || match.index === undefined)
-    return { kind: "no_marker", content };
-  const body = match[2] ?? "";
-  return {
-    kind: "ok",
-    content,
-    markerSha256: match[1] ?? "",
-    actualSha256: normalizedSha256(body),
-    startIndex: match.index,
-    endIndex: match.index + match[0].length
-  };
-}
-async function syncKnowledgeProjection(repoRoot, options = {}) {
-  const sources = await loadKnowledgeSources(repoRoot);
-  const summary = renderKnowledgeSummary(sources);
-  const sha2562 = knowledgeSummarySha256(summary);
-  const block = knowledgeBlock(summary, sha2562);
-  const path = join44(repoRoot, "CLAUDE.md");
-  const check = options.check === true;
-  const file = Bun.file(path);
-  const existing = await file.exists() ? await file.text() : null;
-  const projection = loadKnowledgeProjection(existing);
-  if (projection.kind === "missing") {
-    if (!check)
-      await atomicWriteText(path, `${block}
-`);
-    return {
-      path,
-      action: check ? "would-create" : "created",
-      oldSha256: null,
-      newSha256: sha2562,
-      message: "created new knowledge block"
-    };
-  }
-  if (projection.kind === "no_marker") {
-    const base = projection.content ?? "";
-    const separator = base.endsWith(`
-`) ? `
-` : `
-
-`;
-    const next2 = `${base}${separator}${block}
-`;
-    if (!check)
-      await atomicWriteText(path, next2);
-    return {
-      path,
-      action: check ? "would-update" : "updated",
-      oldSha256: null,
-      newSha256: sha2562,
-      message: "appended new knowledge block"
-    };
-  }
-  if (projection.kind === "multiple_markers") {
-    return {
-      path,
-      action: "refused-multiple-markers",
-      oldSha256: null,
-      newSha256: sha2562,
-      message: `CLAUDE.md contains ${projection.count} ditto:knowledge blocks; clean up to exactly one before re-running`
-    };
-  }
-  const content = projection.content ?? "";
-  const next = `${content.slice(0, projection.startIndex)}${block}${content.slice(projection.endIndex)}`;
-  const unchanged = next === content;
-  if (!unchanged && !check)
-    await atomicWriteText(path, next);
-  return {
-    path,
-    action: unchanged ? check ? "would-be-unchanged" : "unchanged" : check ? "would-update" : "updated",
-    oldSha256: projection.markerSha256 ?? null,
-    newSha256: sha2562
-  };
-}
-
-// src/cli/commands/bridge.ts
 var DRIFT_EXIT = 1;
 var BRIDGE_RUNTIME_ERROR_EXIT = 70;
 var bridgeSync = defineCommand({
@@ -39065,12 +39289,12 @@ var gateInput = exports_external.object({
 var decisionConflictGateCmd = defineCommand({
   meta: {
     name: "gate",
-    description: "Route detected ADR conflicts by (kind, level, mode); block intent conflicts, disclose all"
+    description: "Route detected ADR conflicts by (kind, level, mode); block intent conflicts, disclose all. Pure offline gate: a `resolution` record is accepted but NOT verified here \u2014 HEAD verification is the stop gate's job"
   },
   args: {
     json: {
       type: "string",
-      description: 'JSON: {mode:"interactive"|"autopilot", conflicts:[{adr_id,kind:forbid|require|prefer,level:intent|method,basis}]}',
+      description: 'JSON: {mode:"interactive"|"autopilot", conflicts:[{adr_id,kind:forbid|require|prefer,level:intent|method,basis,resolution?}]} \u2014 resolution is routed as unresolved here (unverified)',
       required: true
     },
     output: { type: "string", description: "Output format: human|json", default: "human" }
@@ -39109,6 +39333,9 @@ var decisionConflictGateCmd = defineCommand({
       writeHuman(`decision-conflict gate: ${status}`);
       for (const d2 of result2.dispositions) {
         writeHuman(`  - ${d2.conflict.adr_id} (${d2.conflict.kind}/${d2.conflict.level}) \u2192 ${d2.route}: ${d2.conflict.basis}`);
+      }
+      if (parsed.data.conflicts.some((c3) => c3.resolution !== undefined)) {
+        writeHuman("  note: \uD574\uC18C \uAE30\uB85D(resolution)\uC740 stop \uAC8C\uC774\uD2B8\uAC00 HEAD \uAC80\uC99D\uC73C\uB85C \uD310\uC815 \u2014 \uC774 \uC21C\uC218 \uAC8C\uC774\uD2B8\uB294 \uBBF8\uAC80\uC99D \uB77C\uC6B0\uD305\uB9CC \uD45C\uC2DC");
       }
     }
     if (result2.blocked || result2.needsApproval)
@@ -51367,15 +51594,24 @@ function riskRecordForcesContinuation(completion, workItem2) {
   const acceptanceIds = workItem2.acceptance_criteria.map((c5) => c5.id);
   return riskRecordBlockers(completion.remaining_risk_records, acceptanceIds).map((b3) => b3.userDecision ? `\uC794\uC5EC \uC704\uD5D8 \uAE30\uB85D(residual-risk record) \uC0AC\uC6A9\uC790 \uC2B9\uC778 \uB300\uAE30(\uC0AC\uC6A9\uC790 \uACB0\uC815 \uD544\uC694) \u2014 ${b3.item}: ${b3.reason}` : `\uC794\uC5EC \uC704\uD5D8 \uAE30\uB85D(residual-risk record) pass-close \uCC28\uB2E8(\uD1B5\uACFC-\uC885\uB8CC \uCC28\uB2E8) \u2014 ${b3.item}: ${b3.reason}`);
 }
-function decisionConflictForcesContinuation(carrier) {
+function decisionConflictForcesContinuation(carrier, readAdrAtHead) {
   if (carrier === undefined)
     return { reasons: [], advisories: [] };
-  const { dispositions } = decisionConflictGate(carrier.conflicts, carrier.mode);
-  const line = (d2) => `${d2.conflict.adr_id} (${d2.conflict.kind}/${d2.conflict.level}) \u2192 ${d2.route}: ${d2.conflict.basis}`;
+  const split = splitResolvedConflicts(carrier.conflicts, readAdrAtHead ?? (() => ({ status: "absent" })));
+  const failureOf = new Map(split.failures.map((f4) => [f4.conflict, f4.message]));
+  const { dispositions } = decisionConflictGate(split.blocking, carrier.mode);
+  const line = (d2) => {
+    const failure = failureOf.get(d2.conflict);
+    return `${d2.conflict.adr_id} (${d2.conflict.kind}/${d2.conflict.level}) \u2192 ${d2.route}: ${d2.conflict.basis}${failure !== undefined ? ` \u2014 ${failure}` : ""}`;
+  };
   const blocks = (d2) => d2.route === "block" || d2.route === "ask_user";
+  const resolvedAdvisories = split.resolved.map(({ conflict, resolution }) => `\uC758\uC0AC\uACB0\uC815 \uCDA9\uB3CC \uD574\uC18C \uD655\uC778(resolved decision conflict, \uBE44\uCC28\uB2E8 \uCC38\uACE0) \u2014 ${conflict.adr_id} (${conflict.kind}/${conflict.level})\uC774(\uAC00) ${resolution.superseded_by}(\uC73C)\uB85C superseded\uC784\uC744 HEAD\uC5D0\uC11C \uD655\uC778\uD568 \xB7 \uCDA9\uB3CC \uADFC\uAC70: ${conflict.basis} \xB7 \uD574\uC18C \uADFC\uAC70: ${resolution.basis}`);
   return {
     reasons: dispositions.filter(blocks).map((d2) => `\uC758\uC0AC\uACB0\uC815 \uCDA9\uB3CC(decision conflict) \u2014 ${line(d2)}`),
-    advisories: dispositions.filter((d2) => !blocks(d2)).map((d2) => `decision conflict (disclosed, agent followed ADR) / \uC758\uC0AC\uACB0\uC815 \uCDA9\uB3CC(\uACF5\uAC1C\uB428, \uC5D0\uC774\uC804\uD2B8\uAC00 ADR\uC744 \uB530\uB984) \u2014 ${line(d2)}`)
+    advisories: [
+      ...dispositions.filter((d2) => !blocks(d2)).map((d2) => `decision conflict (disclosed, agent followed ADR) / \uC758\uC0AC\uACB0\uC815 \uCDA9\uB3CC(\uACF5\uAC1C\uB428, \uC5D0\uC774\uC804\uD2B8\uAC00 ADR\uC744 \uB530\uB984) \u2014 ${line(d2)}`),
+      ...resolvedAdvisories
+    ]
   };
 }
 function fitnessInputFingerprint(repoRoot) {
@@ -51537,11 +51773,12 @@ var stopHandler = async (input) => {
   }
   const reasons = [];
   const advisories = [];
+  const readAdrAtHead = (adrId) => readAdrStatusAtHead(input.repoRoot, adrId);
   const forkGate = directionFork.status === "ok" ? directionForkGate(directionFork.data) : undefined;
   if (forkGate?.pass === true)
     return { exitCode: 0 };
   if (pilot.status === "ok" && pilot.data.approval_gate.status === "pending" && hasPendingMutatingNode(pilot.data)) {
-    if (decisionConflicts.status === "ok" && decisionConflictRequiresApproval(decisionConflicts.data.conflicts)) {
+    if (decisionConflicts.status === "ok" && decisionConflictRequiresApproval(splitResolvedConflicts(decisionConflicts.data.conflicts, readAdrAtHead).blocking)) {
       return { exitCode: 0 };
     }
     if (highRiskAssumption(riskOf(workItem2)))
@@ -51619,8 +51856,10 @@ var stopHandler = async (input) => {
   if (pilot.status === "ok") {
     reasons.push(...knowledgeForcesContinuation(pilot.data, knowledge.status === "ok" ? knowledge.data : undefined));
   }
-  const dc = decisionConflictForcesContinuation(decisionConflicts.status === "ok" ? decisionConflicts.data : undefined);
-  reasons.push(...dc.reasons);
+  const dc = decisionConflictForcesContinuation(decisionConflicts.status === "ok" ? decisionConflicts.data : undefined, readAdrAtHead);
+  if (NON_TERMINAL_STATUSES.includes(workItem2.status)) {
+    reasons.push(...dc.reasons);
+  }
   advisories.push(...dc.advisories);
   const advisoryBlock = advisories.length > 0 ? `DITTO Stop advisory(\uBE44\uCC28\uB2E8 \uCC38\uACE0) \u2014 ${advisories.length}\uAC74:
 - ${advisories.join(`
@@ -51739,7 +51978,7 @@ function evaluateStopGate(input) {
   if (forkGate?.pass === true)
     return { exitCode: 0, effects: NO_EFFECTS };
   if (pilot.status === "ok" && pilot.data.approval_gate.status === "pending" && hasPendingMutatingNode2(pilot.data)) {
-    if (decisionConflicts.status === "ok" && decisionConflictRequiresApproval(decisionConflicts.data.conflicts)) {
+    if (decisionConflicts.status === "ok" && decisionConflictRequiresApproval(splitResolvedConflicts(decisionConflicts.data.conflicts, input.readAdrAtHead).blocking)) {
       return { exitCode: 0, effects: NO_EFFECTS };
     }
     if (highRiskAssumption(riskOf2(workItem2)))
@@ -51814,8 +52053,10 @@ function evaluateStopGate(input) {
   if (pilot.status === "ok") {
     reasons.push(...knowledgeForcesContinuation(pilot.data, knowledge.status === "ok" ? knowledge.data : undefined));
   }
-  const dc = decisionConflictForcesContinuation(decisionConflicts.status === "ok" ? decisionConflicts.data : undefined);
-  reasons.push(...dc.reasons);
+  const dc = decisionConflictForcesContinuation(decisionConflicts.status === "ok" ? decisionConflicts.data : undefined, input.readAdrAtHead);
+  if (NON_TERMINAL_STATUSES2.includes(workItem2.status)) {
+    reasons.push(...dc.reasons);
+  }
   advisories.push(...dc.advisories);
   const advisoryBlock = advisories.length > 0 ? `DITTO Stop advisory(\uBE44\uCC28\uB2E8 \uCC38\uACE0) \u2014 ${advisories.length}\uAC74:
 - ${advisories.join(`
@@ -51977,7 +52218,8 @@ var stopHandler2 = async (input) => {
     computeNudge: () => computeSemanticNudge(input.repoRoot, workItem2, {
       semanticPresent: ledgers.semantic.status === "ok",
       isNonTerminal: NON_TERMINAL_STATUSES3.has(workItem2.status)
-    })
+    }),
+    readAdrAtHead: (adrId) => readAdrStatusAtHead(input.repoRoot, adrId)
   });
   if (decision.effects.recordProcedurePunt && ledgers.pilot.status === "ok") {
     await maybeRecordProcedurePunt2(input.repoRoot, pointer, ledgers.pilot.data);
@@ -58688,7 +58930,7 @@ function defaultRegistry() {
 }
 
 // src/core/setup.ts
-import { execFileSync as execFileSync6 } from "child_process";
+import { execFileSync as execFileSync7 } from "child_process";
 import { chmod, cp, readFile as readFile21, rename as rename4, rm as rm4, writeFile as writeFile6 } from "fs/promises";
 import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute17, join as join94, resolve as resolve27 } from "path";
 
@@ -59014,7 +59256,7 @@ function defaultHookTemplatePath(resourcesDir) {
 }
 function customHooksPath(cwd) {
   try {
-    const v2 = execFileSync6("git", ["config", "--get", "core.hooksPath"], {
+    const v2 = execFileSync7("git", ["config", "--get", "core.hooksPath"], {
       cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
@@ -59025,7 +59267,7 @@ function customHooksPath(cwd) {
   }
 }
 function gitHooksDir(cwd) {
-  const p2 = execFileSync6("git", ["rev-parse", "--git-path", "hooks"], {
+  const p2 = execFileSync7("git", ["rev-parse", "--git-path", "hooks"], {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"]
@@ -59896,7 +60138,7 @@ init_fs();
 
 // src/core/workspace/clone.ts
 init_shared();
-import { execFileSync as execFileSync7 } from "child_process";
+import { execFileSync as execFileSync8 } from "child_process";
 import { existsSync as existsSync17, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile23, readdir as readdir27, rm as rm7, writeFile as writeFile7 } from "fs/promises";
 import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute18, join as join99, relative as relative24, resolve as resolve31 } from "path";
@@ -59961,7 +60203,7 @@ var NONINTERACTIVE_GIT = {
 };
 function gitOriginUrl(dir) {
   try {
-    const v2 = execFileSync7("git", ["config", "--get", "remote.origin.url"], {
+    const v2 = execFileSync8("git", ["config", "--get", "remote.origin.url"], {
       cwd: dir,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
@@ -60048,7 +60290,7 @@ async function cloneRepoEntry(inp) {
     return { dir, url, status: "skipped", reason: "already cloned (same url)", hook: hook2 };
   }
   try {
-    execFileSync7("git", ["clone", "--", url, target], {
+    execFileSync8("git", ["clone", "--", url, target], {
       env: { ...env2, ...NONINTERACTIVE_GIT },
       stdio: ["ignore", "ignore", "pipe"]
     });
@@ -60550,4 +60792,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=7428626b4d48b01ec2a6b5e1ccecdfddbb3fbb0903b56d3397ae5902c1128259
+//# ditto-src-stamp=7ebe623ccad7c22cdb517b440f953a4863b4ef862199e982366879e273b61444

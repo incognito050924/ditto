@@ -1021,6 +1021,152 @@ export function decisionConflictRequiresApproval(conflicts: DecisionConflict[]):
   return conflicts.some((c) => c.kind !== 'prefer' && c.level === 'intent');
 }
 
+// ── decision-conflict resolution demotion (superseded-at-HEAD verification) ──
+
+/**
+ * A per-conflict RESOLUTION claim carried by the decision-conflict carrier
+ * (schema `decision-conflict-carrier.resolution`): the detecting side asserts the
+ * conflicting ADR was superseded (`superseded_by`) after a re-collation with the
+ * user (`basis`). A claim alone demotes NOTHING — it must be verified against the
+ * ADR status line at the HEAD commit (positive evidence only, fail-closed).
+ */
+export interface ConflictResolution {
+  superseded_by: string;
+  basis: string;
+}
+
+/** A carrier conflict, optionally carrying a resolution claim (legacy carriers omit it). `| undefined` matches the zod-inferred optional under exactOptionalPropertyTypes. */
+export type ResolvableConflict = DecisionConflict & { resolution?: ConflictResolution | undefined };
+
+/**
+ * What the injected ADR-at-HEAD reader returns (ArtifactRead-like). The reader
+ * implementation must contain EVERY throw (no git, unborn HEAD, permissions) and
+ * map it to 'absent' — a throw escaping to the hook runtime catch-all exits 0,
+ * i.e. fail-OPEN, which is forbidden. 'ambiguous' is the multi-match fail-closed
+ * branch (several files answer to one id: never pick-first).
+ */
+export type AdrStatusAtHead =
+  | { status: 'absent' }
+  | { status: 'ambiguous'; matches: string[] }
+  | { status: 'malformed' }
+  | { status: 'ok'; adr_status: string; superseded_by?: string };
+
+/** Which fail-closed branch a resolution verification failed on (branch-distinct messaging). */
+export type ResolutionFailureBranch =
+  | 'file_absent'
+  | 'ambiguous'
+  | 'parse_failed'
+  | 'successor_mismatch'
+  | 'not_superseded';
+
+export interface ResolutionFailure {
+  conflict: ResolvableConflict;
+  branch: ResolutionFailureBranch;
+  /** Branch-distinct note. Exits are framed as USER decisions (landing/fetch/record fix) — never a carrier-removal or an agent-executable supersede recipe. */
+  message: string;
+}
+
+export interface EffectiveConflicts {
+  /** Conflicts that still route through `decisionConflictGate` (no resolution claim, or a claim that failed verification). */
+  blocking: ResolvableConflict[];
+  /** One branch-distinct failure note per still-blocking conflict whose resolution claim failed (keyed by conflict object identity). */
+  failures: ResolutionFailure[];
+  /** Verified-resolved conflicts, demoted to non-blocking advisories — conflict basis AND resolution basis both carried (no silent disappearance). */
+  resolved: Array<{ conflict: ResolvableConflict; resolution: ConflictResolution }>;
+}
+
+/**
+ * Pure demotion transform (ac-1/ac-4, wi_2607222uc): split the carrier's
+ * conflicts into what still BLOCKS and what is verifiably RESOLVED, given the
+ * injected ADR-at-HEAD reader. Consumed by every enforcement surface — the Stop
+ * wrappers (`decisionConflictForcesContinuation`), the plan front-load
+ * (`planRequiresDecisionApproval`, which feeds only the blocking set to
+ * `decisionConflictRequiresApproval`), and the done pass-close blocker
+ * (`intentConflictPassCloseBlocker`) — so the demotion decision exists exactly
+ * once.
+ *
+ * Positive evidence ONLY: a conflict is demoted iff its resolution claim is
+ * verified at HEAD — the ADR file resolves to exactly ONE committed file, its
+ * status LINE parses, the status value starts with 'superseded', and (when the
+ * status line names a successor) that successor equals the claimed
+ * `superseded_by`. Every other outcome — absent file, ambiguous multi-match,
+ * unparseable status line, successor mismatch, still-accepted — keeps the
+ * conflict BLOCKING (fail-closed) with a branch-distinct message. A conflict
+ * without a resolution claim is passed through untouched (legacy behavior). A
+ * THROWING reader is contained here as well and treated as 'absent' (belt to the
+ * reader's own suspenders): the gate must never fail open on a reader bug.
+ */
+export function splitResolvedConflicts(
+  conflicts: readonly ResolvableConflict[],
+  readAdrAtHead: (adrId: string) => AdrStatusAtHead,
+): EffectiveConflicts {
+  const blocking: ResolvableConflict[] = [];
+  const failures: ResolutionFailure[] = [];
+  const resolved: EffectiveConflicts['resolved'] = [];
+  for (const conflict of conflicts) {
+    const resolution = conflict.resolution;
+    if (resolution === undefined) {
+      blocking.push(conflict);
+      continue;
+    }
+    let read: AdrStatusAtHead;
+    try {
+      read = readAdrAtHead(conflict.adr_id);
+    } catch {
+      read = { status: 'absent' };
+    }
+    const branch = classifyResolutionRead(read, resolution);
+    if (branch === null) {
+      resolved.push({ conflict, resolution });
+      continue;
+    }
+    blocking.push(conflict);
+    failures.push({
+      conflict,
+      branch,
+      message: resolutionFailureMessage(branch, conflict, resolution, read),
+    });
+  }
+  return { blocking, failures, resolved };
+}
+
+/** null = verified (demote); otherwise the fail-closed branch that keeps the block. */
+function classifyResolutionRead(
+  read: AdrStatusAtHead,
+  resolution: ConflictResolution,
+): ResolutionFailureBranch | null {
+  if (read.status === 'absent') return 'file_absent';
+  if (read.status === 'ambiguous') return 'ambiguous';
+  if (read.status === 'malformed') return 'parse_failed';
+  if (!read.adr_status.toLowerCase().startsWith('superseded')) return 'not_superseded';
+  if (read.superseded_by !== undefined && read.superseded_by !== resolution.superseded_by) {
+    return 'successor_mismatch';
+  }
+  return null;
+}
+
+function resolutionFailureMessage(
+  branch: ResolutionFailureBranch,
+  conflict: ResolvableConflict,
+  resolution: ConflictResolution,
+  read: AdrStatusAtHead,
+): string {
+  switch (branch) {
+    case 'file_absent':
+      return `해소 검증 실패(ADR 파일 부재) — HEAD 커밋에서 ${conflict.adr_id} 파일을 찾지 못함; 해당 ADR의 supersede가 실제로 랜딩(커밋)되었는지 확인이 필요함`;
+    case 'ambiguous':
+      return `해소 검증 실패(ADR 파일 다중 일치) — HEAD 커밋에서 ${conflict.adr_id}에 해당하는 파일이 여러 개라 어느 것도 채택하지 않음(fail-closed); 어느 파일이 이 ADR인지 정리가 필요함`;
+    case 'parse_failed':
+      return `해소 검증 실패(상태줄 파싱 실패) — ${conflict.adr_id}의 '- 상태:' 상태줄을 읽지 못함; 상태줄 형식 확인이 필요함`;
+    case 'successor_mismatch': {
+      const named = read.status === 'ok' ? (read.superseded_by ?? '?') : '?';
+      return `해소 검증 실패(superseded_by 불일치) — 상태줄이 가리키는 후속 ADR(${named})과 해소 기록의 superseded_by(${resolution.superseded_by})가 다름; 해소 기록을 수정해야 함`;
+    }
+    case 'not_superseded':
+      return `해소 검증 실패(아직 superseded 아님) — ${conflict.adr_id} 상태가 HEAD에서 superseded로 확인되지 않음(supersede 미랜딩이거나 상태줄 미flip); fetch로 최신 커밋을 받았는지, 상태줄 flip이 랜딩되었는지 확인이 필요함`;
+  }
+}
+
 // ── intent-conservation gate (axis-2 intent drift across the contract chain) ──
 
 /**

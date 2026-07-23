@@ -23,6 +23,12 @@ import {
  *
  * WHETHER a conflict exists and its (kind, level) is the caller's judgement
  * (host-delegated, ADR-0001); this command is the deterministic routing surface.
+ *
+ * Surface split: this is a PURE offline gate with no repo root — a per-conflict
+ * `resolution` record is accepted by the shared schema but NOT verified here.
+ * HEAD verification (superseded-at-HEAD demotion via `splitResolvedConflicts`)
+ * belongs to the stop-gate surfaces that own a repo root; this command routes
+ * every conflict as if unresolved and says so when a resolution is present.
  */
 const gateInput = z.object({
   mode: z.enum(['interactive', 'autopilot']).default('autopilot'),
@@ -33,13 +39,13 @@ const decisionConflictGateCmd = defineCommand({
   meta: {
     name: 'gate',
     description:
-      'Route detected ADR conflicts by (kind, level, mode); block intent conflicts, disclose all',
+      "Route detected ADR conflicts by (kind, level, mode); block intent conflicts, disclose all. Pure offline gate: a `resolution` record is accepted but NOT verified here — HEAD verification is the stop gate's job",
   },
   args: {
     json: {
       type: 'string',
       description:
-        'JSON: {mode:"interactive"|"autopilot", conflicts:[{adr_id,kind:forbid|require|prefer,level:intent|method,basis}]}',
+        'JSON: {mode:"interactive"|"autopilot", conflicts:[{adr_id,kind:forbid|require|prefer,level:intent|method,basis,resolution?}]} — resolution is routed as unresolved here (unverified)',
       required: true,
     },
     output: { type: 'string', description: 'Output format: human|json', default: 'human' },
@@ -85,6 +91,13 @@ const decisionConflictGateCmd = defineCommand({
       for (const d of result.dispositions) {
         writeHuman(
           `  - ${d.conflict.adr_id} (${d.conflict.kind}/${d.conflict.level}) → ${d.route}: ${d.conflict.basis}`,
+        );
+      }
+      // Surface-split disclosure: this pure gate has no repo root, so it never
+      // verifies a resolution claim — it must say so instead of silently routing.
+      if (parsed.data.conflicts.some((c) => c.resolution !== undefined)) {
+        writeHuman(
+          '  note: 해소 기록(resolution)은 stop 게이트가 HEAD 검증으로 판정 — 이 순수 게이트는 미검증 라우팅만 표시',
         );
       }
     }

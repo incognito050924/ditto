@@ -11,6 +11,7 @@ import { localDir } from '~/core/ditto-paths';
 import { FitnessFunctionStore } from '~/core/fitness-function-store';
 import { atomicWriteText, ensureDir, writeJson } from '~/core/fs';
 import {
+  type AdrStatusAtHead,
   type AttestationState,
   type ConflictDisposition,
   type RiskAxes,
@@ -28,8 +29,10 @@ import {
   nonPassTerminationGate,
   resolvabilityBlockers,
   riskRecordBlockers,
+  splitResolvedConflicts,
 } from '~/core/gates';
 import { captureGitDiff, gitRevParse, listChangedFiles } from '~/core/git';
+import { readAdrStatusAtHead } from '~/core/knowledge-bridge';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { type AcgAssuranceSnapshot, acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -483,26 +486,51 @@ export function riskRecordForcesContinuation(
  *    `justify`-ed preferences — surfaced anyway, because D2's transparency invariant
  *    forbids silent autonomous compliance: the basis must reach the OUTPUT.
  * Absent carrier → inert (declaring no conflicts is a valid run).
+ *
+ * Resolution demotion (wi_2607222uc ac-1/ac-4): a conflict carrying a `resolution`
+ * record is first verified via `splitResolvedConflicts` against the injected
+ * ADR-at-HEAD reader. Verified-superseded ⇒ demoted to a NON-blocking advisory
+ * that carries BOTH bases (conflict + resolution — no silent disappearance) and
+ * never prints the blocking `→ block` route. Any verification failure keeps the
+ * block and appends a branch-distinct note. `readAdrAtHead` omitted ⇒ verification
+ * is impossible ⇒ every resolution claim fails closed as 'absent' (never fail-open).
  */
-export function decisionConflictForcesContinuation(carrier: DecisionConflictCarrier | undefined): {
+export function decisionConflictForcesContinuation(
+  carrier: DecisionConflictCarrier | undefined,
+  readAdrAtHead?: (adrId: string) => AdrStatusAtHead,
+): {
   reasons: string[];
   advisories: string[];
 } {
   if (carrier === undefined) return { reasons: [], advisories: [] };
-  const { dispositions } = decisionConflictGate(carrier.conflicts, carrier.mode);
-  const line = (d: ConflictDisposition) =>
-    `${d.conflict.adr_id} (${d.conflict.kind}/${d.conflict.level}) → ${d.route}: ${d.conflict.basis}`;
+  const split = splitResolvedConflicts(
+    carrier.conflicts,
+    readAdrAtHead ?? (() => ({ status: 'absent' })),
+  );
+  const failureOf = new Map(split.failures.map((f) => [f.conflict, f.message]));
+  const { dispositions } = decisionConflictGate(split.blocking, carrier.mode);
+  const line = (d: ConflictDisposition) => {
+    const failure = failureOf.get(d.conflict);
+    return `${d.conflict.adr_id} (${d.conflict.kind}/${d.conflict.level}) → ${d.route}: ${d.conflict.basis}${failure !== undefined ? ` — ${failure}` : ''}`;
+  };
   const blocks = (d: ConflictDisposition) => d.route === 'block' || d.route === 'ask_user';
+  const resolvedAdvisories = split.resolved.map(
+    ({ conflict, resolution }) =>
+      `의사결정 충돌 해소 확인(resolved decision conflict, 비차단 참고) — ${conflict.adr_id} (${conflict.kind}/${conflict.level})이(가) ${resolution.superseded_by}(으)로 superseded임을 HEAD에서 확인함 · 충돌 근거: ${conflict.basis} · 해소 근거: ${resolution.basis}`,
+  );
   return {
     reasons: dispositions
       .filter(blocks)
       .map((d) => `의사결정 충돌(decision conflict) — ${line(d)}`),
-    advisories: dispositions
-      .filter((d) => !blocks(d))
-      .map(
-        (d) =>
-          `decision conflict (disclosed, agent followed ADR) / 의사결정 충돌(공개됨, 에이전트가 ADR을 따름) — ${line(d)}`,
-      ),
+    advisories: [
+      ...dispositions
+        .filter((d) => !blocks(d))
+        .map(
+          (d) =>
+            `decision conflict (disclosed, agent followed ADR) / 의사결정 충돌(공개됨, 에이전트가 ADR을 따름) — ${line(d)}`,
+        ),
+      ...resolvedAdvisories,
+    ],
   };
 }
 
@@ -836,6 +864,12 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   // human/LLM review, not a deterministic block).
   const advisories: string[] = [];
 
+  // Lazy ADR-at-HEAD reader for the decision-conflict resolution verification
+  // (wi_2607222uc). The implementation contains every throw internally (mapped to
+  // 'absent' → fail-closed), so it can never crash the hook into a fail-open exit 0.
+  const readAdrAtHead = (adrId: string): AdrStatusAtHead =>
+    readAdrStatusAtHead(input.repoRoot, adrId);
+
   // ── Stop-hook yield precedence classifier (wi_260707loq §1) ────────────────────
   // Replaces the old broad "any pending yields exit 0" early-return with an ORDERED
   // classifier. YIELDS (P1-P4) are checked FIRST and early-return exit 0; FORCES
@@ -864,9 +898,13 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
     // P2: ADR-0020 intent-level conflict front-loaded to the approval gate — only the
     // user can resolve it (align / supersede / drop), so YIELD (ac-7, DO NOT regress).
     // Disjoint from the non-pending 851 residual catch, which stays untouched.
+    // Only EFFECTIVE (still-blocking) conflicts count: a resolution claim verified
+    // superseded-at-HEAD is demoted and no longer stalls the plan at the yield.
     if (
       decisionConflicts.status === 'ok' &&
-      decisionConflictRequiresApproval(decisionConflicts.data.conflicts)
+      decisionConflictRequiresApproval(
+        splitResolvedConflicts(decisionConflicts.data.conflicts, readAdrAtHead).blocking,
+      )
     ) {
       return { exitCode: 0 };
     }
@@ -1022,10 +1060,17 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
   }
   // Decision-conflict guardrail (ADR-0020): intent conflicts block (D3 fail-closed),
   // every detected conflict is disclosed (D2 transparency) even when auto-aligned.
+  // A TERMINAL (done/abandoned) work item is already closed by an explicit decision —
+  // a stale carrier must not force blocking continuation forever (ac-3, same
+  // NON_TERMINAL guard shape as the completion/convergence siblings above); the D2
+  // disclosure advisories are still emitted either way.
   const dc = decisionConflictForcesContinuation(
     decisionConflicts.status === 'ok' ? decisionConflicts.data : undefined,
+    readAdrAtHead,
   );
-  reasons.push(...dc.reasons);
+  if (NON_TERMINAL_STATUSES.includes(workItem.status)) {
+    reasons.push(...dc.reasons);
+  }
   advisories.push(...dc.advisories);
 
   // Advisory suffix — appended to whatever this handler returns (blocking or not),

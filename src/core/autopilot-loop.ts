@@ -78,6 +78,7 @@ import {
   type ConditionBDecision,
   GATE_ID,
   type HandoffReason,
+  type ResolvableConflict,
   assertFrozenTestsIntact,
   decisionConflictRequiresApproval,
   defectFixRequiresConditionB,
@@ -85,12 +86,14 @@ import {
   intentDriftGate,
   isFailHandoffReason,
   oracleSatisfaction,
+  splitResolvedConflicts,
 } from './gates';
 import { createGhClient } from './gh-client';
 import { captureGitDiff, listChangedFiles } from './git';
 import { postUnpostedDecisions } from './github-progress';
 import { countHandoffBatonRounds } from './handoff-store';
 import { IntentStore } from './intent-store';
+import { readAdrStatusAtHead } from './knowledge-bridge';
 import { MemoryEventStore, MemorySourceStore } from './memory-store';
 import { warmStartMemoryContext } from './memory-warmstart';
 import { loadResolvedRecipe } from './recipe/load';
@@ -1793,9 +1796,13 @@ export const recordResultPayload = z
       .optional()
       .describe(
         "The planner's declared ADR conflicts (ADR-0020 D3 producer). On a contentful design " +
-          'pass a non-empty list is written to the decision-conflict carrier so an intent ' +
-          'conflict front-loads the approval gate (prevention) and the Stop hook re-checks it ' +
-          '(catch). Absent/empty ⇒ no carrier written (backward compat). Ignored for non-design.',
+          'pass a non-empty list is written to the decision-conflict carrier (merged by adr_id — ' +
+          'an existing entry’s resolution record survives) so an intent conflict front-loads ' +
+          'the approval gate (prevention) and the Stop hook re-checks it (catch). An EXPLICIT [] ' +
+          'means judged-none: method/prefer entries are cleared from a pre-existing carrier ' +
+          '(logged), intent-level entries persist (user-owned resolution only; the file is ' +
+          'removed when nothing remains). Absent (undefined) means no judgment: the carrier is ' +
+          'left untouched. Ignored for non-design.',
       ),
     // Per-AC oracle ASSIGNMENT — the design node's LLM judgment of the verification
     // method per criterion (ADR-0024 §3, ac-2). On a contentful design pass the loop
@@ -2227,8 +2234,14 @@ async function surfaceLspDiagnostics(
  * contradicts a recorded decision the user has not resolved. Absent/malformed
  * carrier → false: the deterministic Stop-hook catch (`decisionConflictForcesContinuation`)
  * still fail-closes at the boundary, so this layer fails open by design.
+ *
+ * Only the EFFECTIVE blocking set reaches `decisionConflictRequiresApproval`:
+ * a conflict whose `resolution` claim is verified against the ADR status line at
+ * the HEAD commit (`splitResolvedConflicts` + `readAdrStatusAtHead`) is demoted
+ * out of the set, so a landed supersede no longer force-pends the plan gate. An
+ * unverifiable claim stays blocking (fail-closed) and still front-loads.
  */
-async function planRequiresDecisionApproval(
+export async function planRequiresDecisionApproval(
   repoRoot: string,
   workItemId: string,
 ): Promise<boolean> {
@@ -2243,10 +2256,206 @@ async function planRequiresDecisionApproval(
   }
   try {
     const parsed = decisionConflictCarrier.safeParse(JSON.parse(text));
-    return parsed.success && decisionConflictRequiresApproval(parsed.data.conflicts);
+    if (!parsed.success) return false;
+    const effective = splitResolvedConflicts(parsed.data.conflicts, (adrId) =>
+      readAdrStatusAtHead(repoRoot, adrId),
+    );
+    return decisionConflictRequiresApproval(effective.blocking);
   } catch {
     return false;
   }
+}
+
+// ── ADR-0020 decision-conflict carrier lifecycle (producer side) ─────────────
+
+/** One declared conflict as the record-result payload carries it (payload-schema-validated). */
+type DeclaredDecisionConflict = z.infer<typeof decisionConflict>;
+
+/** Stable reason-line marker for a carrier clear/removal decision-log entry (무흔적 소멸 금지). */
+export const DECISION_CONFLICT_CLEARED_MARKER = 'decision-conflict-cleared';
+
+function decisionConflictCarrierPath(repoRoot: string, workItemId: string): string {
+  return localDir(repoRoot, 'work-items', workItemId, 'decision-conflict.json');
+}
+
+/**
+ * A carrier entry as raw JSON — the lifecycle reads/writes the file at the raw
+ * level so fields OUTSIDE the base `decisionConflict` shape (notably the
+ * user-gated `resolution` record a supersede lands on the entry) survive every
+ * rewrite instead of being stripped by a schema-validated round-trip.
+ */
+type RawCarrierEntry = Record<string, unknown>;
+
+/** True for the entries only the USER can resolve: intent-level forbid/require (never `prefer`). */
+function isUserOwnedIntentEntry(entry: RawCarrierEntry): boolean {
+  return entry.level === 'intent' && entry.kind !== 'prefer';
+}
+
+async function readRawCarrier(
+  path: string,
+): Promise<
+  | { state: 'absent' }
+  | { state: 'malformed' }
+  | { state: 'ok'; shell: RawCarrierEntry; entries: RawCarrierEntry[] }
+> {
+  let text: string;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch {
+    return { state: 'absent' };
+  }
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return { state: 'malformed' };
+    const shell = parsed as RawCarrierEntry;
+    const conflicts = shell.conflicts;
+    if (!Array.isArray(conflicts)) return { state: 'malformed' };
+    if (conflicts.some((c) => typeof c !== 'object' || c === null)) return { state: 'malformed' };
+    return { state: 'ok', shell, entries: conflicts as RawCarrierEntry[] };
+  } catch {
+    return { state: 'malformed' };
+  }
+}
+
+/** Raw atomic write in the same format `writeJson` uses (pretty + trailing newline). */
+async function writeRawCarrier(
+  path: string,
+  shell: RawCarrierEntry,
+  entries: RawCarrierEntry[],
+): Promise<void> {
+  await atomicWriteText(path, `${JSON.stringify({ ...shell, conflicts: entries }, null, 2)}\n`);
+}
+
+/**
+ * ADR-0020 D3 producer lifecycle (wi_2607222uc ac-2) — apply a contentful design
+ * pass's `decision_conflicts` declaration to the persisted carrier:
+ *
+ *  - `undefined` — NO judgment was made: the carrier (if any) is left untouched.
+ *  - explicit `[]` — the planner JUDGED there are no conflicts: only the
+ *    agent-resolvable entries (method-level, and any `prefer`) are cleared from a
+ *    pre-existing carrier; intent-level forbid/require entries are USER-owned
+ *    (사용자 전유 해소 원칙 — they leave only via a verified supersede resolution
+ *    or a terminal close) and survive. When nothing survives, the carrier file
+ *    itself is removed (`rm force` — idempotent under node re-dispatch). Every
+ *    clear/removal appends ONE decision-log record (무흔적 소멸 금지); a no-change
+ *    pass appends nothing. A malformed carrier is left untouched (fail-closed:
+ *    never destroy evidence the Stop hook / done gate will refuse on).
+ *  - non-empty — the declaration is written, MERGED by `adr_id`: an existing
+ *    entry's `resolution` record survives a re-declaration of the same adr_id
+ *    (no clobber), so a user-gated supersede is not silently erased by the next
+ *    design pass.
+ */
+export async function applyDecisionConflictDeclaration(args: {
+  repoRoot: string;
+  workItemId: string;
+  nodeId: string;
+  declared: DeclaredDecisionConflict[] | undefined;
+  appendDecision: (d: AutopilotDecision) => Promise<void>;
+  now: Date;
+}): Promise<void> {
+  if (args.declared === undefined) return; // no judgment ⇒ carrier untouched
+  const path = decisionConflictCarrierPath(args.repoRoot, args.workItemId);
+  const existing = await readRawCarrier(path);
+
+  // Explicit judged-none: clear the agent-resolvable entries, keep the user-owned ones.
+  if (Array.isArray(args.declared) && args.declared.length === 0) {
+    if (existing.state !== 'ok') return; // absent (idempotent) or malformed (fail-closed): untouched
+    const kept = existing.entries.filter(isUserOwnedIntentEntry);
+    const removed = existing.entries.filter((e) => !isUserOwnedIntentEntry(e));
+    const removeFile = kept.length === 0;
+    if (removed.length === 0 && !removeFile) return; // nothing to clear ⇒ no write, no log
+    if (removeFile) {
+      await rm(path, { force: true }); // force tolerates ENOENT (re-dispatch idempotency)
+    } else {
+      await writeRawCarrier(path, existing.shell, kept);
+    }
+    const removedIds = removed.map((e) => String(e.adr_id ?? 'unknown-adr'));
+    await args.appendDecision({
+      ts: args.now.toISOString(),
+      node_id: args.nodeId,
+      // A normal in-flow disclosure record, never an escalation: `surface` +
+      // decision_or_adr_conflict is not decisive-post material (isDecisivePost=false).
+      decision: 'surface',
+      resolvability: 'decision_or_adr_conflict',
+      reason:
+        `${DECISION_CONFLICT_CLEARED_MARKER}: design pass declared decision_conflicts=[] (judged-none) — ` +
+        `removed ${removed.length} method/prefer entr${removed.length === 1 ? 'y' : 'ies'}` +
+        `${removedIds.length > 0 ? ` (${removedIds.join(', ')})` : ''}; ` +
+        `${kept.length} intent-level entr${kept.length === 1 ? 'y' : 'ies'} preserved (user-owned resolution only)` +
+        `${removeFile ? '; no entries remain — carrier file removed' : ''}`,
+    });
+    return;
+  }
+
+  // Non-empty declaration: write, merging per adr_id so an existing entry's
+  // user-gated `resolution` record survives the rewrite.
+  const priorByAdrId = new Map<string, RawCarrierEntry>(
+    existing.state === 'ok'
+      ? existing.entries
+          .filter((e) => typeof e.adr_id === 'string')
+          .map((e) => [e.adr_id as string, e])
+      : [],
+  );
+  const merged: RawCarrierEntry[] = args.declared.map((c) => {
+    const prior = priorByAdrId.get(c.adr_id);
+    return prior !== undefined && prior.resolution !== undefined
+      ? { ...c, resolution: prior.resolution }
+      : { ...c };
+  });
+  await ensureDir(localDir(args.repoRoot, 'work-items', args.workItemId));
+  const shell: RawCarrierEntry =
+    existing.state === 'ok' ? existing.shell : { schema_version: '0.1.0', mode: 'autopilot' };
+  await writeRawCarrier(path, shell, merged);
+}
+
+/**
+ * `ditto work done` pass-close gate (wi_2607222uc ac-3): an intent-level
+ * (forbid|require × intent) conflict still recorded in the carrier without a
+ * HEAD-VERIFIED `resolution` refuses the pass-close — intent conflicts are
+ * user-owned, so the only legitimate exits are user decisions (record a verified
+ * supersede resolution, or abandon the work). A `resolution` record is a CLAIM,
+ * not evidence: it demotes the block only after `splitResolvedConflicts` verifies
+ * the ADR status line at the HEAD commit (`readAdrStatusAtHead` — positive
+ * evidence only). Any verification failure — no git, absent/ambiguous file,
+ * still-accepted status, successor mismatch, unparseable entry — keeps the
+ * refusal (fail-closed). A malformed carrier also refuses (fail-closed). Absent
+ * or method/prefer-only ⇒ null (no effect).
+ */
+export async function intentConflictPassCloseBlocker(
+  repoRoot: string,
+  workItemId: string,
+): Promise<string | null> {
+  const path = decisionConflictCarrierPath(repoRoot, workItemId);
+  const carrier = await readRawCarrier(path);
+  if (carrier.state === 'absent') return null;
+  if (carrier.state === 'malformed') {
+    return `decision-conflict carrier (.ditto/local/work-items/${workItemId}/decision-conflict.json) is malformed — fail-closed. Restore/repair the carrier, then re-run.`;
+  }
+  const intentEntries = carrier.entries.filter(isUserOwnedIntentEntry);
+  if (intentEntries.length === 0) return null;
+  // An entry that does not even parse as a carrier conflict cannot have its
+  // resolution claim verified — it stays blocking (fail-closed), never demoted.
+  const verifiable: ResolvableConflict[] = [];
+  const unparseable: RawCarrierEntry[] = [];
+  for (const entry of intentEntries) {
+    const parsed = decisionConflict.safeParse(entry);
+    if (parsed.success) verifiable.push(parsed.data);
+    else unparseable.push(entry);
+  }
+  const split = splitResolvedConflicts(verifiable, (adrId) => readAdrStatusAtHead(repoRoot, adrId));
+  if (split.blocking.length === 0 && unparseable.length === 0) return null;
+  const failureOf = new Map(split.failures.map((f) => [f.conflict, f.message]));
+  const named = [
+    ...split.blocking.map((c) => {
+      const failure = failureOf.get(c);
+      return `${c.adr_id} (${c.kind}: ${c.basis})${failure !== undefined ? ` — ${failure}` : ''}`;
+    }),
+    ...unparseable.map(
+      (e) =>
+        `${String(e.adr_id ?? 'unknown-adr')} (${String(e.kind)}: ${String(e.basis ?? 'no basis recorded')})`,
+    ),
+  ].join('; ');
+  return `unresolved intent-level decision conflict(s) — ${named}. These are user-owned: either record a verified supersede resolution on the conflict entry (the ADR was superseded and the conflict re-judged against the successor), or give the work up (\`ditto work abandon ${workItemId}\`).`;
 }
 
 // ── ADR-0024 Decision 6 (loop discipline): in-loop oracle authority ──────────
@@ -3166,27 +3375,22 @@ async function recordResultCore(
         });
       }
     }
-    // ADR-0020 D3 producer (wi_260616eu8): on a contentful `design` pass the
-    // planner declares any ADR conflicts it detected; persist them as the carrier
-    // BEFORE the plan-gate consults it (planRequiresDecisionApproval, below), so an
-    // intent conflict front-loads the approval gate in this SAME call (prevention)
-    // and the Stop hook re-checks the same file (catch). Written regardless of
-    // plan_brief; empty/absent ⇒ no carrier (backward compat — legacy design pass).
-    if (
-      node.kind === 'design' &&
-      input.payload.decision_conflicts !== undefined &&
-      input.payload.decision_conflicts.length > 0
-    ) {
-      await ensureDir(localDir(repoRoot, 'work-items', input.workItemId));
-      await writeJson(
-        localDir(repoRoot, 'work-items', input.workItemId, 'decision-conflict.json'),
-        decisionConflictCarrier,
-        {
-          schema_version: '0.1.0',
-          mode: 'autopilot',
-          conflicts: input.payload.decision_conflicts,
-        },
-      );
+    // ADR-0020 D3 producer (wi_260616eu8, lifecycle wi_2607222uc): on a contentful
+    // `design` pass the planner declares any ADR conflicts it detected; apply the
+    // declaration to the carrier BEFORE the plan-gate consults it
+    // (planRequiresDecisionApproval, below), so an intent conflict front-loads the
+    // approval gate in this SAME call (prevention) and the Stop hook re-checks the
+    // same file (catch). Full [] / undefined / merge semantics live in
+    // applyDecisionConflictDeclaration.
+    if (node.kind === 'design') {
+      await applyDecisionConflictDeclaration({
+        repoRoot,
+        workItemId: input.workItemId,
+        nodeId: node.id,
+        declared: input.payload.decision_conflicts,
+        appendDecision: (d) => aps.appendDecision(input.workItemId, d),
+        now: input.now ?? new Date(),
+      });
     }
     // Forward re-expansion (A-2 · §2.4): a contentful findings-bearing node that
     // still has findings does NOT close the loop — it splices a fix+re-check round

@@ -1,4 +1,5 @@
 import { defineCommand } from 'citty';
+import { intentConflictPassCloseBlocker } from '~/core/autopilot-loop';
 import { AutopilotStore } from '~/core/autopilot-store';
 import {
   BranchedStemError,
@@ -1989,6 +1990,17 @@ const workDone = defineCommand({
             blocking.materialized_wi ? ` (tracked as ${blocking.materialized_wi})` : ''
           }. Fix it, or mark the follow-up resolved, before closing.`,
         );
+        process.exit(USAGE_ERROR_EXIT);
+        return;
+      }
+      // ADR-0020 termination seam (wi_2607222uc ac-3): a pass-close must not slip past
+      // an unresolved intent-level decision conflict still recorded in the carrier —
+      // intent conflicts are user-owned, so the DONE(pass) path refuses (fail-closed on
+      // a malformed carrier too). Only this path: --status partial|blocked parking above
+      // and `work abandon` (the sanctioned drop) are untouched.
+      const conflictBlock = await intentConflictPassCloseBlocker(repoRoot, args.workId);
+      if (conflictBlock !== null) {
+        writeError(`work ${args.workId} cannot close: ${conflictBlock}`);
         process.exit(USAGE_ERROR_EXIT);
         return;
       }

@@ -4,6 +4,7 @@ import type { ZodTypeAny, z } from 'zod';
 import { AutopilotStore } from '~/core/autopilot-store';
 import { localDir } from '~/core/ditto-paths';
 import { listChangedFiles } from '~/core/git';
+import { readAdrStatusAtHead } from '~/core/knowledge-bridge';
 import { SessionPointerStore } from '~/core/session-pointer';
 import { WorkItemStore } from '~/core/work-item-store';
 import { acgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
@@ -236,6 +237,10 @@ export const stopHandler: HookHandler = async (input: HookInput) => {
         semanticPresent: ledgers.semantic.status === 'ok',
         isNonTerminal: NON_TERMINAL_STATUSES.has(workItem.status),
       }),
+    // ADR-at-HEAD reader for the decision-conflict resolution verification
+    // (wi_2607222uc): contains every throw internally (mapped to 'absent' →
+    // fail-closed), so it can never crash the hook into a fail-open exit 0.
+    readAdrAtHead: (adrId) => readAdrStatusAtHead(input.repoRoot, adrId),
   });
 
   // Effects ordered by the pure gate — performed before the verdict returns.

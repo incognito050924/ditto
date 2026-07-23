@@ -28,6 +28,31 @@ export const decisionConflict = z.object({
     .string()
     .min(1)
     .describe('Evidence: what the ADR says and how the current work touches it'),
+  // Optional per-conflict RESOLUTION record (wi_2607222uc): the detecting side
+  // asserts the conflicting ADR was superseded after a re-collation with the user.
+  // A claim alone demotes NOTHING — the gate verifies the ADR's status line at the
+  // HEAD commit (positive evidence only; every failure branch stays blocking,
+  // fail-closed — see `splitResolvedConflicts` in src/core/gates.ts). Additive +
+  // optional: a legacy carrier without it parses and blocks exactly as before
+  // (schema_version stays 0.1.0 — the literal is shared across every artifact).
+  resolution: z
+    .object({
+      superseded_by: z
+        .string()
+        .regex(
+          ADR_ID_FULL_RE,
+          'superseded_by must be legacy ADR-NNNN or new ADR-YYYYMMDD-slug (slug = lowercase alphanumeric words, hyphen-separated)',
+        )
+        .describe('The successor ADR the conflicting decision was superseded by'),
+      basis: z
+        .string()
+        .min(1)
+        .describe('Re-collation evidence: why/how the conflict was resolved with the user'),
+    })
+    .optional()
+    .describe(
+      'Claimed resolution of this conflict; demotes the block only after HEAD verification',
+    ),
 });
 
 export const decisionConflictCarrier = z

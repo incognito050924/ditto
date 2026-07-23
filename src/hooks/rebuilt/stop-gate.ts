@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import {
+  type AdrStatusAtHead,
   type AttestationState,
   type RiskAxes,
   attestAcVerdicts,
@@ -12,6 +13,7 @@ import {
   intentDriftGate,
   landGate,
   nonPassTerminationGate,
+  splitResolvedConflicts,
 } from '~/core/gates';
 import type { AcgAssuranceSnapshot } from '~/schemas/acg-assurance-snapshot';
 import type { AcgImpactGraph } from '~/schemas/acg-impact-graph';
@@ -87,6 +89,14 @@ export interface StopGateInput {
   uncommittedFiles: () => string[];
   /** Lazy: the non-blocking semantic-scan nudge; consulted only on a clean stop. */
   computeNudge: () => string | null;
+  /**
+   * Lazy: the ADR status at HEAD for a resolution-claimed decision conflict
+   * (wi_2607222uc ac-1); consulted only when the carrier claims a resolution. The
+   * IMPLEMENTATION must contain every throw internally and map it to 'absent'
+   * (fail-closed block) — a throw escaping to the hook runtime catch-all would
+   * exit 0 = fail-OPEN; the pure gate additionally contains a throwing reader.
+   */
+  readAdrAtHead: (adrId: string) => AdrStatusAtHead;
 }
 
 export interface StopEffects {
@@ -226,9 +236,13 @@ export function evaluateStopGate(input: StopGateInput): StopGateDecision {
     hasPendingMutatingNode(pilot.data)
   ) {
     // P2: ADR-0020 intent-level conflict — only the user can resolve it → YIELD.
+    // Only EFFECTIVE (still-blocking) conflicts count: a resolution claim verified
+    // superseded-at-HEAD is demoted and no longer stalls the plan at the yield.
     if (
       decisionConflicts.status === 'ok' &&
-      decisionConflictRequiresApproval(decisionConflicts.data.conflicts)
+      decisionConflictRequiresApproval(
+        splitResolvedConflicts(decisionConflicts.data.conflicts, input.readAdrAtHead).blocking,
+      )
     ) {
       return { exitCode: 0, effects: NO_EFFECTS };
     }
@@ -340,11 +354,18 @@ export function evaluateStopGate(input: StopGateInput): StopGateDecision {
     );
   }
   // Decision-conflict guardrail (ADR-0020): intent conflicts block; every
-  // detected conflict is disclosed even when auto-aligned.
+  // detected conflict is disclosed even when auto-aligned. A TERMINAL
+  // (done/abandoned) work item is already closed by an explicit decision — a
+  // stale carrier must not force blocking continuation forever (ac-3, same
+  // NON_TERMINAL guard shape as the completion/convergence siblings above); the
+  // D2 disclosure advisories are still emitted either way.
   const dc = decisionConflictForcesContinuation(
     decisionConflicts.status === 'ok' ? decisionConflicts.data : undefined,
+    input.readAdrAtHead,
   );
-  reasons.push(...dc.reasons);
+  if (NON_TERMINAL_STATUSES.includes(workItem.status)) {
+    reasons.push(...dc.reasons);
+  }
   advisories.push(...dc.advisories);
 
   const advisoryBlock =

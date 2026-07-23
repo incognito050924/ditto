@@ -1,8 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { ADR_ID_EXTRACT_RE, ADR_TITLE_PREFIX_RE } from '~/schemas/adr-id';
 import { atomicWriteText } from './fs';
+import type { AdrStatusAtHead } from './gates';
 import { normalizeInstructionText, normalizedSha256 } from './instruction-bridge';
 
 /**
@@ -69,11 +71,99 @@ export interface KnowledgeSyncResult {
 
 const KNOWLEDGE_DIR = join('.ditto', 'knowledge');
 
+/** Parsed `- 상태:` / `- status:` list line of an ADR body. */
+export interface AdrStatusLine {
+  /** Full status value text after the label (trimmed), e.g. `superseded by ADR-…`. */
+  status: string;
+  /** Successor ADR id when the value reads `superseded by <id>`. */
+  supersededBy?: string;
+}
+
+// LINE-anchored status-line matchers (the `- 상태:` / `- status:` list line; the
+// list dash is optional but the label must open its own line). Deliberately NOT a
+// whole-body substring match: accepted ADR bodies legitimately contain the word
+// 'superseded' (and even '상태:') in prose, and a substring match would let prose
+// fake a supersede verdict. `상태:` wins; `status:` is the case-insensitive fallback.
+const ADR_STATUS_LINE_KO_RE = /^\s*(?:[-*]\s+)?상태:\s*(.+)$/m;
+const ADR_STATUS_LINE_EN_RE = /^\s*(?:[-*]\s+)?status:\s*(.+)$/im;
+
+/**
+ * Parse an ADR body's status LINE — the single shared parser for the knowledge
+ * projection (`adrHeadline`) and the decision-conflict resolution verification
+ * (`splitResolvedConflicts` consumers), so projection and gate can never disagree
+ * about what an ADR's status is. Returns the full status value plus the successor
+ * id extracted from a `superseded by <id>` value (ADR_ID_EXTRACT_RE prefix, so a
+ * trailing annotation after the id is tolerated). null = no parseable status line.
+ */
+export function parseAdrStatusLine(body: string): AdrStatusLine | null {
+  const value = body.match(ADR_STATUS_LINE_KO_RE)?.[1] ?? body.match(ADR_STATUS_LINE_EN_RE)?.[1];
+  if (value === undefined) return null;
+  const status = value.trim();
+  if (status.length === 0) return null;
+  const after = status.match(/superseded by\s+(.+)$/i)?.[1];
+  const supersededBy = after?.match(ADR_ID_EXTRACT_RE)?.[0];
+  return { status, ...(supersededBy !== undefined ? { supersededBy } : {}) };
+}
+
+const ADR_DIR_AT_HEAD = '.ditto/knowledge/adr';
+
+/**
+ * Read an ADR's status at the HEAD COMMIT (not the working tree — an uncommitted
+ * local edit is never landed positive evidence). Lookup by id: a new-form id IS
+ * its filename stem (`<id>.md`); a legacy `ADR-NNNN` resolves via the prefix glob
+ * `ADR-NNNN-*.md` (trailing hyphen, so ADR-0016 never matches ADR-00160-*).
+ * MULTIPLE matches fail closed as 'ambiguous' (never pick-first). argv-array git
+ * (no shell interpolation), and EVERY throw — git absent, not a repo, unborn
+ * HEAD, permissions — is contained and mapped to 'absent': a throw escaping into
+ * the hook runtime catch-all would exit 0 = fail-OPEN, which is forbidden.
+ */
+export function readAdrStatusAtHead(repoRoot: string, adrId: string): AdrStatusAtHead {
+  try {
+    const listed = execFileSync(
+      'git',
+      ['ls-tree', '-r', '--name-only', 'HEAD', '--', ADR_DIR_AT_HEAD],
+      { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    const names = listed
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    const matches = names
+      .filter((path) => {
+        const name = path.slice(path.lastIndexOf('/') + 1);
+        return name === `${adrId}.md` || (name.startsWith(`${adrId}-`) && name.endsWith('.md'));
+      })
+      .sort();
+    const first = matches[0];
+    if (first === undefined) return { status: 'absent' };
+    if (matches.length > 1) return { status: 'ambiguous', matches };
+    const body = execFileSync('git', ['show', `HEAD:${first}`], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const parsed = parseAdrStatusLine(body);
+    if (parsed === null) return { status: 'malformed' };
+    return {
+      status: 'ok',
+      adr_status: parsed.status,
+      ...(parsed.supersededBy !== undefined ? { superseded_by: parsed.supersededBy } : {}),
+    };
+  } catch {
+    // No git / not a repo / unborn HEAD / permissions — verification is impossible,
+    // which the gate treats as fail-closed 'absent' (block stays), never a throw.
+    return { status: 'absent' };
+  }
+}
+
 function adrHeadline(filename: string, body: string): string {
   const id = filename.match(ADR_ID_EXTRACT_RE)?.[0] ?? filename;
   const titleLine = body.split('\n').find((l) => l.startsWith('# '));
   const title = titleLine ? titleLine.replace(/^#\s*/, '').trim() : '';
-  const status = body.match(/상태:\s*(\S+)/)?.[1] ?? body.match(/status:\s*(\S+)/i)?.[1] ?? '';
+  // Same parser as the gate-side verification (parseAdrStatusLine) so projection
+  // and gate agree; the headline keeps only the first token (`superseded`,
+  // `accepted (…)` → `accepted`) exactly as the previous inline regex did.
+  const status = parseAdrStatusLine(body)?.status.split(/\s+/)[0] ?? '';
   const parts = [id];
   if (status) parts.push(status);
   if (title) parts.push(title.replace(ADR_TITLE_PREFIX_RE, ''));
