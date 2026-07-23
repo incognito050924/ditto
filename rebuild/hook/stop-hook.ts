@@ -2,6 +2,7 @@
 import { join } from 'node:path';
 
 import { parseQueueState, type QueueState } from '../state/queue-state';
+import { atomicWriteText } from '../util/fs';
 import { evaluateStopGate } from './stop-gate';
 
 /**
@@ -83,7 +84,9 @@ export async function runStopHook(
     timestamp: nowIso,
     output_excerpt: excerpt,
   };
-  fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+  // Atomic (temp+rename) so a crash mid-write never leaves a torn queue.json —
+  // the fail-closed parse above would otherwise block every later stop.
+  await atomicWriteText(statePath, `${JSON.stringify(state, null, 2)}\n`);
 
   if (decision.exitCode === 2) {
     const header = decision.repeatBlock
