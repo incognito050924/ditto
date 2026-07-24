@@ -20352,6 +20352,74 @@ function runPrismRounds(rounds, caps = PRISM_CAPS, start = {}) {
   };
 }
 
+// src/schemas/interview-state.ts
+init_zod();
+init_common();
+
+// src/schemas/convergence.ts
+init_zod();
+init_common();
+var honestyKind = exports_external.enum(["finding", "hypothesis", "taste"]).describe("What the item is; backing-less claims are hypothesis, not finding");
+var confidenceLevel = exports_external.enum(["high", "medium", "low"]).describe("Confidence in a claim; backing-less claims must be low");
+var ledgerStatus = exports_external.enum(["acted", "deferred", "dismissed"]).describe("What was done with the item; deferred/dismissed require a reason");
+var closureMode = exports_external.enum(["mutual_agreement", "ledger_only", "safe_default"]).describe("How the closure was reached, not why (that is exit.reason)");
+var convergenceVersion = exports_external.object({
+  version: exports_external.number().int().positive(),
+  score: exports_external.number(),
+  evidence_refs: exports_external.array(evidenceRef).default([])
+}).describe("One scored version of the refined artifact");
+var decisionLedgerEntry = exports_external.object({
+  id: exports_external.string().min(1),
+  round: exports_external.number().int().nonnegative(),
+  objection: exports_external.string().min(1),
+  kind: honestyKind,
+  criterion_id: exports_external.string().min(1).nullable().default(null),
+  severity,
+  admissible: exports_external.boolean(),
+  status: ledgerStatus,
+  confidence: confidenceLevel,
+  backed_by: exports_external.array(evidenceRef).default([]),
+  reason: exports_external.string().min(1).describe("Why acted/dismissed; required for symmetry (\xA73.2)"),
+  supersedes: exports_external.string().min(1).nullable().default(null)
+}).superRefine((value, ctx) => {
+  if (value.kind === "finding" && value.backed_by.length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "kind=finding requires non-empty backed_by",
+      path: ["backed_by"]
+    });
+  }
+  if (value.admissible === true && value.severity !== "high" && value.severity !== "critical") {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)",
+      path: ["admissible"]
+    });
+  }
+}).describe("Append-only decision ledger entry with honesty labels (\xA74.1, \xA76.1)");
+var convergence = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  target_ref: exports_external.string().min(1).describe("Node id, review id, or AC-set this refinement targets"),
+  round_cap: exports_external.number().int().positive(),
+  rounds_run: exports_external.number().int().nonnegative(),
+  versions: exports_external.array(convergenceVersion).min(1),
+  selected_version: exports_external.number().int().positive(),
+  decision_ledger: exports_external.array(decisionLedgerEntry).default([]),
+  open_admissible_count: exports_external.number().int().nonnegative(),
+  gate: exports_external.object({
+    completion_gate: verdict,
+    convergence_gate: exports_external.enum(["no_open_admissible", "open_admissible"]),
+    converged: exports_external.boolean()
+  }),
+  exit: exports_external.object({
+    reason: exports_external.enum(["converged", "cap_reached", "blocked"]),
+    closure_mode: closureMode,
+    verdict_delegated_to_completion: exports_external.boolean().default(true),
+    next_handoff_path: relativePath.nullable().default(null)
+  })
+}).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
+
 // src/schemas/question-gate.ts
 init_zod();
 init_common();
@@ -20371,6 +20439,154 @@ var questionGate = exports_external.object({
   risk_if_not_asked: exports_external.string().min(1).describe("How the implementation result changes if this is not asked")
 }).describe("Pre-ask judgement that blocks unnecessary and responsibility-shifting questions (\xA76.2)");
 
+// src/schemas/interview-state.ts
+var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
+var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
+var infoGain = exports_external.enum(["high", "medium", "low"]).describe("Estimated information gain of a question");
+var answerSelfReport = exports_external.enum(["confident", "partial", "unsure"]).describe("User self-report of decision-ability after answering (presentation-sufficiency signal)");
+var interviewDissent = exports_external.object({
+  status: exports_external.enum(["engaged", "host_absent"]),
+  verdict: exports_external.enum(["accept", "revise", "reject"]).optional(),
+  impact: exports_external.enum(["low", "high"]).optional(),
+  text: exports_external.string().optional(),
+  acknowledged: exports_external.boolean().default(false)
+}).describe("Intent-layer opponent dissent recorded on a dimension (wi_260709mqt)");
+var interviewDissentVerdict = exports_external.object({
+  dimension_id: exports_external.string().min(1).describe("The interview dimension this dissent is recorded on"),
+  text: exports_external.string().min(1).describe("The opponent\u2019s sharper-intent judgment text (host-produced, ADR-0001)")
+}).describe("One host-delegated intent-dissent verdict consumed by dissent-record");
+var interviewDissentVerdicts = exports_external.object({
+  verdicts: exports_external.array(interviewDissentVerdict).min(1).describe("The intent-dissent verdicts to record (at least one)")
+}).describe("The --json payload for `ditto deep-interview dissent-record`");
+var interviewSemanticVerdict = exports_external.object({
+  dimension_id: exports_external.string().min(1).describe("The covered dimension this critique is recorded on"),
+  text: exports_external.string().min(1).describe("The achieve-vs-characterize judgment (host-produced, ADR-0001)")
+}).describe("One host-delegated A1 semantic-critic verdict consumed by semantic-record");
+var interviewSemanticVerdicts = exports_external.object({
+  verdicts: exports_external.array(interviewSemanticVerdict).min(1).describe("The A1 semantic-critic verdicts to record (at least one)")
+}).describe("The --json payload for `ditto deep-interview semantic-record`");
+var interviewDimension = exports_external.object({
+  id: exports_external.string().min(1),
+  critical: exports_external.boolean().default(false),
+  state: dimensionState,
+  ambiguity: exports_external.number().min(0).max(1),
+  resolved_by: exports_external.array(exports_external.string()).default([]),
+  notes: exports_external.string().default(""),
+  dissent: interviewDissent.optional(),
+  semantic_status: exports_external.enum(["engaged", "host_absent"]).optional().describe("A1 semantic-critic seam status; host_absent on degrade (ADR-0018), advisory"),
+  semantic_critique: exports_external.string().optional().describe("A1 achieve-vs-characterize judgment on a covered (fragment,dimension) pair")
+}).describe("One ambiguity dimension tracked during the interview");
+var interviewBranchEdge = exports_external.object({
+  from: exports_external.string().min(1).describe("Source dimension/question id whose answer opened the dependent decision"),
+  to: exports_external.string().min(1).describe("Target dependent dimension/question id the answer opened")
+}).describe("One dependency edge (source\u2192target) in the branch-walking reference graph (wi_260713cx4)");
+var interviewQuestionOption = exports_external.object({
+  label: exports_external.string().min(1).optional().describe("Short choice label shown to the user"),
+  expected_effect: exports_external.string().min(1).optional().describe("What this option settles if chosen (the decision it resolves)"),
+  ripple: exports_external.string().min(1).optional().describe("Downstream / side effects this option would trigger"),
+  root_cause_approach: exports_external.string().min(1).optional().describe("How this option addresses the root cause rather than a symptom")
+}).describe("One presented choice with its element-4 decision subfields (ac-1)");
+var interviewQuestion = exports_external.object({
+  id: exports_external.string().min(1),
+  asked_at: isoDateTime,
+  dimension: exports_external.string().min(1),
+  question: exports_external.string().min(1),
+  why_matters: exports_external.string().min(1).describe("What changes depending on the answer"),
+  info_gain_estimate: infoGain,
+  self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
+  user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
+  recommended_answer: exports_external.string().min(1).optional().describe("The agent\u2019s suggested default answer (user language) carried with the question"),
+  background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
+  grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
+  options: exports_external.array(interviewQuestionOption).optional().describe("Element-4 choice set presented with this question (gate hard-requires subfields)"),
+  turn_kind: exports_external.enum(["fired", "internal"]).optional().describe("Turn classification; ABSENT \u21D2 'fired' (legacy turns count as fired)"),
+  source_anchor: exports_external.string().min(1).optional().describe("Driver-filled verbatim original user utterance this question traces to (scan-exempt)"),
+  review_status: exports_external.enum(["reviewed", "unverified-degraded"]).optional().describe("Session-blind context-review outcome (critical questions only)"),
+  answer: exports_external.string().optional(),
+  answer_kind: exports_external.enum(["user", "assumption"]).optional(),
+  answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
+  ambiguity_delta: exports_external.number().optional(),
+  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
+  novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (deterministic; angle-exhaustion axis)"),
+  branch_edges: exports_external.array(interviewBranchEdge).optional().describe("Dependency edges this turn opened (positive pole); the driver guards integrity"),
+  branch_judgment: exports_external.object({
+    opened: exports_external.boolean().describe("Did this turn open a value-bearing dependent decision (branch)? false = seam marker (opened nothing further)"),
+    why: exports_external.string().min(1).optional().describe("WHY of the branch-open / value-exhaustion judgment (audit trace, termination rationale)")
+  }).optional().describe("Per-turn branch-open / value-exhaustion judgment ledger (reconstructible from disk)")
+}).describe("One asked question with its self-answer attempts and outcome");
+var interviewAssumption = exports_external.object({
+  statement: exports_external.string().min(1),
+  label: honestyKind,
+  confidence: confidenceLevel,
+  because_no_answer_to: exports_external.string().min(1).describe("Question id left unanswered")
+}).describe("Assumption recorded when a question was not answered (\xA76.9)");
+var premortemItem = exports_external.object({
+  scenario: exports_external.string().min(1).describe("What failed / caused harm if this shipped"),
+  likelihood: exports_external.enum(["low", "medium", "high"]),
+  blast_radius: exports_external.enum(["low", "medium", "high", "critical"]),
+  reversibility: exports_external.enum(["reversible", "hard", "irreversible"]),
+  early_signal: exports_external.string().default("").describe("What you would observe if this risk is materializing"),
+  promoted_to: exports_external.enum(["ac", "out_of_scope", "user_owned_decision", "none"]).describe("Where a critical item was promoted (\xA75 \uC2B9\uACA9 \uADDC\uCE59)"),
+  ref: exports_external.string().default("").describe("Pointer to the AC / out_of_scope[i] / question id"),
+  maps_to: exports_external.array(exports_external.string().min(1)).min(1).optional().describe("Oracle-link: original-intent fragment | file:line | ADR the risk binds to"),
+  refutation: exports_external.object({
+    status: exports_external.enum(["engaged", "host_absent"]),
+    text: exports_external.string().optional().describe("The opponent\u2019s refutation judgment (host-produced)")
+  }).optional().describe("Lightweight opponent refutation on a high-blast item (host-delegated)")
+}).describe("One pre-mortem risk item with its promotion outcome (deep-interview \xA75)");
+var premortemRefutationVerdict = exports_external.object({
+  index: exports_external.number().int().min(0).describe("Index into interview-state.premortem the refutation targets"),
+  text: exports_external.string().min(1).describe("The opponent\u2019s refutation judgment (host-produced, ADR-0001)")
+}).describe("One host-delegated pre-mortem refutation verdict consumed by premortem-refute-record");
+var premortemRefutationVerdicts = exports_external.object({
+  verdicts: exports_external.array(premortemRefutationVerdict).min(1).describe("The pre-mortem refutation verdicts to record (at least one)")
+}).describe("The --json payload for `ditto deep-interview premortem-refute-record`");
+var userConfirmation = exports_external.object({
+  confirmed: exports_external.boolean().describe("The user confirmed the synthesized intent matches their understanding"),
+  statement: exports_external.string().default("").describe("The user's own words confirming; required (non-empty) when confirmed=true"),
+  confirmed_at: isoDateTime.optional().describe("When the confirmation was captured")
+}).superRefine((value, ctx) => {
+  if (value.confirmed && value.statement.trim().length === 0) {
+    ctx.addIssue({
+      code: exports_external.ZodIssueCode.custom,
+      message: "confirmed=true requires the user statement (evidence, not a bare boolean)",
+      path: ["statement"]
+    });
+  }
+}).describe("\uCD951 2\uCC28 \uAC8C\uC774\uD2B8: explicit, evidence-bearing user confirmation of the intent");
+var interviewState = exports_external.object({
+  schema_version: schemaVersion,
+  work_item_id: workItemId,
+  status: interviewStatus,
+  started_at: isoDateTime,
+  updated_at: isoDateTime,
+  dimensions: exports_external.array(interviewDimension).default([]),
+  readiness: exports_external.object({
+    score: exports_external.number().min(0).max(1),
+    threshold: exports_external.number().min(0).max(1),
+    critical_unresolved: exports_external.array(exports_external.string()).default([]),
+    gate: exports_external.enum(["blocked", "ready"])
+  }),
+  questions: exports_external.array(interviewQuestion).default([]),
+  assumptions: exports_external.array(interviewAssumption).default([]),
+  premortem: exports_external.array(premortemItem).default([]),
+  user_confirmation: userConfirmation.optional(),
+  exit: exports_external.object({
+    reason: exports_external.enum([
+      "readiness_met",
+      "diminishing_returns",
+      "user_deferred",
+      "user_owned_decision",
+      "cap_reached",
+      "parked",
+      "blocked"
+    ]),
+    closure_mode: closureMode,
+    question_cap: exports_external.number().int().positive(),
+    questions_asked: exports_external.number().int().nonnegative()
+  })
+}).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
+
 // src/core/question-context.ts
 var questionContextCandidate = exports_external.object({
   text: exports_external.string().min(1),
@@ -20379,6 +20595,7 @@ var questionContextCandidate = exports_external.object({
   recommended_answer: exports_external.string().optional(),
   background: exports_external.string().optional(),
   grounding: exports_external.string().optional(),
+  options: exports_external.array(interviewQuestionOption).optional(),
   self_answer_attempts: exports_external.array(selfAnswerAttempt).optional()
 }).describe("A gate-selected question candidate checked against the presentation contract");
 var isBlank = (s2) => s2 === undefined || s2.trim().length === 0;
@@ -20483,6 +20700,46 @@ function validateQuestionContext(candidate, opaqueVocab = []) {
       field: "why_matters",
       reason: "\uC774 \uB2F5\uC774 \uBB34\uC5C7\uC744 \uC815\uD558\uB294\uC9C0(\uC65C \uC911\uC694\uD55C\uC9C0)\uB97C \uBC1D\uD600\uC57C \uD574\uC694"
     });
+  }
+  const options = candidate.options ?? [];
+  const optionsBearing = options.length > 0;
+  if (optionsBearing) {
+    if (isBlank(candidate.background)) {
+      violations.push({
+        field: "background",
+        reason: "\uC120\uD0DD\uC9C0\uB97C \uC774\uD574\uD558\uB294 \uB370 \uD544\uC694\uD55C \uBC30\uACBD \uC124\uBA85\uC744 \uBA3C\uC800 \uC801\uC5B4\uC57C \uD574\uC694 (\uC120\uD0DD\uC9C0\uAC00 \uC788\uB294 \uC9C8\uBB38\uC758 \uD544\uC218 \uC694\uC18C)"
+      });
+    }
+    options.forEach((opt, i2) => {
+      if (isBlank(opt.expected_effect)) {
+        violations.push({
+          field: "option_expected_effect",
+          reason: `${i2 + 1}\uBC88\uC9F8 \uC120\uD0DD\uC9C0\uC5D0 "\uC774\uAC78 \uACE0\uB974\uBA74 \uBB34\uC5C7\uC774 \uC815\uD574\uC9C0\uB294\uC9C0(\uC608\uC0C1 \uD6A8\uACFC)"\uAC00 \uBE60\uC84C\uC5B4\uC694`
+        });
+      }
+      if (isBlank(opt.ripple)) {
+        violations.push({
+          field: "option_ripple",
+          reason: `${i2 + 1}\uBC88\uC9F8 \uC120\uD0DD\uC9C0\uC5D0 "\uC774\uAC78 \uACE0\uB974\uBA74 \uC0DD\uAE30\uB294 \uD30C\uAE09\xB7\uBD80\uC218 \uD6A8\uACFC"\uAC00 \uBE60\uC84C\uC5B4\uC694`
+        });
+      }
+      if (isBlank(opt.root_cause_approach)) {
+        violations.push({
+          field: "option_root_cause_approach",
+          reason: `${i2 + 1}\uBC88\uC9F8 \uC120\uD0DD\uC9C0\uC5D0 "\uADFC\uBCF8 \uC6D0\uC778\uC744 \uB2E4\uB8E8\uB294\uC9C0(\uC784\uC2DC\uBC29\uD3B8\uC778\uC9C0)"\uAC00 \uBE60\uC84C\uC5B4\uC694`
+        });
+      }
+    });
+    if (needsBriefing(candidate.background ?? "")) {
+      const eachOptionSelfSufficient = options.every((opt) => needsBriefing([opt.expected_effect, opt.ripple, opt.root_cause_approach].filter((s2) => !isBlank(s2)).join(`
+`)));
+      if (!eachOptionSelfSufficient) {
+        violations.push({
+          field: "option_self_sufficiency",
+          reason: "\uC120\uD0DD\uC9C0 \uC124\uBA85\uC774 \uAE38\uC5B4 \uC548\uB0B4\uAC00 \uD544\uC694\uD55C\uB370, \uADF8 \uC548\uB0B4\uAC00 \uC77C\uBC18 \uBC30\uACBD\uC5D0\uB9CC \uC788\uACE0 \uAC01 \uC120\uD0DD\uC9C0\uC5D0\uB294 \uB2F4\uACA8 \uC788\uC9C0 \uC54A\uC544\uC694 \u2014 \uACE0\uB974\uB294 \uC21C\uAC04 \uAC01 \uC120\uD0DD\uC9C0 \uC606\uC5D0\uC11C \uBC14\uB85C \uC77D\uC744 \uC218 \uC788\uAC8C \uC120\uD0DD\uC9C0\uBCC4 \uC124\uBA85\uC744 \uB2F4\uC544\uC57C \uD574\uC694"
+        });
+      }
+    }
   }
   const leaked = [
     ...findUnexplainedIdentifiers(candidate.text, opaqueVocab),
@@ -20975,7 +21232,7 @@ function deterministicFloor(s2) {
 }
 function ambiguityFromInterview(state) {
   const open2 = state.dimensions.filter((d2) => d2.critical && d2.state !== "resolved").length;
-  const asked = state.questions.length;
+  const asked = state.questions.reduce((n2, q2) => q2.turn_kind === "internal" ? n2 : n2 + 1, 0);
   const assumption_ratio = asked === 0 ? state.assumptions.length > 0 ? 1 : 0 : state.assumptions.length / asked;
   return {
     open_required_sections: open2,
@@ -21006,6 +21263,7 @@ function deriveClosureMode(reason, gatePassed) {
       return gatePassed ? "mutual_agreement" : "ledger_only";
     case "user_deferred":
     case "user_owned_decision":
+    case "parked":
     case "blocked":
       return "safe_default";
   }
@@ -23763,70 +24021,6 @@ async function collectCompletionCoverageReport(deps) {
   }
   return { rows, totals: totalsOf(rows) };
 }
-
-// src/schemas/convergence.ts
-init_zod();
-init_common();
-var honestyKind = exports_external.enum(["finding", "hypothesis", "taste"]).describe("What the item is; backing-less claims are hypothesis, not finding");
-var confidenceLevel = exports_external.enum(["high", "medium", "low"]).describe("Confidence in a claim; backing-less claims must be low");
-var ledgerStatus = exports_external.enum(["acted", "deferred", "dismissed"]).describe("What was done with the item; deferred/dismissed require a reason");
-var closureMode = exports_external.enum(["mutual_agreement", "ledger_only", "safe_default"]).describe("How the closure was reached, not why (that is exit.reason)");
-var convergenceVersion = exports_external.object({
-  version: exports_external.number().int().positive(),
-  score: exports_external.number(),
-  evidence_refs: exports_external.array(evidenceRef).default([])
-}).describe("One scored version of the refined artifact");
-var decisionLedgerEntry = exports_external.object({
-  id: exports_external.string().min(1),
-  round: exports_external.number().int().nonnegative(),
-  objection: exports_external.string().min(1),
-  kind: honestyKind,
-  criterion_id: exports_external.string().min(1).nullable().default(null),
-  severity,
-  admissible: exports_external.boolean(),
-  status: ledgerStatus,
-  confidence: confidenceLevel,
-  backed_by: exports_external.array(evidenceRef).default([]),
-  reason: exports_external.string().min(1).describe("Why acted/dismissed; required for symmetry (\xA73.2)"),
-  supersedes: exports_external.string().min(1).nullable().default(null)
-}).superRefine((value, ctx) => {
-  if (value.kind === "finding" && value.backed_by.length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "kind=finding requires non-empty backed_by",
-      path: ["backed_by"]
-    });
-  }
-  if (value.admissible === true && value.severity !== "high" && value.severity !== "critical") {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "admissible=true requires severity high or critical (ADMISSIBLE_SEVERITIES)",
-      path: ["admissible"]
-    });
-  }
-}).describe("Append-only decision ledger entry with honesty labels (\xA74.1, \xA76.1)");
-var convergence = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  target_ref: exports_external.string().min(1).describe("Node id, review id, or AC-set this refinement targets"),
-  round_cap: exports_external.number().int().positive(),
-  rounds_run: exports_external.number().int().nonnegative(),
-  versions: exports_external.array(convergenceVersion).min(1),
-  selected_version: exports_external.number().int().positive(),
-  decision_ledger: exports_external.array(decisionLedgerEntry).default([]),
-  open_admissible_count: exports_external.number().int().nonnegative(),
-  gate: exports_external.object({
-    completion_gate: verdict,
-    convergence_gate: exports_external.enum(["no_open_admissible", "open_admissible"]),
-    converged: exports_external.boolean()
-  }),
-  exit: exports_external.object({
-    reason: exports_external.enum(["converged", "cap_reached", "blocked"]),
-    closure_mode: closureMode,
-    verdict_delegated_to_completion: exports_external.boolean().default(true),
-    next_handoff_path: relativePath.nullable().default(null)
-  })
-}).describe("Convergence sidecar; records refinement closure, does not set verdict (\xA76.9)");
 
 // src/core/convergence-store.ts
 init_ditto_paths();
@@ -39421,145 +39615,9 @@ init_fs();
 
 // src/core/interview-driver.ts
 init_zod();
-
-// src/schemas/interview-state.ts
-init_zod();
-init_common();
-var interviewStatus = exports_external.enum(["active", "converged", "deferred", "aborted"]).describe("Lifecycle of the deep interview");
-var dimensionState = exports_external.enum(["unknown", "partial", "resolved"]).describe("Resolution state of one ambiguity dimension");
-var infoGain = exports_external.enum(["high", "medium", "low"]).describe("Estimated information gain of a question");
-var answerSelfReport = exports_external.enum(["confident", "partial", "unsure"]).describe("User self-report of decision-ability after answering (presentation-sufficiency signal)");
-var interviewDissent = exports_external.object({
-  status: exports_external.enum(["engaged", "host_absent"]),
-  verdict: exports_external.enum(["accept", "revise", "reject"]).optional(),
-  impact: exports_external.enum(["low", "high"]).optional(),
-  text: exports_external.string().optional(),
-  acknowledged: exports_external.boolean().default(false)
-}).describe("Intent-layer opponent dissent recorded on a dimension (wi_260709mqt)");
-var interviewDissentVerdict = exports_external.object({
-  dimension_id: exports_external.string().min(1).describe("The interview dimension this dissent is recorded on"),
-  text: exports_external.string().min(1).describe("The opponent\u2019s sharper-intent judgment text (host-produced, ADR-0001)")
-}).describe("One host-delegated intent-dissent verdict consumed by dissent-record");
-var interviewDissentVerdicts = exports_external.object({
-  verdicts: exports_external.array(interviewDissentVerdict).min(1).describe("The intent-dissent verdicts to record (at least one)")
-}).describe("The --json payload for `ditto deep-interview dissent-record`");
-var interviewSemanticVerdict = exports_external.object({
-  dimension_id: exports_external.string().min(1).describe("The covered dimension this critique is recorded on"),
-  text: exports_external.string().min(1).describe("The achieve-vs-characterize judgment (host-produced, ADR-0001)")
-}).describe("One host-delegated A1 semantic-critic verdict consumed by semantic-record");
-var interviewSemanticVerdicts = exports_external.object({
-  verdicts: exports_external.array(interviewSemanticVerdict).min(1).describe("The A1 semantic-critic verdicts to record (at least one)")
-}).describe("The --json payload for `ditto deep-interview semantic-record`");
-var interviewDimension = exports_external.object({
-  id: exports_external.string().min(1),
-  critical: exports_external.boolean().default(false),
-  state: dimensionState,
-  ambiguity: exports_external.number().min(0).max(1),
-  resolved_by: exports_external.array(exports_external.string()).default([]),
-  notes: exports_external.string().default(""),
-  dissent: interviewDissent.optional(),
-  semantic_status: exports_external.enum(["engaged", "host_absent"]).optional().describe("A1 semantic-critic seam status; host_absent on degrade (ADR-0018), advisory"),
-  semantic_critique: exports_external.string().optional().describe("A1 achieve-vs-characterize judgment on a covered (fragment,dimension) pair")
-}).describe("One ambiguity dimension tracked during the interview");
-var interviewBranchEdge = exports_external.object({
-  from: exports_external.string().min(1).describe("Source dimension/question id whose answer opened the dependent decision"),
-  to: exports_external.string().min(1).describe("Target dependent dimension/question id the answer opened")
-}).describe("One dependency edge (source\u2192target) in the branch-walking reference graph (wi_260713cx4)");
-var interviewQuestion = exports_external.object({
-  id: exports_external.string().min(1),
-  asked_at: isoDateTime,
-  dimension: exports_external.string().min(1),
-  question: exports_external.string().min(1),
-  why_matters: exports_external.string().min(1).describe("What changes depending on the answer"),
-  info_gain_estimate: infoGain,
-  self_answer_attempts: exports_external.array(selfAnswerAttempt).default([]),
-  user_explanation: exports_external.string().min(1).optional().describe("Plain-language why-we-ask + what-the-answer-decides \u2014 user language, no raw code/jargon (default-shown)"),
-  recommended_answer: exports_external.string().min(1).optional().describe("The agent\u2019s suggested default answer (user language) carried with the question"),
-  background: exports_external.string().min(1).optional().describe('Deeper context for progressive disclosure ("more") \u2014 optional expansion beyond user_explanation'),
-  grounding: exports_external.string().min(1).optional().describe("Evidence the question stems from (file:line | doc | domain) \u2014 the source behind why-we-ask"),
-  review_status: exports_external.enum(["reviewed", "unverified-degraded"]).optional().describe("Session-blind context-review outcome (critical questions only)"),
-  answer: exports_external.string().optional(),
-  answer_kind: exports_external.enum(["user", "assumption"]).optional(),
-  answer_self_report: answerSelfReport.optional().describe("User self-report of decision-ability after answering (presentation-sufficiency signal)"),
-  ambiguity_delta: exports_external.number().optional(),
-  marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
-  novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (deterministic; angle-exhaustion axis)"),
-  branch_edges: exports_external.array(interviewBranchEdge).optional().describe("Dependency edges this turn opened (positive pole); the driver guards integrity"),
-  branch_judgment: exports_external.object({
-    opened: exports_external.boolean().describe("Did this turn open a value-bearing dependent decision (branch)? false = seam marker (opened nothing further)"),
-    why: exports_external.string().min(1).optional().describe("WHY of the branch-open / value-exhaustion judgment (audit trace, termination rationale)")
-  }).optional().describe("Per-turn branch-open / value-exhaustion judgment ledger (reconstructible from disk)")
-}).describe("One asked question with its self-answer attempts and outcome");
-var interviewAssumption = exports_external.object({
-  statement: exports_external.string().min(1),
-  label: honestyKind,
-  confidence: confidenceLevel,
-  because_no_answer_to: exports_external.string().min(1).describe("Question id left unanswered")
-}).describe("Assumption recorded when a question was not answered (\xA76.9)");
-var premortemItem = exports_external.object({
-  scenario: exports_external.string().min(1).describe("What failed / caused harm if this shipped"),
-  likelihood: exports_external.enum(["low", "medium", "high"]),
-  blast_radius: exports_external.enum(["low", "medium", "high", "critical"]),
-  reversibility: exports_external.enum(["reversible", "hard", "irreversible"]),
-  early_signal: exports_external.string().default("").describe("What you would observe if this risk is materializing"),
-  promoted_to: exports_external.enum(["ac", "out_of_scope", "user_owned_decision", "none"]).describe("Where a critical item was promoted (\xA75 \uC2B9\uACA9 \uADDC\uCE59)"),
-  ref: exports_external.string().default("").describe("Pointer to the AC / out_of_scope[i] / question id"),
-  maps_to: exports_external.array(exports_external.string().min(1)).min(1).optional().describe("Oracle-link: original-intent fragment | file:line | ADR the risk binds to"),
-  refutation: exports_external.object({
-    status: exports_external.enum(["engaged", "host_absent"]),
-    text: exports_external.string().optional().describe("The opponent\u2019s refutation judgment (host-produced)")
-  }).optional().describe("Lightweight opponent refutation on a high-blast item (host-delegated)")
-}).describe("One pre-mortem risk item with its promotion outcome (deep-interview \xA75)");
-var premortemRefutationVerdict = exports_external.object({
-  index: exports_external.number().int().min(0).describe("Index into interview-state.premortem the refutation targets"),
-  text: exports_external.string().min(1).describe("The opponent\u2019s refutation judgment (host-produced, ADR-0001)")
-}).describe("One host-delegated pre-mortem refutation verdict consumed by premortem-refute-record");
-var premortemRefutationVerdicts = exports_external.object({
-  verdicts: exports_external.array(premortemRefutationVerdict).min(1).describe("The pre-mortem refutation verdicts to record (at least one)")
-}).describe("The --json payload for `ditto deep-interview premortem-refute-record`");
-var userConfirmation = exports_external.object({
-  confirmed: exports_external.boolean().describe("The user confirmed the synthesized intent matches their understanding"),
-  statement: exports_external.string().default("").describe("The user's own words confirming; required (non-empty) when confirmed=true"),
-  confirmed_at: isoDateTime.optional().describe("When the confirmation was captured")
-}).superRefine((value, ctx) => {
-  if (value.confirmed && value.statement.trim().length === 0) {
-    ctx.addIssue({
-      code: exports_external.ZodIssueCode.custom,
-      message: "confirmed=true requires the user statement (evidence, not a bare boolean)",
-      path: ["statement"]
-    });
-  }
-}).describe("\uCD951 2\uCC28 \uAC8C\uC774\uD2B8: explicit, evidence-bearing user confirmation of the intent");
-var interviewState = exports_external.object({
-  schema_version: schemaVersion,
-  work_item_id: workItemId,
-  status: interviewStatus,
-  started_at: isoDateTime,
-  updated_at: isoDateTime,
-  dimensions: exports_external.array(interviewDimension).default([]),
-  readiness: exports_external.object({
-    score: exports_external.number().min(0).max(1),
-    threshold: exports_external.number().min(0).max(1),
-    critical_unresolved: exports_external.array(exports_external.string()).default([]),
-    gate: exports_external.enum(["blocked", "ready"])
-  }),
-  questions: exports_external.array(interviewQuestion).default([]),
-  assumptions: exports_external.array(interviewAssumption).default([]),
-  premortem: exports_external.array(premortemItem).default([]),
-  user_confirmation: userConfirmation.optional(),
-  exit: exports_external.object({
-    reason: exports_external.enum([
-      "readiness_met",
-      "diminishing_returns",
-      "user_deferred",
-      "user_owned_decision",
-      "cap_reached"
-    ]),
-    closure_mode: closureMode,
-    question_cap: exports_external.number().int().positive(),
-    questions_asked: exports_external.number().int().nonnegative()
-  })
-}).describe("Deep interview sidecar tracking ambiguity dimensions and readiness (\xA76.3)");
+import { join as join55 } from "path";
+init_ditto_paths();
+init_fs();
 
 // src/core/opponent-router.ts
 var TOKEN_MAP = {
@@ -39834,6 +39892,59 @@ var DEFAULT_THRESHOLD = 0.7;
 var DEFAULT_QUESTION_CAP = 8;
 var DEFAULT_GENERATORS = 1;
 var DRY_FLOOR = 0.12;
+function isFiredTurn(q2) {
+  return q2.turn_kind !== "internal";
+}
+function firedTurnCount(questions) {
+  return questions.reduce((n2, q2) => isFiredTurn(q2) ? n2 + 1 : n2, 0);
+}
+function summarizeIntent(state) {
+  const label2 = (d2) => d2.notes.trim() || d2.id;
+  return {
+    confirmed: state.dimensions.filter((d2) => d2.state === "resolved").map(label2),
+    open: state.dimensions.filter((d2) => d2.state !== "resolved").map(label2)
+  };
+}
+var fireRejectionState = exports_external.object({
+  attempts: exports_external.number().int().nonnegative().default(0)
+});
+var FIRE_REJECTION_BOUND = DEFAULT_DRY_K;
+function fireRejectionPath(repoRoot, workItemId2) {
+  return join55(localDir(repoRoot, "work-items", workItemId2), "interview-fire-rejections.json");
+}
+async function bumpFireRejections(repoRoot, workItemId2) {
+  const path = fireRejectionPath(repoRoot, workItemId2);
+  let attempts = 0;
+  if (await Bun.file(path).exists()) {
+    try {
+      attempts = (await readJson(path, fireRejectionState)).attempts;
+    } catch {
+      attempts = 0;
+    }
+  }
+  const next = attempts + 1;
+  await writeJson(path, fireRejectionState, { attempts: next });
+  return next;
+}
+async function recordFireRejection(repoRoot, workItemId2, now) {
+  const attempts = await bumpFireRejections(repoRoot, workItemId2);
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId2);
+  const unresolved = state.dimensions.filter((d2) => d2.state !== "resolved").map((d2) => d2.id);
+  if (attempts >= FIRE_REJECTION_BOUND && state.status === "active") {
+    const parked = await store.write({
+      ...state,
+      updated_at: (now ?? new Date).toISOString(),
+      exit: {
+        ...state.exit,
+        reason: "parked",
+        closure_mode: deriveClosureMode("parked", false)
+      }
+    });
+    return { attempts, bound: FIRE_REJECTION_BOUND, parked: true, unresolved, state: parked };
+  }
+  return { attempts, bound: FIRE_REJECTION_BOUND, parked: false, unresolved };
+}
 async function startInterview(repoRoot, input) {
   const now = (input.now ?? new Date).toISOString();
   const generators = input.generators ?? DEFAULT_GENERATORS;
@@ -39891,7 +40002,12 @@ var recordTurnPayload = exports_external.object({
     marginal_gain: exports_external.number().min(0).max(1).optional().describe("Score-gated marginal information gain of this round; low value across a round is the dry signal"),
     novelty: exports_external.boolean().optional().describe("Whether this round added admissible novelty (angle-exhaustion axis)"),
     branch_edges: exports_external.array(interviewBranchEdge).optional(),
-    branch_judgment: exports_external.object({ opened: exports_external.boolean(), why: exports_external.string().min(1).optional() }).optional()
+    branch_judgment: exports_external.object({ opened: exports_external.boolean(), why: exports_external.string().min(1).optional() }).optional(),
+    turn_kind: exports_external.enum(["fired", "internal"]).optional(),
+    intent_fidelity: exports_external.object({
+      preserves_intent: exports_external.boolean(),
+      basis: exports_external.string().min(1).optional()
+    }).optional()
   }).describe("The asked question and why it matters"),
   answer: exports_external.object({
     text: exports_external.string().min(1),
@@ -39984,6 +40100,7 @@ function orderPendingBranchWork(state) {
 async function recordTurn(repoRoot, input) {
   const store = new InterviewStore(repoRoot);
   const current = await store.get(input.workItemId);
+  const workItem2 = await new WorkItemStore(repoRoot).get(input.workItemId);
   const nowIso = (input.now ?? new Date).toISOString();
   const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
   const opaqueVocab = await loadGlossaryVocab(repoRoot, () => warnMalformedGlossary(repoRoot));
@@ -40003,7 +40120,18 @@ async function recordTurn(repoRoot, input) {
   if (!surfaceVerdict.ok || leakedIdentifiers.length > 0) {
     const violations = surfaceVerdict.violations.map((v2) => `${v2.field}: ${v2.reason}`).join("; ");
     const leaked = leakedIdentifiers.length > 0 ? ` | leaked identifiers: ${[...new Set(leakedIdentifiers)].join(", ")}` : "";
-    throw new Error(`record-turn rejected: question surface failed the presentation contract before persist \u2014 violations: ${violations}${leaked}`);
+    const rejection = await recordFireRejection(repoRoot, input.workItemId, input.now);
+    if (rejection.parked && rejection.state !== undefined)
+      return rejection.state;
+    throw new Error(`record-turn rejected: question surface failed the presentation contract before persist \u2014 violations: ${violations}${leaked} | fire attempts ${rejection.attempts}/${rejection.bound}`);
+  }
+  const firedTurn = question.turn_kind !== "internal";
+  if (firedTurn && question.intent_fidelity?.preserves_intent === false) {
+    const basis = question.intent_fidelity.basis ? ` \u2014 ${question.intent_fidelity.basis}` : "";
+    const rejection = await recordFireRejection(repoRoot, input.workItemId, input.now);
+    if (rejection.parked && rejection.state !== undefined)
+      return rejection.state;
+    throw new Error(`record-turn rejected: fired question would distort/shrink/bias-inject the original intent (2nd-layer intent-fidelity block)${basis} | fire attempts ${rejection.attempts}/${rejection.bound}`);
   }
   const existingDim = current.dimensions.find((d2) => d2.id === rawDimension.id);
   const isCritical = rawDimension.critical || existingDim?.critical || false;
@@ -40036,6 +40164,8 @@ async function recordTurn(repoRoot, input) {
     why_matters: question.why_matters,
     info_gain_estimate: question.info_gain_estimate,
     self_answer_attempts: question.self_answer_attempts ?? [],
+    ...normalizePresentedText(workItem2.source_request).trim().length > 0 ? { source_anchor: normalizePresentedText(workItem2.source_request) } : {},
+    ...question.turn_kind !== undefined ? { turn_kind: question.turn_kind } : {},
     ...normalizedUserExplanation !== undefined ? { user_explanation: normalizedUserExplanation } : {},
     ...normalizedRecommendedAnswer !== undefined ? { recommended_answer: normalizedRecommendedAnswer } : {},
     ...question.background !== undefined ? { background: question.background } : {},
@@ -40079,23 +40209,24 @@ async function recordTurn(repoRoot, input) {
     },
     exit: {
       ...current.exit,
-      questions_asked: current.questions.length + 1
+      questions_asked: firedTurnCount([...current.questions, appendedQuestion])
     }
   };
   const gateResult = interviewReadinessGate(updated);
-  const capReached = updated.exit.questions_asked >= updated.exit.question_cap;
   updated.readiness.gate = gateResult.pass ? "ready" : "blocked";
-  const noveltyDryCounter = updated.questions.reduce((counter, q2) => recordDryRound(counter, { admissibleBranchesAdded: q2.novelty === false ? 0 : 1 }), 0);
+  if (updated.exit.reason === "parked") {
+    updated.exit.reason = "readiness_met";
+  }
+  const noveltyDryCounter = updated.questions.filter(isFiredTurn).reduce((counter, q2) => recordDryRound(counter, { admissibleBranchesAdded: q2.novelty === false ? 0 : 1 }), 0);
   const valueDry = question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR;
   const angleDry = noveltyDryCounter >= DEFAULT_DRY_K;
   const valueExhausted = isValueExhausted(updated);
-  if (capReached && updated.status === "active") {
-    updated.exit.reason = "cap_reached";
-  } else if ((valueDry || angleDry || valueExhausted) && !gateResult.pass && updated.status === "active") {
+  if ((valueDry || angleDry || valueExhausted) && !gateResult.pass && updated.status === "active") {
     updated.exit.reason = "diminishing_returns";
   }
   updated.exit.closure_mode = deriveClosureMode(updated.exit.reason, gateResult.pass);
-  return store.write(updated);
+  const written = await store.write(updated);
+  return answer?.kind === "user" ? { ...written, intent_summary: summarizeIntent(written) } : written;
 }
 async function checkReadiness(repoRoot, workItemId2) {
   const state = await new InterviewStore(repoRoot).get(workItemId2);
@@ -40492,13 +40623,13 @@ async function recordIntentSemanticCritique(repoRoot, workItemId2, verdicts, now
 
 // src/core/prism/finalize.ts
 import { readFile as readFile12 } from "fs/promises";
-import { join as join56 } from "path";
+import { join as join57 } from "path";
 
 // src/core/prism/store.ts
 init_ditto_paths();
 init_fs();
 init_work_item_store();
-import { join as join55 } from "path";
+import { join as join56 } from "path";
 
 // src/schemas/prism.ts
 init_zod();
@@ -40732,13 +40863,13 @@ class PrismStore {
     return localDir(this.repoRoot, "work-items", workItemId2, "prism");
   }
   mapPath(workItemId2) {
-    return join55(this.dir(workItemId2), "issue-map.json");
+    return join56(this.dir(workItemId2), "issue-map.json");
   }
   decisionsPath(workItemId2) {
-    return join55(this.dir(workItemId2), "prism-decisions.jsonl");
+    return join56(this.dir(workItemId2), "prism-decisions.jsonl");
   }
   backlogSplitPath(workItemId2) {
-    return join55(this.dir(workItemId2), "prism-backlog-split.json");
+    return join56(this.dir(workItemId2), "prism-backlog-split.json");
   }
   async exists(workItemId2) {
     return Bun.file(this.mapPath(workItemId2)).exists();
@@ -40805,7 +40936,7 @@ async function finalizeFromDesignDoc(repoRoot, input) {
   const docPath = input.docPath ?? `.ditto/specs/${input.workItemId}-design.md`;
   let markdown;
   try {
-    markdown = await readFile12(join56(repoRoot, docPath), "utf8");
+    markdown = await readFile12(join57(repoRoot, docPath), "utf8");
   } catch {
     return { status: "compile_rejected", reasons: [`design document not found: ${docPath}`] };
   }
@@ -40860,6 +40991,9 @@ async function readWorkItemIntent(repoRoot, workItemId2) {
   const item = await new WorkItemStore(repoRoot).get(workItemId2);
   return item.source_request.trim().length > 0 ? item.source_request : item.goal;
 }
+function unresolvedDimensionIds(state) {
+  return state.dimensions.filter((d2) => d2.state !== "resolved").map((d2) => d2.id);
+}
 function parseJsonArg(raw) {
   try {
     return JSON.parse(raw);
@@ -40881,7 +41015,7 @@ var startCmd = defineCommand({
     },
     questionCap: {
       type: "string",
-      description: "Maximum questions before exit=cap_reached (default 8)",
+      description: "Advisory question-count guide (default 8). Advisory ONLY \u2014 does NOT terminate the interview; termination is governed by readiness \u2227 user confirmation, with a fire-rejection backstop.",
       required: false
     },
     generators: {
@@ -41002,6 +41136,8 @@ var recordTurnCmd = defineCommand({
         workItemId: args.workItem,
         payload: parsed.data
       });
+      const parked = state.exit.reason === "parked";
+      const unresolved = parked ? unresolvedDimensionIds(state) : [];
       if (format === "json") {
         writeJson2({
           work_item_id: state.work_item_id,
@@ -41009,13 +41145,39 @@ var recordTurnCmd = defineCommand({
           readiness_score: state.readiness.score,
           readiness_gate: state.readiness.gate,
           critical_unresolved: state.readiness.critical_unresolved,
-          exit_reason: state.exit.reason
+          exit_reason: state.exit.reason,
+          intent_summary: state.intent_summary ?? null,
+          parked,
+          unresolved
         });
       } else {
         writeHuman(`Recorded turn for ${state.work_item_id}`);
-        writeHuman(`  questions_asked:     ${state.exit.questions_asked}/${state.exit.question_cap}`);
+        writeHuman(`  questions_asked:     ${state.exit.questions_asked} (\uCC38\uACE0\uC6A9 \uAD8C\uACE0\uCE58 ${state.exit.question_cap})`);
         writeHuman(`  readiness:           ${state.readiness.score.toFixed(2)} (${state.readiness.gate})`);
         writeHuman(`  critical_unresolved: ${state.readiness.critical_unresolved.join(", ") || "(none)"}`);
+        if (state.intent_summary) {
+          writeHuman("");
+          writeHuman("\uC9C0\uAE08\uAE4C\uC9C0 \uD30C\uC545\uD55C \uC758\uB3C4:");
+          if (state.intent_summary.confirmed.length > 0) {
+            for (const c3 of state.intent_summary.confirmed)
+              writeHuman(`  - ${c3}`);
+          } else {
+            writeHuman("  (\uC544\uC9C1 \uD655\uC815\uB41C \uD56D\uBAA9 \uC5C6\uC74C)");
+          }
+          writeHuman("\uC544\uC9C1 \uC5F4\uB9B0 \uAC83:");
+          if (state.intent_summary.open.length > 0) {
+            for (const o3 of state.intent_summary.open)
+              writeHuman(`  - ${o3}`);
+          } else {
+            writeHuman("  (\uC5C6\uC74C)");
+          }
+        }
+        if (parked) {
+          writeHuman("");
+          writeHuman("\uC778\uD130\uBDF0\uAC00 \uBA48\uCDA4(parked) \uC0C1\uD0DC\uC785\uB2C8\uB2E4 \u2014 \uC218\uB834\uD558\uC9C0 \uBABB\uD588\uACE0(\uC644\uB8CC \uC544\uB2D8), \uC544\uC9C1 \uD574\uC18C\uB418\uC9C0 \uC54A\uC740 \uD56D\uBAA9\uC774 \uB0A8\uC544 \uC788\uC2B5\uB2C8\uB2E4:");
+          for (const d2 of unresolved)
+            writeHuman(`  - ${d2}`);
+        }
       }
     } catch (err) {
       writeError(`record-turn failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -41044,6 +41206,8 @@ var checkReadinessCmd = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     try {
       const result2 = await checkReadiness(repoRoot, args.workItem);
+      const parked = result2.state.exit.reason === "parked";
+      const unresolved = parked ? unresolvedDimensionIds(result2.state) : [];
       if (format === "json") {
         writeJson2({
           work_item_id: result2.state.work_item_id,
@@ -41052,14 +41216,22 @@ var checkReadinessCmd = defineCommand({
           critical_unresolved: result2.critical_unresolved,
           cap_reached: result2.cap_reached,
           questions_asked: result2.state.exit.questions_asked,
-          readiness_score: result2.state.readiness.score
+          readiness_score: result2.state.readiness.score,
+          exit_reason: result2.state.exit.reason,
+          parked,
+          unresolved
         });
       } else {
         writeHuman(`Readiness for ${result2.state.work_item_id}: ${result2.gate.pass ? "READY" : "BLOCKED"}`);
         for (const r3 of result2.gate.reasons)
           writeHuman(`  - ${r3}`);
         if (result2.cap_reached)
-          writeHuman("  (question cap reached)");
+          writeHuman("  (\uC9C8\uBB38 \uAD8C\uACE0 \uC218 \uB3C4\uB2EC \u2014 \uCC38\uACE0\uC6A9, \uC885\uB8CC \uC870\uAC74 \uC544\uB2D8)");
+        if (parked) {
+          writeHuman("  \uC0C1\uD0DC: \uBA48\uCDA4(parked) \u2014 \uC218\uB834\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4(\uC644\uB8CC \uC544\uB2D8). \uC544\uC9C1 \uD574\uC18C\uB418\uC9C0 \uC54A\uC740 \uD56D\uBAA9:");
+          for (const d2 of unresolved)
+            writeHuman(`    - ${d2}`);
+        }
       }
     } catch (err) {
       writeError(`check-readiness failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -41294,6 +41466,7 @@ var checkQuestionCmd = defineCommand({
     description: "Gate a question candidate against the presentation contract (why\xB7value\xB7user-language) before asking"
   },
   args: {
+    workItem: { type: "string", description: "Work item id (wi_*)", required: true },
     json: {
       type: "string",
       description: "Question candidate JSON: {text, why_matters, user_explanation, recommended_answer, background?, grounding?, self_answer_attempts?}",
@@ -41342,14 +41515,39 @@ var checkQuestionCmd = defineCommand({
     const loanwordAdvisory = [
       ...new Set([normalized.text, normalized.user_explanation, normalized.recommended_answer].flatMap((field) => findLoanwords(field)).map((signal) => signal.loanword))
     ];
+    let rejection;
+    if (!verdict2.ok) {
+      rejection = await recordFireRejection(repoRoot, args.workItem);
+    }
     if (format === "json") {
-      writeJson2({ ...verdict2, normalized, loanword_advisory: loanwordAdvisory });
+      writeJson2({
+        ...verdict2,
+        normalized,
+        loanword_advisory: loanwordAdvisory,
+        ...rejection ? {
+          fire_rejection: {
+            attempts: rejection.attempts,
+            bound: rejection.bound,
+            parked: rejection.parked,
+            unresolved: rejection.unresolved,
+            ...rejection.parked ? { exit_reason: "parked" } : {}
+          }
+        } : {}
+      });
     } else if (verdict2.ok) {
       writeHuman("check-question: ok (presentation contract satisfied)");
     } else {
       writeError("check-question: \uAC70\uC808\uB428 \u2014 \uB9E5\uB77D(\uC65C \uBB3B\uB294\uC9C0\xB7\uBB34\uC5C7\uC744 \uC815\uD558\uB294\uC9C0)\uC774 \uBD80\uC871\uD55C \uC9C8\uBB38\uC785\uB2C8\uB2E4. \uC774\uB300\uB85C \uC0AC\uC6A9\uC790\uC5D0\uAC8C \uBB3B\uC9C0 \uB9C8\uC138\uC694:");
       for (const v2 of verdict2.violations) {
         writeError(`  - ${v2.field}: ${v2.reason}`);
+      }
+      if (rejection?.parked) {
+        writeError("");
+        writeError(`\uC778\uD130\uBDF0\uAC00 \uBA48\uCDA4(parked) \uC0C1\uD0DC\uB85C \uC804\uD658\uB410\uC2B5\uB2C8\uB2E4 \u2014 \uC9C8\uBB38 \uAC70\uC808\uC774 ${rejection.bound}\uD68C\uC5D0 \uB3C4\uB2EC\uD574 \uB354\uB294 \uB418\uD480\uC774\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4(\uC218\uB834 \uC544\uB2D8). \uC544\uC9C1 \uD574\uC18C\uB418\uC9C0 \uC54A\uC740 \uD56D\uBAA9:`);
+        for (const d2 of rejection.unresolved)
+          writeError(`  - ${d2}`);
+      } else if (rejection) {
+        writeError(`  (\uC9C8\uBB38 \uAC70\uC808 ${rejection.attempts}/${rejection.bound}\uD68C \u2014 ${rejection.bound}\uD68C\uC5D0 \uB3C4\uB2EC\uD558\uBA74 \uC778\uD130\uBDF0\uAC00 \uBA48\uCDA4 \uC0C1\uD0DC\uB85C \uC804\uD658\uB429\uB2C8\uB2E4)`);
       }
     }
     if (!verdict2.ok)
@@ -41897,14 +42095,14 @@ var deepInterviewCommand = defineCommand({
 
 // src/cli/commands/doctor.ts
 import { homedir as homedir9 } from "os";
-import { join as join63 } from "path";
+import { join as join64 } from "path";
 
 // src/core/capability-inventory.ts
 init_shared();
-import { join as join57 } from "path";
+import { join as join58 } from "path";
 var REQUIRED_CAPABILITIES = ["instructions", "permissions", "mcp", "surface"];
 async function codexPluginNeedsUserAction(repoRoot) {
-  const raw = asRecord(await readJsonIfExists(join57(repoRoot, ".ditto", "local", "codex-plugin-status.json")).catch(() => null));
+  const raw = asRecord(await readJsonIfExists(join58(repoRoot, ".ditto", "local", "codex-plugin-status.json")).catch(() => null));
   if (!raw || raw.plugin !== "ditto" || raw.status !== "needs_user_action")
     return null;
   const commands = Array.isArray(raw.commands) ? raw.commands.filter((command) => typeof command === "string") : [];
@@ -41980,7 +42178,7 @@ async function collectCapabilityInventory(adapters, repoRoot, pluginRoot) {
 import { existsSync as existsSync8 } from "fs";
 import { mkdir as mkdir8 } from "fs/promises";
 import { homedir as homedir7 } from "os";
-import { join as join58 } from "path";
+import { join as join59 } from "path";
 function detectPlatform(os = process.platform) {
   switch (os) {
     case "darwin":
@@ -41996,10 +42194,10 @@ function detectPlatform(os = process.platform) {
 function bundleUrl(platform2) {
   return `https://github.com/github/codeql-cli-binaries/releases/latest/download/codeql-${platform2}.zip`;
 }
-var DEFAULT_INSTALL_DIR = join58(homedir7(), ".local", "share", "ditto", "codeql");
-var DEFAULT_BIN_DIR = join58(homedir7(), ".local", "bin");
+var DEFAULT_INSTALL_DIR = join59(homedir7(), ".local", "share", "ditto", "codeql");
+var DEFAULT_BIN_DIR = join59(homedir7(), ".local", "bin");
 function managedBinary(installDir, platform2) {
-  return join58(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
+  return join59(installDir, "codeql", platform2 === "win64" ? "codeql.exe" : "codeql");
 }
 function manualInstructions(platform2) {
   const lines = [
@@ -42031,7 +42229,7 @@ async function installCodeqlCli(deps) {
   }
   await deps.ensureDir(deps.installDir);
   await deps.ensureDir(deps.binDir);
-  const zip = join58(deps.installDir, `codeql-${platform2}.zip`);
+  const zip = join59(deps.installDir, `codeql-${platform2}.zip`);
   const url = bundleUrl(platform2);
   const fail = (why, stderr2) => ({
     status: "failed",
@@ -42054,10 +42252,10 @@ async function installCodeqlCli(deps) {
     return {
       status: "installed",
       binary,
-      message: `codeql installed at ${binary} \u2014 ${join58(deps.installDir, "codeql")}\uB97C PATH\uC5D0 \uCD94\uAC00\uD558\uB77C.`
+      message: `codeql installed at ${binary} \u2014 ${join59(deps.installDir, "codeql")}\uB97C PATH\uC5D0 \uCD94\uAC00\uD558\uB77C.`
     };
   }
-  const link = join58(deps.binDir, "codeql");
+  const link = join59(deps.binDir, "codeql");
   const ln = await deps.run("ln", ["-sf", binary, link]);
   if (ln.exit_code !== 0)
     return fail(`\uC2EC\uB9C1\uD06C \uC2E4\uD328 (ln exit=${ln.exit_code ?? "null"})`, ln.stderr);
@@ -42075,7 +42273,7 @@ var defaultInstallDeps = {
     const onPath = Bun.which("codeql");
     if (onPath)
       return onPath;
-    const gh = join58(homedir7(), ".local", "share", "gh", "extensions", "gh-codeql");
+    const gh = join59(homedir7(), ".local", "share", "gh", "extensions", "gh-codeql");
     if (existsSync8(gh))
       return gh;
     const platform2 = detectPlatform();
@@ -42109,16 +42307,16 @@ var defaultInstallDeps = {
 
 // src/core/distribution-doctor.ts
 import { existsSync as existsSync9, readFileSync as readFileSync4 } from "fs";
-import { join as join60 } from "path";
+import { join as join61 } from "path";
 
 // src/core/build-stamp.ts
 import { createHash as createHash11 } from "crypto";
 import { readFileSync as readFileSync3, readdirSync } from "fs";
-import { join as join59 } from "path";
+import { join as join60 } from "path";
 var STAMP_PREFIX = "//# ditto-src-stamp=";
 function listSourceFiles(repoRoot, rel = "src") {
   const out = [];
-  const entries = readdirSync(join59(repoRoot, rel), { withFileTypes: true });
+  const entries = readdirSync(join60(repoRoot, rel), { withFileTypes: true });
   for (const e2 of entries) {
     const childRel = `${rel}/${e2.name}`;
     if (e2.isDirectory())
@@ -42133,7 +42331,7 @@ function computeSourceStamp(repoRoot) {
   for (const rel of listSourceFiles(repoRoot)) {
     h2.update(rel);
     h2.update("\x00");
-    h2.update(readFileSync3(join59(repoRoot, rel)));
+    h2.update(readFileSync3(join60(repoRoot, rel)));
     h2.update("\x00");
   }
   return h2.digest("hex");
@@ -42195,7 +42393,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
     pluginRoot,
     targetRoot,
     whichDitto: () => Bun.which("ditto"),
-    readProjectSettings: () => readJsonObject(join60(targetRoot, ".claude", "settings.json")),
+    readProjectSettings: () => readJsonObject(join61(targetRoot, ".claude", "settings.json")),
     exists: (p) => existsSync9(p),
     readText: (p) => {
       try {
@@ -42208,7 +42406,7 @@ function defaultDistributionDeps(targetRoot, pluginRoot) {
   };
 }
 function pluginSurfacePresent(pluginRoot, exists) {
-  return exists(join60(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join60(pluginRoot, "skills")) && exists(join60(pluginRoot, "agents"));
+  return exists(join61(pluginRoot, ".claude-plugin", "plugin.json")) && exists(join61(pluginRoot, "skills")) && exists(join61(pluginRoot, "agents"));
 }
 function allowlisted(settings) {
   const permissions = settings.permissions;
@@ -42216,9 +42414,9 @@ function allowlisted(settings) {
   return Array.isArray(allow) && allow.includes(ALLOW_RULE);
 }
 function binaryFresh(deps, binaryName) {
-  if (!deps.exists(join60(deps.pluginRoot, "src")))
+  if (!deps.exists(join61(deps.pluginRoot, "src")))
     return true;
-  const text = deps.readText(join60(deps.pluginRoot, "bin", binaryName));
+  const text = deps.readText(join61(deps.pluginRoot, "bin", binaryName));
   if (text === null)
     return false;
   const embedded = readEmbeddedStamp(text);
@@ -42233,12 +42431,12 @@ function binaryFresh(deps, binaryName) {
 function collectDistributionChecks(deps) {
   const binaryName = "ditto";
   return {
-    binary_built: deps.exists(join60(deps.pluginRoot, "bin", binaryName)),
+    binary_built: deps.exists(join61(deps.pluginRoot, "bin", binaryName)),
     binary_fresh: binaryFresh(deps, binaryName),
-    hooks_registered: deps.exists(join60(deps.pluginRoot, "hooks", "hooks.json")),
+    hooks_registered: deps.exists(join61(deps.pluginRoot, "hooks", "hooks.json")),
     plugin_surface_present: pluginSurfacePresent(deps.pluginRoot, deps.exists),
     binary_on_path: deps.whichDitto() !== null,
-    target_initialized: deps.exists(join60(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
+    target_initialized: deps.exists(join61(deps.targetRoot, ".ditto", "knowledge", "glossary.json")),
     allowlisted: allowlisted(deps.readProjectSettings())
   };
 }
@@ -42247,7 +42445,7 @@ function collectDistributionReport(deps) {
 }
 
 // src/core/doctor-fix.ts
-import { join as join61 } from "path";
+import { join as join62 } from "path";
 init_fs();
 init_shared();
 
@@ -42294,7 +42492,7 @@ async function unallowlistSettingsFile(settingsPath) {
 
 // src/core/doctor-fix.ts
 function classifyReversible(targetPath, homeDir) {
-  const globalRoot = join61(homeDir, ".claude");
+  const globalRoot = join62(homeDir, ".claude");
   return !(targetPath === globalRoot || targetPath.startsWith(`${globalRoot}/`));
 }
 function planInstructionFixes(findings, homeDir) {
@@ -42348,22 +42546,22 @@ function defaultDoctorFixDeps(repoRoot, homeDir) {
     homeDir,
     confirmNonReversible: async () => false,
     syncProjection: async () => {
-      const path = join61(repoRoot, "CLAUDE.md");
+      const path = join62(repoRoot, "CLAUDE.md");
       const backupPath = await writeBackupOnce(path);
       const result2 = await syncClaudeCodeProjection(repoRoot);
       const applied = result2.action === "created" || result2.action === "updated";
       return { applied, backupPath };
     },
     ensureAllowlist: async () => {
-      await allowlistSettingsFile(join61(repoRoot, ".claude", "settings.json"));
+      await allowlistSettingsFile(join62(repoRoot, ".claude", "settings.json"));
       return { applied: true };
     },
     registerVariant: async (name) => {
-      const dest = join61(repoRoot, ".claude", "agents", `${name}.md`);
+      const dest = join62(repoRoot, ".claude", "agents", `${name}.md`);
       if (await fileExists(dest))
         return { applied: false };
-      const src2 = join61(repoRoot, ".ditto", "agents", `${name}.md`);
-      await ensureDir(join61(repoRoot, ".claude", "agents"));
+      const src2 = join62(repoRoot, ".ditto", "agents", `${name}.md`);
+      await ensureDir(join62(repoRoot, ".claude", "agents"));
       await Bun.write(dest, await Bun.file(src2).text());
       return { applied: true };
     }
@@ -42627,11 +42825,11 @@ async function collectPermissionFindings(adapters, repoRoot) {
 // src/core/plugin-root.ts
 import { existsSync as existsSync10, readFileSync as readFileSync5 } from "fs";
 import { homedir as homedir8 } from "os";
-import { dirname as dirname11, join as join62 } from "path";
+import { dirname as dirname11, join as join63 } from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 var PLUGIN_MANIFEST = [".claude-plugin", "plugin.json"];
 function isPluginRoot(dir, exists) {
-  return exists(join62(dir, ...PLUGIN_MANIFEST));
+  return exists(join63(dir, ...PLUGIN_MANIFEST));
 }
 function selfLocate(start, exists) {
   let dir = start;
@@ -42688,7 +42886,7 @@ function defaultPluginRootDeps() {
     exists: (p) => existsSync10(p),
     readInstalledPlugins: () => {
       try {
-        const path = join62(homedir8(), ".claude", "plugins", "installed_plugins.json");
+        const path = join63(homedir8(), ".claude", "plugins", "installed_plugins.json");
         const text = readFileSync5(path, "utf8").trim();
         return text ? JSON.parse(text) : null;
       } catch {
@@ -44405,7 +44603,7 @@ function planAllowlistFixes(allowlisted2, repoRoot) {
     {
       kind: "allowlist",
       reversible: true,
-      targetPath: join63(repoRoot, ".claude", "settings.json"),
+      targetPath: join64(repoRoot, ".claude", "settings.json"),
       describe: "add Bash(ditto:*) to project .claude/settings.json allow"
     }
   ];
@@ -44414,7 +44612,7 @@ function planVariantFixes(orphans, repoRoot) {
   return orphans.map((name) => ({
     kind: "register-variant",
     reversible: true,
-    targetPath: join63(repoRoot, ".claude", "agents", `${name}.md`),
+    targetPath: join64(repoRoot, ".claude", "agents", `${name}.md`),
     variantName: name,
     describe: `register orphan variant ${name} into .claude/agents`
   }));
@@ -44664,7 +44862,7 @@ var codeqlCommand2 = defineCommand({
         return;
       }
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join63(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join64(repoRoot, "src");
       const report = await inspectCodeqlTarget({ sourceRoot, buildVerified: args["build-verified"] }, defaultDoctorDeps);
       if (format === "json") {
         writeJson2({
@@ -45043,7 +45241,7 @@ var doctorCommand = defineCommand({
 
 // src/cli/commands/e2e.ts
 import { mkdir as mkdir9, readFile as readFile16, readdir as readdir18 } from "fs/promises";
-import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join67, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
+import { basename as basename4, dirname as dirname14, isAbsolute as isAbsolute11, join as join68, relative as relative18, resolve as resolve15, sep as sep8 } from "path";
 init_zod();
 init_ditto_paths();
 
@@ -45392,7 +45590,7 @@ function checkStepConformance(input) {
 // src/core/e2e/failure-verdict.ts
 init_dist2();
 import { readFile as readFile14 } from "fs/promises";
-import { join as join64 } from "path";
+import { join as join65 } from "path";
 
 // src/schemas/e2e-failure-verdict.ts
 init_zod();
@@ -45411,7 +45609,7 @@ init_ditto_paths();
 init_fs();
 init_shared();
 function verdictsPath(repoRoot, workItemId2) {
-  return join64(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
+  return join65(localDir(repoRoot, "work-items", workItemId2), "e2e-verdicts.jsonl");
 }
 async function appendFailureVerdict(repoRoot, workItemId2, verdict2) {
   const parsed = e2eFailureVerdict.parse(verdict2);
@@ -45478,7 +45676,7 @@ ${split.body}`);
 
 // src/core/e2e/generator.ts
 init_ditto_paths();
-import { join as join65 } from "path";
+import { join as join66 } from "path";
 
 // src/core/e2e/init-agents.ts
 init_zod();
@@ -45780,7 +45978,7 @@ async function safe(fn, onError) {
 async function probeGenerator(repoRoot, host, seams = {}) {
   const probeBrowser = seams.probeBrowser ?? probePlaywright;
   const readVersion = seams.readPlaywrightVersion ?? defaultReadPlaywrightVersion;
-  const readAgents = seams.readAgentsRecord ?? ((root) => readE2eAgentsRecord(join65(localDir(root), "e2e-agents.json")));
+  const readAgents = seams.readAgentsRecord ?? ((root) => readE2eAgentsRecord(join66(localDir(root), "e2e-agents.json")));
   const probeMcp = seams.probeMcp ?? (async () => true);
   const probe = await safe(() => probeBrowser(repoRoot), {
     available: false,
@@ -45868,7 +46066,7 @@ async function runGenerator(input, seams) {
 
 // src/core/e2e/lifecycle.ts
 import { readFile as readFile15, readdir as readdir17, unlink as unlink3 } from "fs/promises";
-import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join66, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
+import { basename as basename3, dirname as dirname13, isAbsolute as isAbsolute10, join as join67, relative as relative17, resolve as resolve14, sep as sep7 } from "path";
 
 // src/schemas/e2e-lifecycle.ts
 init_zod();
@@ -45888,7 +46086,7 @@ var e2eLifecycleDecision = exports_external.object({
 init_ditto_paths();
 init_fs();
 function lifecycleLedgerPath(repoRoot, workItemId2) {
-  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join66(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
+  return workItemId2 === undefined ? localDir(repoRoot, "e2e-lifecycle.jsonl") : join67(localDir(repoRoot, "work-items", workItemId2), "e2e-lifecycle.jsonl");
 }
 async function appendDecision(path, decision) {
   const parsed = e2eLifecycleDecision.parse(decision);
@@ -45937,7 +46135,7 @@ async function runLifecycleAction(repoRoot, req) {
   }
   const slug = journeyName.slice(0, -".journey.md".length);
   const generatedDir = resolve14(dirname13(journeyAbs), "..", "generated");
-  const specAbs = join66(generatedDir, `${slug}.spec.ts`);
+  const specAbs = join67(generatedDir, `${slug}.spec.ts`);
   const rel = (abs) => toPosix2(relative17(repoRoot, abs));
   const specText = await readOrNull(specAbs);
   if (specText === null) {
@@ -45952,8 +46150,8 @@ async function runLifecycleAction(repoRoot, req) {
       refusal: `${rel(specAbs)}\uB294 @ditto-generated \uB9C8\uCEE4\uAC00 \uC5C6\uB294 \uC218\uB3D9 \uD30C\uC77C \u2014 \uC218\uBA85\uC8FC\uAE30 \uC9D1\uD589\uC740 DSL \uD30C\uC0DD \uD14C\uC2A4\uD2B8\uC5D0\uB9CC \uC801\uC6A9\uB41C\uB2E4`
     };
   }
-  const supportDir = join66(generatedDir, "support");
-  const helperOf = (blockId) => join66(supportDir, `${blockId}.block.ts`);
+  const supportDir = join67(generatedDir, "support");
+  const helperOf = (blockId) => join67(supportDir, `${blockId}.block.ts`);
   for (const blockId of parsed.frontMatter.uses_blocks) {
     const helperText = await readOrNull(helperOf(blockId));
     if (helperText !== null && !isDittoGenerated(helperText)) {
@@ -46003,7 +46201,7 @@ async function runLifecycleAction(repoRoot, req) {
   const journeysDir = dirname13(journeyAbs);
   const referencedElsewhere = new Set;
   for (const name of (await readdir17(journeysDir)).filter((n3) => n3.endsWith(".journey.md"))) {
-    const otherAbs = join66(journeysDir, name);
+    const otherAbs = join67(journeysDir, name);
     if (otherAbs === journeyAbs)
       continue;
     const other = await readOrNull(otherAbs);
@@ -46385,7 +46583,7 @@ var e2eRun = defineCommand({
       const result2 = await runJourney(repoRoot, args.runId, parsed.data);
       const runDir2 = localDir(repoRoot, "runs", args.runId);
       await mkdir9(runDir2, { recursive: true });
-      await atomicWriteText(join67(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
+      await atomicWriteText(join68(runDir2, "journey.json"), `${JSON.stringify(result2.journey, null, 2)}
 `);
       if (format === "json") {
         writeJson2(result2);
@@ -46465,8 +46663,8 @@ var e2eConformance = defineCommand({
     try {
       const journeyAbs = resolve15(args.journey);
       const generatedAbs = resolve15(args.generated);
-      const blocksDir = resolve15(args["blocks-dir"] ?? join67(dirname14(journeyAbs), "blocks"));
-      const supportDir = resolve15(args["support-dir"] ?? join67(dirname14(generatedAbs), "support"));
+      const blocksDir = resolve15(args["blocks-dir"] ?? join68(dirname14(journeyAbs), "blocks"));
+      const supportDir = resolve15(args["support-dir"] ?? join68(dirname14(generatedAbs), "support"));
       const journeyText = await readFile16(journeyAbs, "utf8");
       const generatedText = await readFile16(generatedAbs, "utf8");
       const blockTexts = {};
@@ -46474,7 +46672,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir18(blocksDir)) {
           if (!name.endsWith(".block.md"))
             continue;
-          blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join67(blocksDir, name), "utf8");
+          blockTexts[name.slice(0, -".block.md".length)] = await readFile16(join68(blocksDir, name), "utf8");
         }
       } catch {}
       const supportTexts = [];
@@ -46482,7 +46680,7 @@ var e2eConformance = defineCommand({
         for (const name of await readdir18(supportDir)) {
           if (!name.endsWith(".ts"))
             continue;
-          supportTexts.push(await readFile16(join67(supportDir, name), "utf8"));
+          supportTexts.push(await readFile16(join68(supportDir, name), "utf8"));
         }
       } catch {}
       const report = checkStepConformance({ journeyText, blockTexts, generatedText, supportTexts });
@@ -46497,8 +46695,8 @@ var e2eConformance = defineCommand({
         for (const blockId of parsedJourney.frontMatter.uses_blocks) {
           if (blockTexts[blockId] === undefined)
             continue;
-          const helperAbs = join67(supportDir, `${blockId}.block.ts`);
-          const blockMdAbs = join67(blocksDir, `${blockId}.block.md`);
+          const helperAbs = join68(supportDir, `${blockId}.block.ts`);
+          const blockMdAbs = join68(blocksDir, `${blockId}.block.md`);
           const verdict2 = await detectStale(blockMdAbs, helperAbs, repoRel(blockMdAbs));
           if (verdict2.stale)
             stale.push(`support/${blockId}.block.ts: ${verdict2.reason}`);
@@ -46572,12 +46770,12 @@ var e2eVerifyGenerated = defineCommand({
 });
 async function loadJourneyNames(repoRoot) {
   const names = {};
-  const journeysDir = join67(repoRoot, "e2e", "journeys");
+  const journeysDir = join68(repoRoot, "e2e", "journeys");
   try {
     for (const name of await readdir18(journeysDir)) {
       if (!name.endsWith(".journey.md"))
         continue;
-      const parsed = parseJourneyDoc(await readFile16(join67(journeysDir, name), "utf8"));
+      const parsed = parseJourneyDoc(await readFile16(join68(journeysDir, name), "utf8"));
       if (parsed.ok)
         names[parsed.frontMatter.id] = parsed.frontMatter.name;
     }
@@ -46604,7 +46802,7 @@ var e2eFailureReport = defineCommand({
     }
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const reportPath = join67(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
+      const reportPath = join68(localDir(repoRoot, "runs", args.runId), "playwright-report.json");
       const reportFile = Bun.file(reportPath);
       if (!await reportFile.exists()) {
         writeError(`no playwright-report.json for run ${args.runId} \u2014 run \`ditto e2e verify-generated --runId ${args.runId} --files <specs>\` first`);
@@ -46959,10 +47157,10 @@ function slugFromJourney(journeyPath) {
 }
 async function loadBlockBodies(journeyAbs, useBlocks) {
   const out = {};
-  const blocksDir = join67(dirname14(journeyAbs), "blocks");
+  const blocksDir = join68(dirname14(journeyAbs), "blocks");
   for (const id of useBlocks) {
     try {
-      const text = await readFile16(join67(blocksDir, `${id}.block.md`), "utf8");
+      const text = await readFile16(join68(blocksDir, `${id}.block.md`), "utf8");
       out[id] = { body: splitFrontMatter(text)?.body ?? text };
     } catch {}
   }
@@ -47174,7 +47372,7 @@ var e2eGenerate = defineCommand({
       const mapDocRel = `specs/${slug}.assertion-map.md`;
       await atomicWriteText(resolve15(repoRoot, mapDocRel), renderAssertionMapDoc(amap));
       if (args["work-item"] !== undefined) {
-        await atomicWriteText(join67(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
+        await atomicWriteText(join68(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
 `);
       }
       const gate2 = assertionMapGate(amap);
@@ -47268,7 +47466,7 @@ var e2eMapping = defineCommand({
       const docRel = `specs/${slug}.assertion-map.md`;
       await atomicWriteText(resolve15(repoRoot, docRel), renderAssertionMapDoc(amap));
       if (args["work-item"] !== undefined) {
-        await atomicWriteText(join67(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
+        await atomicWriteText(join68(localDir(repoRoot, "work-items", wi), "e2e-assertion-map.json"), `${JSON.stringify(amap, null, 2)}
 `);
       }
       const gate2 = assertionMapGate(amap);
@@ -47388,7 +47586,7 @@ var e2eInitAgents = defineCommand({
         mcpServers = merged.servers;
       }
       const record = buildE2eAgentsRecord({ playwrightVersion, loop });
-      await writeE2eAgentsRecord(join67(localDir(repoRoot), "e2e-agents.json"), record);
+      await writeE2eAgentsRecord(join68(localDir(repoRoot), "e2e-agents.json"), record);
       if (gate2.warn)
         writeError(gate2.warn);
       if (format === "json") {
@@ -48462,7 +48660,7 @@ init_ditto_paths();
 init_git();
 init_git();
 import { appendFileSync, mkdirSync } from "fs";
-import { join as join68 } from "path";
+import { join as join69 } from "path";
 var HANDOFF_PUSH_REFSPEC = `${HANDOFF_REF}:${HANDOFF_REF}`;
 var SYNC_MAX_RETRIES = 3;
 var SYNC_TIMEOUT_MS = 120000;
@@ -48545,7 +48743,7 @@ function appendSyncLog(cwd, entry) {
   try {
     const dir = localDir(cwd, "logs");
     mkdirSync(dir, { recursive: true });
-    appendFileSync(join68(dir, SYNC_LOG_FILE), `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}
+    appendFileSync(join69(dir, SYNC_LOG_FILE), `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}
 `);
   } catch (err) {
     console.error(`handoff-ref-sync: failed to append sync log: ${err instanceof Error ? err.message : String(err)}`);
@@ -49864,7 +50062,7 @@ init_common();
 init_ditto_paths();
 init_fs();
 import { readdir as readdir19, stat as stat9, unlink as unlink4 } from "fs/promises";
-import { join as join69 } from "path";
+import { join as join70 } from "path";
 var sessionPointer = exports_external.object({
   schema_version: exports_external.literal("0.1.0"),
   session_id: exports_external.string().min(1),
@@ -49886,7 +50084,7 @@ class SessionPointerStore {
     return localDir(this.repoRoot, "sessions");
   }
   path(sessionId) {
-    return join69(this.dir(), `${safeSessionId(sessionId)}.json`);
+    return join70(this.dir(), `${safeSessionId(sessionId)}.json`);
   }
   async get(sessionId) {
     try {
@@ -49921,7 +50119,7 @@ class SessionPointerStore {
     for (const name of names) {
       if (!name.endsWith(".json"))
         continue;
-      const path = join69(this.dir(), name);
+      const path = join70(this.dir(), name);
       let mtimeMs;
       try {
         mtimeMs = (await stat9(path)).mtimeMs;
@@ -50051,7 +50249,7 @@ var preCompactHandler = async (_input) => {
 
 // src/hooks/pre-tool-use.ts
 import { homedir as homedir10, tmpdir } from "os";
-import { join as join70 } from "path";
+import { join as join71 } from "path";
 import { isAbsolute as isAbsolute14, relative as relative19, resolve as resolve18, sep as sep9 } from "path";
 
 // src/acg/scope/resolve.ts
@@ -50440,9 +50638,9 @@ function autopilotBypassActive(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord(repoRoot, entry) {
-  const dir = join70(repoRoot, ".ditto");
+  const dir = join71(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join70(dir, "autopilot-bypass.jsonl");
+  const path = join71(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -50725,7 +50923,7 @@ var preCompactHandler2 = async (_input) => {
 
 // src/hooks/rebuilt/pre-tool-use.ts
 import { homedir as homedir11 } from "os";
-import { join as join71, resolve as resolve20 } from "path";
+import { join as join72, resolve as resolve20 } from "path";
 init_fs();
 
 // src/hooks/rebuilt/pre-tool-use-policy.ts
@@ -51089,9 +51287,9 @@ function autopilotBypassActive2(input) {
   return env2.DITTO_AUTOPILOT_BYPASS === "1" || process.env.DITTO_AUTOPILOT_BYPASS === "1";
 }
 async function appendBypassRecord2(repoRoot, entry) {
-  const dir = join71(repoRoot, ".ditto");
+  const dir = join72(repoRoot, ".ditto");
   await ensureDir(dir);
-  const path = join71(dir, "autopilot-bypass.jsonl");
+  const path = join72(dir, "autopilot-bypass.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -51279,7 +51477,7 @@ import { spawnSync } from "child_process";
 import { createHash as createHash12 } from "crypto";
 import { existsSync as existsSync11, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "fs";
 import { homedir as homedir12 } from "os";
-import { dirname as dirname15, join as join72, resolve as resolve21 } from "path";
+import { dirname as dirname15, join as join73, resolve as resolve21 } from "path";
 function classifySession(pluginRoot, repoRoot) {
   if (pluginRoot === null)
     return "unknown";
@@ -51359,7 +51557,7 @@ function formatModeHuman(report, inDittoRepo) {
 }
 var SURFACE_DIRS = ["agents", "skills", "hooks"];
 function listSurfaceFiles(root, rel, out) {
-  const dir = join72(root, rel);
+  const dir = join73(root, rel);
   if (!existsSync11(dir))
     return;
   for (const e2 of readdirSync2(dir, { withFileTypes: true })) {
@@ -51379,18 +51577,18 @@ function computeSurfaceStamp(root) {
   for (const rel of files) {
     h3.update(rel);
     h3.update("\x00");
-    h3.update(readFileSync6(join72(root, rel)));
+    h3.update(readFileSync6(join73(root, rel)));
     h3.update("\x00");
   }
   return h3.digest("hex");
 }
 function isDittoSourceRepo(repoRoot) {
-  const pkgPath = join72(repoRoot, "package.json");
+  const pkgPath = join73(repoRoot, "package.json");
   if (!existsSync11(pkgPath))
     return false;
   try {
     const pkg = JSON.parse(readFileSync6(pkgPath, "utf8"));
-    return pkg.name === "ditto" && existsSync11(join72(repoRoot, "src", "cli", "index.ts"));
+    return pkg.name === "ditto" && existsSync11(join73(repoRoot, "src", "cli", "index.ts"));
   } catch {
     return false;
   }
@@ -51406,7 +51604,7 @@ function resolvePluginRoot2(env2, argv1) {
   return null;
 }
 function readInstalledIdentity(home) {
-  const base = join72(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
+  const base = join73(home, ".claude", "plugins", "cache", "ditto-local", "ditto");
   const absent = { present: false, version: null, srcStamp: null, surfaceStamp: null };
   if (!existsSync11(base))
     return absent;
@@ -51414,10 +51612,10 @@ function readInstalledIdentity(home) {
   const version = versions[versions.length - 1];
   if (!version)
     return absent;
-  const dir = join72(base, version);
+  const dir = join73(base, version);
   let srcStamp = null;
   try {
-    srcStamp = readEmbeddedStamp(readFileSync6(join72(dir, "bin", "ditto"), "utf8"));
+    srcStamp = readEmbeddedStamp(readFileSync6(join73(dir, "bin", "ditto"), "utf8"));
   } catch {
     srcStamp = null;
   }
@@ -51513,7 +51711,7 @@ var sessionStartHandler = async (input) => {
 
 // src/hooks/rebuilt/stop.ts
 import { readFile as readFile18, readdir as readdir21 } from "fs/promises";
-import { join as join74 } from "path";
+import { join as join75 } from "path";
 init_ditto_paths();
 init_git();
 init_work_item_store();
@@ -51793,7 +51991,7 @@ function freshObservationChangeCount(repoRoot, workItemId2, base) {
 import { createHash as createHash13 } from "crypto";
 import { existsSync as existsSync12 } from "fs";
 import { readFile as readFile17, readdir as readdir20 } from "fs/promises";
-import { join as join73 } from "path";
+import { join as join74 } from "path";
 init_ditto_paths();
 init_fs();
 init_git();
@@ -51830,7 +52028,7 @@ function dialecticForcesContinuation(d2, repoRoot) {
     }
     if (admissible && repoRoot !== undefined) {
       const anchor = fileAnchorPath(obj.maps_to);
-      if (anchor !== undefined && !existsSync12(join73(repoRoot, anchor))) {
+      if (anchor !== undefined && !existsSync12(join74(repoRoot, anchor))) {
         reasons.push(`\uC2EC\uC758(dialectic) ${d2.review_id}: \uBC18\uB860\uC758 maps_to '${obj.maps_to}'\uAC00 \uC874\uC7AC\uD558\uB294 \uD30C\uC77C\uB85C \uD655\uC778\uB418\uC9C0 \uC54A\uC74C(does not resolve) \u2014 backward-finding \uC624\uB77C\uD074\uC774 \uAC80\uC99D \uBD88\uAC00/\uC624\uB798\uB428`);
       }
     }
@@ -51861,7 +52059,7 @@ async function readArtifact(path, schema, name) {
   }
 }
 async function readDialecticLedgers(dir) {
-  const reviewsDir = join73(dir, "reviews");
+  const reviewsDir = join74(dir, "reviews");
   let names;
   try {
     names = await readdir20(reviewsDir);
@@ -51871,7 +52069,7 @@ async function readDialecticLedgers(dir) {
   const files = names.filter((n3) => /^dialectic-.*\.json$/.test(n3)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact(join73(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact(join74(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -52011,8 +52209,8 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
     const fns = await new FitnessFunctionStore(repoRoot).read(workItemId2);
     if (!fns || fns.length === 0)
       return;
-    const snapshotPath = join73(dir, "assurance-snapshot.json");
-    const fingerprintPath = join73(dir, "fitness-input-fingerprint");
+    const snapshotPath = join74(dir, "assurance-snapshot.json");
+    const fingerprintPath = join74(dir, "fitness-input-fingerprint");
     const fingerprint = fitnessInputFingerprint(repoRoot);
     if (fingerprint !== null && await Bun.file(snapshotPath).exists() && await Bun.file(fingerprintPath).exists() && (await Bun.file(fingerprintPath).text()).trim() === fingerprint) {
       return;
@@ -52023,7 +52221,7 @@ async function maybeRunFitness(repoRoot, workItemId2, dir) {
       riskKnown: false,
       producedAt: new Date().toISOString()
     };
-    const verdictsPath2 = join73(dir, "fitness-verdicts.json");
+    const verdictsPath2 = join74(dir, "fitness-verdicts.json");
     const provider = await Bun.file(verdictsPath2).exists() ? compositeProvider(repoRoot, verdictsPath2) : commandProvider(repoRoot);
     const snapshot = await runFitness(fns, ctx, provider);
     await ensureDir(dir);
@@ -52117,18 +52315,18 @@ var stopHandler = async (input) => {
   }
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
-  const completion = await readArtifact(join73(dir, "completion.json"), completionContract, "completion.json");
-  const conv = await readArtifact(join73(dir, "convergence.json"), convergence, "convergence.json");
-  const pilot = await readArtifact(join73(dir, "autopilot.json"), autopilot, "autopilot.json");
-  const intent = await readArtifact(join73(dir, "intent.json"), intentContract, "intent.json");
+  const completion = await readArtifact(join74(dir, "completion.json"), completionContract, "completion.json");
+  const conv = await readArtifact(join74(dir, "convergence.json"), convergence, "convergence.json");
+  const pilot = await readArtifact(join74(dir, "autopilot.json"), autopilot, "autopilot.json");
+  const intent = await readArtifact(join74(dir, "intent.json"), intentContract, "intent.json");
   const dialectics = await readDialecticLedgers(dir);
-  const acgReview = await readArtifact(join73(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
-  const assurance = await readArtifact(join73(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
-  const impact = await readArtifact(join73(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
-  const semantic = await readArtifact(join73(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
-  const knowledge = await readArtifact(join73(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
-  const decisionConflicts = await readArtifact(join73(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
-  const directionFork = await readArtifact(join73(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
+  const acgReview = await readArtifact(join74(dir, "acg-review.json"), acgReviewGraph, "acg-review.json");
+  const assurance = await readArtifact(join74(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json");
+  const impact = await readArtifact(join74(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json");
+  const semantic = await readArtifact(join74(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json");
+  const knowledge = await readArtifact(join74(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json");
+  const decisionConflicts = await readArtifact(join74(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json");
+  const directionFork = await readArtifact(join74(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json");
   const malformed = [
     completion,
     conv,
@@ -52491,7 +52689,7 @@ async function readArtifact2(path, schema, name) {
   }
 }
 async function readDialecticLedgers2(dir) {
-  const reviewsDir = join74(dir, "reviews");
+  const reviewsDir = join75(dir, "reviews");
   let names;
   try {
     names = await readdir21(reviewsDir);
@@ -52501,7 +52699,7 @@ async function readDialecticLedgers2(dir) {
   const files = names.filter((n3) => /^dialectic-.*\.json$/.test(n3)).sort();
   const items = [];
   for (const name of files) {
-    const read = await readArtifact2(join74(reviewsDir, name), dialectic, `reviews/${name}`);
+    const read = await readArtifact2(join75(reviewsDir, name), dialectic, `reviews/${name}`);
     if (read.status === "malformed")
       return { status: "malformed", name: read.name };
     if (read.status === "ok")
@@ -52576,18 +52774,18 @@ var stopHandler2 = async (input) => {
   const dir = localDir(input.repoRoot, "work-items", pointer);
   await maybeRunFitness(input.repoRoot, pointer, dir);
   const ledgers = {
-    completion: await readArtifact2(join74(dir, "completion.json"), completionContract, "completion.json"),
-    conv: await readArtifact2(join74(dir, "convergence.json"), convergence, "convergence.json"),
-    pilot: await readArtifact2(join74(dir, "autopilot.json"), autopilot, "autopilot.json"),
-    intent: await readArtifact2(join74(dir, "intent.json"), intentContract, "intent.json"),
+    completion: await readArtifact2(join75(dir, "completion.json"), completionContract, "completion.json"),
+    conv: await readArtifact2(join75(dir, "convergence.json"), convergence, "convergence.json"),
+    pilot: await readArtifact2(join75(dir, "autopilot.json"), autopilot, "autopilot.json"),
+    intent: await readArtifact2(join75(dir, "intent.json"), intentContract, "intent.json"),
     dialectics: await readDialecticLedgers2(dir),
-    acgReview: await readArtifact2(join74(dir, "acg-review.json"), acgReviewGraph, "acg-review.json"),
-    assurance: await readArtifact2(join74(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json"),
-    impact: await readArtifact2(join74(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json"),
-    semantic: await readArtifact2(join74(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json"),
-    knowledge: await readArtifact2(join74(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json"),
-    decisionConflicts: await readArtifact2(join74(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json"),
-    directionFork: await readArtifact2(join74(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json")
+    acgReview: await readArtifact2(join75(dir, "acg-review.json"), acgReviewGraph, "acg-review.json"),
+    assurance: await readArtifact2(join75(dir, "assurance-snapshot.json"), acgAssuranceSnapshot, "assurance-snapshot.json"),
+    impact: await readArtifact2(join75(dir, "impact-graph.json"), acgImpactGraph, "impact-graph.json"),
+    semantic: await readArtifact2(join75(dir, "semantic-compatibility.json"), acgSemanticCompatibility, "semantic-compatibility.json"),
+    knowledge: await readArtifact2(join75(dir, "knowledge-gate.json"), knowledgeGateCarrier, "knowledge-gate.json"),
+    decisionConflicts: await readArtifact2(join75(dir, "decision-conflict.json"), decisionConflictCarrier, "decision-conflict.json"),
+    directionFork: await readArtifact2(join75(dir, "direction-fork.json"), directionForkCarrier, "direction-fork.json")
   };
   const decision = evaluateStopGate({
     workItem: workItem2,
@@ -52610,13 +52808,13 @@ var stopHandler2 = async (input) => {
 };
 
 // src/hooks/rebuilt/user-prompt-submit.ts
-import { join as join76 } from "path";
+import { join as join77 } from "path";
 init_ditto_paths();
 init_fs();
 
 // src/hooks/user-prompt-submit.ts
 import { readdir as readdir22 } from "fs/promises";
-import { join as join75 } from "path";
+import { join as join76 } from "path";
 init_ditto_paths();
 init_fs();
 init_work_item_store();
@@ -52742,7 +52940,7 @@ async function legacyHandoffLeftoverWarning(repoRoot) {
       return 0;
     }
   };
-  const n3 = await countMd(join75(repoRoot, ".ditto", "handoff")) + await countMd(localDir(repoRoot, "handoff"));
+  const n3 = await countMd(join76(repoRoot, ".ditto", "handoff")) + await countMd(localDir(repoRoot, "handoff"));
   if (n3 === 0)
     return;
   return `WARNING: ${n3} legacy file-tier handoff file(s) remain under .ditto/handoff/ or .ditto/local/handoff/ \u2014 the hidden-ref handoff store (\`ditto handoff\`) does not read them; migrate (ditto handoff write) or read them manually, then delete.`;
@@ -52750,7 +52948,7 @@ async function legacyHandoffLeftoverWarning(repoRoot) {
 async function logClassification(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join75(dir, "user-prompt.jsonl");
+  const path = join76(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -52832,7 +53030,7 @@ function pendingHandoffHint2(item) {
 async function logClassification2(repoRoot, entry) {
   const dir = localDir(repoRoot, "logs");
   await ensureDir(dir);
-  const path = join76(dir, "user-prompt.jsonl");
+  const path = join77(dir, "user-prompt.jsonl");
   const file = Bun.file(path);
   const existing = await file.exists() ? await file.text() : "";
   const prefix = existing.length === 0 || existing.endsWith(`
@@ -53001,10 +53199,10 @@ var hookCommand = defineCommand({
 });
 
 // src/cli/commands/impact.ts
-import { join as join78 } from "path";
+import { join as join79 } from "path";
 
 // src/acg/impact/codeql-analyzer.ts
-import { join as join77 } from "path";
+import { join as join78 } from "path";
 function isTestFile(path, language) {
   if (language === "java") {
     return path.includes("/test/") || /(Test|Tests|IT)\.java$/.test(path);
@@ -53033,8 +53231,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot: input.sourceRoot,
       language: this.target.language,
-      dbPath: join77(this.target.cacheDir, "db"),
-      workDir: join77(this.target.cacheDir, `q-impact-${this.target.symbol}`),
+      dbPath: join78(this.target.cacheDir, "db"),
+      workDir: join78(this.target.cacheDir, `q-impact-${this.target.symbol}`),
       query: renderQuery(relationQueries(this.target.language).impact, this.target.symbol, this.target.declFile),
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -53070,8 +53268,8 @@ class CodeqlImpactAnalyzer {
       repoRoot: this.target.repoRoot,
       sourceRoot,
       language: this.target.language,
-      dbPath: join77(this.target.cacheDir, "db"),
-      workDir: join77(this.target.cacheDir, "q-xrepo"),
+      dbPath: join78(this.target.cacheDir, "db"),
+      workDir: join78(this.target.cacheDir, "q-xrepo"),
       query: relationQueries(this.target.language).unresolved,
       ...this.target.buildMode ? { buildMode: this.target.buildMode } : {},
       ...this.target.buildCommand ? { buildCommand: this.target.buildCommand } : {},
@@ -53185,7 +53383,7 @@ var impactCommand = defineCommand({
     const changeType = args["change-type"] ?? "signature";
     try {
       const repoRoot = await resolveRepoRootForCreate();
-      const sourceRoot = args["source-root"] ?? join78(repoRoot, "src");
+      const sourceRoot = args["source-root"] ?? join79(repoRoot, "src");
       const language = args.language ?? "javascript";
       const buildCommand = args["build-command"];
       const buildMode = !buildCommand && language === "java" ? "none" : undefined;
@@ -53247,7 +53445,7 @@ import { resolve as resolve24 } from "path";
 init_fs();
 
 // src/core/init-scaffold.ts
-import { basename as basename5, join as join79 } from "path";
+import { basename as basename5, join as join80 } from "path";
 
 // src/schemas/glossary.ts
 init_zod();
@@ -53276,15 +53474,15 @@ var glossary = exports_external.object({
 init_fs();
 init_shared();
 var SCAFFOLD_DIRS = [
-  join79("local", "work-items"),
-  join79("local", "runs"),
-  join79("local", "handoff"),
-  join79("local", "sessions"),
-  join79("local", "logs"),
-  join79("local", "cache"),
+  join80("local", "work-items"),
+  join80("local", "runs"),
+  join80("local", "handoff"),
+  join80("local", "sessions"),
+  join80("local", "logs"),
+  join80("local", "cache"),
   "agents",
   "knowledge",
-  join79("knowledge", "adr")
+  join80("knowledge", "adr")
 ];
 var DITTO_GITIGNORE = `# DITTO per-developer runtime \u2014 volatile, not for version control.
 # Managed by \`ditto init\`; safe to edit.
@@ -53321,18 +53519,18 @@ async function seedFileIfAbsent(absPath, relPath, write, created, skipped) {
   return true;
 }
 async function initScaffold(repoRoot, now) {
-  const dittoDir2 = join79(repoRoot, ".ditto");
+  const dittoDir2 = join80(repoRoot, ".ditto");
   const createdDirs = [];
   const createdFiles = [];
   const skippedFiles = [];
-  const glossaryAbs = join79(dittoDir2, "knowledge", "glossary.json");
+  const glossaryAbs = join80(dittoDir2, "knowledge", "glossary.json");
   const alreadyInitialized = await fileExists(glossaryAbs);
   await ensureDirTracked(dittoDir2, ".ditto", createdDirs);
   for (const sub of SCAFFOLD_DIRS) {
-    await ensureDirTracked(join79(dittoDir2, sub), join79(".ditto", sub), createdDirs);
+    await ensureDirTracked(join80(dittoDir2, sub), join80(".ditto", sub), createdDirs);
   }
   const projectName = basename5(repoRoot) || "project";
-  await seedFileIfAbsent(glossaryAbs, join79(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
+  await seedFileIfAbsent(glossaryAbs, join80(".ditto", "knowledge", "glossary.json"), () => writeJson(glossaryAbs, glossary, {
     schema_version: "0.1.0",
     project_name: projectName,
     updated_at: now.toISOString(),
@@ -53340,10 +53538,10 @@ async function initScaffold(repoRoot, now) {
   }).then(() => {
     return;
   }), createdFiles, skippedFiles);
-  const contextAbs = join79(dittoDir2, "knowledge", "CONTEXT.md");
-  await seedFileIfAbsent(contextAbs, join79(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
-  const gitignoreAbs = join79(dittoDir2, ".gitignore");
-  await seedFileIfAbsent(gitignoreAbs, join79(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
+  const contextAbs = join80(dittoDir2, "knowledge", "CONTEXT.md");
+  await seedFileIfAbsent(contextAbs, join80(".ditto", "knowledge", "CONTEXT.md"), () => atomicWriteText(contextAbs, emptyContext(projectName)), createdFiles, skippedFiles);
+  const gitignoreAbs = join80(dittoDir2, ".gitignore");
+  await seedFileIfAbsent(gitignoreAbs, join80(".ditto", ".gitignore"), () => atomicWriteText(gitignoreAbs, DITTO_GITIGNORE), createdFiles, skippedFiles);
   return { repoRoot, createdDirs, createdFiles, skippedFiles, alreadyInitialized };
 }
 
@@ -53441,7 +53639,7 @@ ${body}
 }
 // src/core/journey-authoring/store.ts
 import { readdir as readdir23 } from "fs/promises";
-import { join as join80 } from "path";
+import { join as join81 } from "path";
 
 // src/schemas/acg-journey-spec.ts
 init_zod();
@@ -53538,10 +53736,10 @@ class JourneyAuthoringStore {
     return localDir(this.repoRoot, "stories");
   }
   journeyPath(id) {
-    return join80(this.journeysDir(), `${id}.json`);
+    return join81(this.journeysDir(), `${id}.json`);
   }
   storyPath(id) {
-    return join80(this.storiesDir(), `${id}.json`);
+    return join81(this.storiesDir(), `${id}.json`);
   }
   async getJourney(id) {
     if (!await Bun.file(this.journeyPath(id)).exists())
@@ -53568,12 +53766,12 @@ class JourneyAuthoringStore {
     }
     const out = [];
     for (const name of names) {
-      out.push(await readJson(join80(dir, name), schema));
+      out.push(await readJson(join81(dir, name), schema));
     }
     return out;
   }
   sessionPath(workItemId2) {
-    return join80(localDir(this.repoRoot, "work-items", workItemId2), "journey-authoring-state.json");
+    return join81(localDir(this.repoRoot, "work-items", workItemId2), "journey-authoring-state.json");
   }
   async sessionExists(workItemId2) {
     return Bun.file(this.sessionPath(workItemId2)).exists();
@@ -53587,7 +53785,7 @@ class JourneyAuthoringStore {
   }
 }
 // src/core/journey-authoring/session.ts
-import { join as join81 } from "path";
+import { join as join82 } from "path";
 init_fs();
 init_shared();
 class IdConflictError extends Error {
@@ -53689,7 +53887,7 @@ async function finalizeAuthoring(repoRoot, input) {
         reason: `already owned by ${existing.story_id ?? "(journey-only)"}`
       });
     }
-    const dslPath = join81(repoRoot, "e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
+    const dslPath = join82(repoRoot, "e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
     if (await fileExists(dslPath)) {
       const existingText = await Bun.file(dslPath).text();
       const parsed = parseJourneyDoc(existingText);
@@ -53709,8 +53907,8 @@ async function finalizeAuthoring(repoRoot, input) {
   const dslPaths = [];
   for (const { spec, dsl } of built) {
     writtenJourneys.push(await store.writeJourney(spec));
-    const rel = join81("e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
-    await atomicWriteText(join81(repoRoot, rel), dsl);
+    const rel = join82("e2e", "journeys", `${dslSlug(spec.id)}.journey.md`);
+    await atomicWriteText(join82(repoRoot, rel), dsl);
     dslPaths.push(rel);
   }
   const superseded = [];
@@ -54030,7 +54228,7 @@ var journeyAuthorCommand = defineCommand({
 
 // src/cli/commands/knowledge.ts
 import { readdir as readdir24, writeFile as writeFile5 } from "fs/promises";
-import { join as join82 } from "path";
+import { join as join83 } from "path";
 init_zod();
 init_fs();
 init_shared();
@@ -54137,7 +54335,7 @@ async function createAdrSkeleton(opts) {
     throw new Error(`invalid --slug "${opts.slug}"; expected lowercase alphanumeric words joined by single hyphens (e.g. my-feature)`);
   }
   const id = `ADR-${ymdCompact(now)}-${opts.slug}`;
-  const path = join82(opts.repoRoot, ".ditto", "knowledge", "adr", `${id}.md`);
+  const path = join83(opts.repoRoot, ".ditto", "knowledge", "adr", `${id}.md`);
   if (await fileExists(path)) {
     throw new Error(`refusing to overwrite existing ADR: ${path}`);
   }
@@ -54145,7 +54343,7 @@ async function createAdrSkeleton(opts) {
   return { id, path };
 }
 async function checkAdrConsistency(repoRoot) {
-  const adrDir = join82(repoRoot, ".ditto", "knowledge", "adr");
+  const adrDir = join83(repoRoot, ".ditto", "knowledge", "adr");
   const violations = [];
   let files = [];
   try {
@@ -54257,7 +54455,7 @@ var knowledgeCommand = defineCommand({
 // src/cli/commands/memory.ts
 import { randomBytes as randomBytes4 } from "crypto";
 import { readFile as readFile20, readdir as readdir26 } from "fs/promises";
-import { isAbsolute as isAbsolute16, join as join84 } from "path";
+import { isAbsolute as isAbsolute16, join as join85 } from "path";
 init_ditto_paths();
 init_evidence_store();
 init_fs();
@@ -54269,7 +54467,7 @@ init_ditto_paths();
 init_memory_scan();
 init_memory_store();
 import { readFile as readFile19, readdir as readdir25 } from "fs/promises";
-import { join as join83, relative as relative21 } from "path";
+import { join as join84, relative as relative21 } from "path";
 function bootstrapEventId(key) {
   return `memevt_${sha256Hex(key).slice(0, 12)}`;
 }
@@ -54380,7 +54578,7 @@ async function listMarkdown(dir) {
   } catch {
     return [];
   }
-  return entries.filter((n3) => n3.endsWith(".md")).sort().map((n3) => join83(dir, n3));
+  return entries.filter((n3) => n3.endsWith(".md")).sort().map((n3) => join84(dir, n3));
 }
 async function bootstrapIngest(repoRoot, options = {}) {
   const now = (options.now ?? new Date).toISOString();
@@ -54396,7 +54594,7 @@ async function bootstrapIngest(repoRoot, options = {}) {
 }
 async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const dir = join83(dittoDir(repoRoot), "knowledge", "adr");
+  const dir = join84(dittoDir(repoRoot), "knowledge", "adr");
   for (const abs of await listMarkdown(dir)) {
     const body = await readFile19(abs, "utf8");
     const rel = relative21(repoRoot, abs);
@@ -54436,7 +54634,7 @@ async function ingestAdrs(repoRoot, sourceStore, eventStore, now, revision, head
 }
 async function ingestGlossary(repoRoot, sourceStore, eventStore, now, revision, head) {
   const result2 = emptyResult();
-  const abs = join83(dittoDir(repoRoot), "knowledge", "glossary.json");
+  const abs = join84(dittoDir(repoRoot), "knowledge", "glossary.json");
   let raw;
   try {
     raw = await readFile19(abs, "utf8");
@@ -55082,7 +55280,7 @@ var memoryBuild = defineCommand({
     }
     try {
       if (args.fragments) {
-        const path = isAbsolute16(args.fragments) ? args.fragments : join84(repoRoot, args.fragments);
+        const path = isAbsolute16(args.fragments) ? args.fragments : join85(repoRoot, args.fragments);
         const raw = await readFile20(path, "utf8");
         const parsed = irFragmentsSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) {
@@ -55123,7 +55321,7 @@ var memoryBuild = defineCommand({
         const path = s2.source.path;
         if (!path)
           continue;
-        const abs = isAbsolute16(path) ? path : join84(repoRoot, path);
+        const abs = isAbsolute16(path) ? path : join85(repoRoot, path);
         files.push({
           source_id: s2.source.source_id,
           path,
@@ -55883,7 +56081,7 @@ var memoryMeasure = defineCommand({
       return;
     }
     const repoRoot = await resolveRepoRootForCreate();
-    const adrDir = join84(dittoDir(repoRoot), "knowledge", "adr");
+    const adrDir = join85(dittoDir(repoRoot), "knowledge", "adr");
     let names;
     try {
       names = (await readdir26(adrDir)).filter((n3) => n3.endsWith(".md")).sort();
@@ -55898,9 +56096,9 @@ var memoryMeasure = defineCommand({
       return;
     }
     try {
-      const adrs = await Promise.all(names.map(async (n3) => ({ id: n3, body: await readFile20(join84(adrDir, n3), "utf8") })));
+      const adrs = await Promise.all(names.map(async (n3) => ({ id: n3, body: await readFile20(join85(adrDir, n3), "utf8") })));
       const candidateFiles = (args.against ?? "").split(",").map((s2) => s2.trim()).filter((s2) => s2.length > 0);
-      const candidates = await Promise.all(candidateFiles.map((f4) => readFile20(isAbsolute16(f4) ? f4 : join84(repoRoot, f4), "utf8")));
+      const candidates = await Promise.all(candidateFiles.map((f4) => readFile20(isAbsolute16(f4) ? f4 : join85(repoRoot, f4), "utf8")));
       const report = measureHallucination(adrs, candidates);
       if (format === "json") {
         writeJson2(report);
@@ -57304,7 +57502,7 @@ function resolvePushGate(recipe2, repoRelDir) {
 }
 
 // src/core/push-gate-cache.ts
-import { join as join85 } from "path";
+import { join as join86 } from "path";
 var MAX_GREEN_TREES = 20;
 var IGNORABLE_TRAIL_PREFIXES = [".ditto/work-items/", ".ditto/memory/"];
 function isTreeCleanIgnoringTrails(porcelain) {
@@ -57330,7 +57528,7 @@ function addGreenTree(cache, tree, command, recordedAt) {
   return { trees: kept.slice(-MAX_GREEN_TREES) };
 }
 function greenCachePath(cwd) {
-  return join85(cwd, ".ditto", "local", "push-gate-green.json");
+  return join86(cwd, ".ditto", "local", "push-gate-green.json");
 }
 
 // src/cli/commands/push-gate.ts
@@ -57512,7 +57710,7 @@ var pushGateCommand = defineCommand({
 });
 
 // src/cli/commands/refactor.ts
-import { join as join86 } from "path";
+import { join as join87 } from "path";
 
 // src/acg/scope/unit-resolve.ts
 var API_LAYERS = ["controller", "controllers", "route", "routes"];
@@ -57638,7 +57836,7 @@ function trackedSrcFiles(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec3(repoRoot) {
-  const specPath = join86(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join87(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -57710,7 +57908,7 @@ var refactorCommand = defineCommand({
 
 // src/cli/commands/release.ts
 import { readFileSync as readFileSync9 } from "fs";
-import { join as join87 } from "path";
+import { join as join88 } from "path";
 init_fs();
 var GH_SOURCE = "incognito050924/ditto";
 function releaseGateError(input) {
@@ -57740,7 +57938,7 @@ function isDirty2(repoRoot) {
   return proc.stdout.toString().trim().length > 0;
 }
 function readVersion(repoRoot) {
-  const pkg = JSON.parse(readFileSync9(join87(repoRoot, "package.json"), "utf8"));
+  const pkg = JSON.parse(readFileSync9(join88(repoRoot, "package.json"), "utf8"));
   return pkg.version ?? "";
 }
 var releaseCommand = defineCommand({
@@ -57827,7 +58025,7 @@ var releaseCommand = defineCommand({
 });
 
 // src/cli/commands/review.ts
-import { join as join88 } from "path";
+import { join as join89 } from "path";
 
 // src/acg/review/unit-review.ts
 var REVIEW_ROLES = ["code-reviewer", "security-reviewer"];
@@ -57886,7 +58084,7 @@ function trackedSrcFiles2(repoRoot) {
 `).map((s2) => s2.trim()).filter((s2) => s2.length > 0 && /\.[cm]?tsx?$/.test(s2) && !/\.(test|spec)\./.test(s2));
 }
 async function loadArchSpec4(repoRoot) {
-  const specPath = join88(repoRoot, ".ditto", "architecture-spec.json");
+  const specPath = join89(repoRoot, ".ditto", "architecture-spec.json");
   try {
     return await readArchitectureSpec(specPath, acgArchitectureSpec);
   } catch {
@@ -58009,7 +58207,7 @@ init_common();
 init_fs();
 init_git();
 import { stat as stat10, writeFile as writeFile6 } from "fs/promises";
-import { dirname as dirname17, join as join89, relative as relative23, resolve as resolve26, sep as sep10 } from "path";
+import { dirname as dirname17, join as join90, relative as relative23, resolve as resolve26, sep as sep10 } from "path";
 init_work_item_store();
 init_worktree();
 var NETWORK_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY"];
@@ -58038,7 +58236,7 @@ function resolveRepoCwd(repoRoot, cwd) {
     throw new RunWithUsageError(`invalid cwd: ${parsed.error.issues[0]?.message}`);
   }
   const resolvedRoot = resolve26(repoRoot);
-  const resolvedCwd = resolve26(join89(repoRoot, cwd));
+  const resolvedCwd = resolve26(join90(repoRoot, cwd));
   if (resolvedCwd !== resolvedRoot && !resolvedCwd.startsWith(`${resolvedRoot}${sep10}`)) {
     throw new RunWithUsageError(`cwd escapes repo root: ${cwd}`);
   }
@@ -58576,7 +58774,7 @@ function applySemanticVerdict(seed, v2) {
 // src/acg/semantic/signature-codeql.ts
 import { existsSync as existsSync13 } from "fs";
 import { rm as rm3 } from "fs/promises";
-import { join as join90 } from "path";
+import { join as join91 } from "path";
 init_ditto_paths();
 init_git();
 var SIGNATURE_QUERY_JS = `/**
@@ -58706,20 +58904,20 @@ async function extractSignatures(input, deps) {
 async function scanSignatureChanges(input, deps) {
   const baseSha = gitRevParse(input.repoRoot, input.baseRef);
   const cacheBase = localDir(input.repoRoot, "cache", "codeql");
-  const baseCache = join90(cacheBase, `${baseSha}-${input.language}`);
-  const baseDb = join90(baseCache, "db");
+  const baseCache = join91(cacheBase, `${baseSha}-${input.language}`);
+  const baseDb = join91(baseCache, "db");
   const needWorktree = !existsSync13(baseDb);
-  const worktree = join90(cacheBase, "worktrees", `${baseSha}-${input.language}`);
+  const worktree = join91(cacheBase, "worktrees", `${baseSha}-${input.language}`);
   if (needWorktree)
     addDetachedWorktree(input.repoRoot, worktree, baseSha);
   let before;
   try {
     before = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join90(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
+      sourceRoot: join91(needWorktree ? worktree : input.repoRoot, input.sourceRootRel),
       language: input.language,
       dbPath: baseDb,
-      workDir: join90(baseCache, "q-sig"),
+      workDir: join91(baseCache, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -58727,14 +58925,14 @@ async function scanSignatureChanges(input, deps) {
     if (needWorktree)
       removeWorktree(input.repoRoot, worktree);
   }
-  const afterDir = join90(cacheBase, `after-${process.pid}-${input.language}`);
+  const afterDir = join91(cacheBase, `after-${process.pid}-${input.language}`);
   try {
     const after = await extractSignatures({
       repoRoot: input.repoRoot,
-      sourceRoot: join90(input.repoRoot, input.sourceRootRel),
+      sourceRoot: join91(input.repoRoot, input.sourceRootRel),
       language: input.language,
-      dbPath: join90(afterDir, "db"),
-      workDir: join90(afterDir, "q-sig"),
+      dbPath: join91(afterDir, "db"),
+      workDir: join91(afterDir, "q-sig"),
       ...input.buildMode ? { buildMode: input.buildMode } : {},
       ...input.binary ? { binary: input.binary } : {}
     }, deps);
@@ -59110,7 +59308,7 @@ var semanticCommand = defineCommand({
 
 // src/cli/commands/setup.ts
 import { homedir as homedir15 } from "os";
-import { dirname as dirname20, join as join96, resolve as resolve29 } from "path";
+import { dirname as dirname20, join as join97, resolve as resolve29 } from "path";
 init_fs();
 init_shared();
 
@@ -59118,7 +59316,7 @@ init_shared();
 import { existsSync as existsSync14, readFileSync as readFileSync10, writeFileSync as writeFileSync2 } from "fs";
 import { join as pathJoin } from "path";
 var GITIGNORE_ENTRY = ".ditto/memory/";
-function join91(...parts) {
+function join92(...parts) {
   return parts.join("/");
 }
 function ensureGitignored(deps) {
@@ -59142,7 +59340,7 @@ var submoduleManual = (memoryDir) => [
   "# \uADF8\uB2E4\uC74C \uBD80\uBAA8\uC5D0\uC11C: git rm -r --cached .ditto/memory && git submodule add <URL> .ditto/memory"
 ];
 async function separateMemoryRepo(deps, mode = "gitignore") {
-  const memoryDir = join91(deps.repoRoot, ".ditto", "memory");
+  const memoryDir = join92(deps.repoRoot, ".ditto", "memory");
   if (!deps.pathExists(memoryDir)) {
     return {
       status: "failed",
@@ -59156,7 +59354,7 @@ async function separateMemoryRepo(deps, mode = "gitignore") {
       manual: submoduleManual(memoryDir)
     };
   }
-  const alreadyRepo = deps.pathExists(join91(memoryDir, ".git"));
+  const alreadyRepo = deps.pathExists(join92(memoryDir, ".git"));
   if (!alreadyRepo) {
     const r4 = await deps.run("git", ["init"], memoryDir);
     if (r4.exit_code !== 0) {
@@ -59205,16 +59403,16 @@ function defaultMemorySeparateDeps(repoRoot) {
 // src/core/provision/playwright.ts
 import { existsSync as existsSync15, readdirSync as readdirSync3 } from "fs";
 import { homedir as homedir14, platform as osPlatform } from "os";
-import { join as join92 } from "path";
+import { join as join93 } from "path";
 function playwrightCacheRoot(os = osPlatform()) {
   if (os === "win32")
-    return join92(homedir14(), "AppData", "Local", "ms-playwright");
+    return join93(homedir14(), "AppData", "Local", "ms-playwright");
   if (os === "darwin")
-    return join92(homedir14(), "Library", "Caches", "ms-playwright");
-  return join92(homedir14(), ".cache", "ms-playwright");
+    return join93(homedir14(), "Library", "Caches", "ms-playwright");
+  return join93(homedir14(), ".cache", "ms-playwright");
 }
 function bunCacheDir() {
-  return join92(process.env.BUN_INSTALL ?? join92(homedir14(), ".bun"), "install", "cache");
+  return join93(process.env.BUN_INSTALL ?? join93(homedir14(), ".bun"), "install", "cache");
 }
 function detectPlaywright(deps) {
   const core = deps.listDir(deps.bunCache).some((e2) => /^playwright-core@\d+\.\d+\.\d+$/.test(e2));
@@ -59311,7 +59509,7 @@ function defaultRegistry() {
 // src/core/setup.ts
 import { execFileSync as execFileSync7 } from "child_process";
 import { chmod, cp, readFile as readFile21, rename as rename5, rm as rm4, writeFile as writeFile7 } from "fs/promises";
-import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute17, join as join94, resolve as resolve27 } from "path";
+import { basename as basename6, dirname as dirname18, isAbsolute as isAbsolute17, join as join95, resolve as resolve27 } from "path";
 
 // src/core/charter-region.ts
 function leadingPrefixOffsets(content) {
@@ -59348,7 +59546,7 @@ init_shared();
 
 // src/core/resource-routing.ts
 import { readdirSync as readdirSync4 } from "fs";
-import { join as join93 } from "path";
+import { join as join94 } from "path";
 var GLOBAL_PREFIX = "GLOBAL_";
 function routeResource(filename, ctx) {
   if (filename.startsWith(GLOBAL_PREFIX)) {
@@ -59356,13 +59554,13 @@ function routeResource(filename, ctx) {
     return {
       scope: "global",
       destName,
-      destPath: join93(ctx.homeDir, ".claude", destName)
+      destPath: join94(ctx.homeDir, ".claude", destName)
     };
   }
   return {
     scope: "project",
     destName: filename,
-    destPath: join93(ctx.projectRoot, filename)
+    destPath: join94(ctx.projectRoot, filename)
   };
 }
 function discoverResources(resourcesDir) {
@@ -59377,10 +59575,10 @@ function discoverResources(resourcesDir) {
 var CHARTER_MANIFEST_FILENAME = "charter-manifest.json";
 var CODEX_MARKETPLACE_NAME = "ditto-local";
 var CODEX_PLUGIN_NAME = "ditto";
-var CODEX_PLUGIN_DEST_REL = join94(".agents", "plugins", CODEX_PLUGIN_NAME);
+var CODEX_PLUGIN_DEST_REL = join95(".agents", "plugins", CODEX_PLUGIN_NAME);
 var CODEX_BIN_NAME = "ditto";
 async function loadCharterShas(resourcesDir) {
-  const raw = await readJsonIfExists(join94(resourcesDir, CHARTER_MANIFEST_FILENAME));
+  const raw = await readJsonIfExists(join95(resourcesDir, CHARTER_MANIFEST_FILENAME));
   if (raw === null || typeof raw !== "object" || Array.isArray(raw))
     return [];
   const shas = raw.shas;
@@ -59411,14 +59609,14 @@ function resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts)
           host: "codex",
           filename,
           scope: "project",
-          destPath: join94(projectRoot, "AGENTS.md")
+          destPath: join95(projectRoot, "AGENTS.md")
         });
       } else if (filename === "GLOBAL_AGENTS.md") {
         out.push({
           host: "codex",
           filename,
           scope: "global",
-          destPath: join94(codexHome, "AGENTS.md")
+          destPath: join95(codexHome, "AGENTS.md")
         });
       }
     }
@@ -59473,23 +59671,23 @@ async function writeCodexMarketplace(path) {
 `);
 }
 async function installCodexAgents(pluginRoot, projectRoot) {
-  const srcDir = join94(pluginRoot, ".codex", "agents");
+  const srcDir = join95(pluginRoot, ".codex", "agents");
   if (!await fileExists(srcDir)) {
     throw new Error(`codex custom agents not found at ${srcDir}; run build:codex-plugin first`);
   }
-  const destDir = join94(projectRoot, ".codex", "agents");
+  const destDir = join95(projectRoot, ".codex", "agents");
   await ensureDir(destDir);
   let count = 0;
   for (const file of await listFiles(srcDir)) {
     if (!file.id.endsWith(".toml"))
       continue;
-    await cp(file.path, join94(destDir, file.id));
+    await cp(file.path, join95(destDir, file.id));
     count += 1;
   }
   return count;
 }
 function codexDittoCommand(installedPluginDir) {
-  return `"${join94(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
+  return `"${join95(installedPluginDir, "bin", CODEX_BIN_NAME).replaceAll("\\", "/")}"`;
 }
 function rewriteCodexDittoReferences(text, dittoCommand) {
   return text.replace(/"\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?"/g, dittoCommand).replace(/\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/ditto(?:\.exe)?/g, dittoCommand).replace(/`ditto(?=\s)/g, `\`${dittoCommand}`);
@@ -59511,26 +59709,26 @@ async function rewriteCodexAgentTomlFile(path, dittoCommand) {
 }
 async function rewriteCodexInstalledReferences(installedPluginDir) {
   const dittoCommand = codexDittoCommand(installedPluginDir);
-  for (const dir of await listDirectories(join94(installedPluginDir, "skills"))) {
-    const skillPath = join94(dir.path, "SKILL.md");
+  for (const dir of await listDirectories(join95(installedPluginDir, "skills"))) {
+    const skillPath = join95(dir.path, "SKILL.md");
     if (await fileExists(skillPath))
       await rewriteCodexTextFile(skillPath, dittoCommand);
   }
-  for (const file of await listFiles(join94(installedPluginDir, ".codex", "agents"))) {
+  for (const file of await listFiles(join95(installedPluginDir, ".codex", "agents"))) {
     if (file.id.endsWith(".toml"))
       await rewriteCodexAgentTomlFile(file.path, dittoCommand);
   }
 }
 async function writeCodexSurfaceCatalog(projectRoot) {
-  const surfaceCatalogPath = join94(projectRoot, ".ditto", "local", "surfaces.codex.json");
-  await ensureDir(join94(projectRoot, ".ditto", "local"));
+  const surfaceCatalogPath = join95(projectRoot, ".ditto", "local", "surfaces.codex.json");
+  await ensureDir(join95(projectRoot, ".ditto", "local"));
   const catalog = await generateSurfaceCatalog([codexHostAdapter], projectRoot, "surfaces.codex.json");
   await atomicWriteText(surfaceCatalogPath, `${JSON.stringify(catalog, null, 2)}
 `);
   return surfaceCatalogPath;
 }
 async function writeCodexPluginStatus(projectRoot) {
-  const statusPath = join94(projectRoot, ".ditto", "local", "codex-plugin-status.json");
+  const statusPath = join95(projectRoot, ".ditto", "local", "codex-plugin-status.json");
   const enableCommands = [
     `codex plugin marketplace add ${JSON.stringify(projectRoot)}`,
     `codex plugin add ${CODEX_PLUGIN_NAME}@${CODEX_MARKETPLACE_NAME}`
@@ -59548,19 +59746,19 @@ async function writeCodexPluginStatus(projectRoot) {
 }
 async function installCodexSurface(opts) {
   const { pluginRoot, projectRoot } = opts;
-  const manifestPath = join94(pluginRoot, ".codex-plugin", "plugin.json");
+  const manifestPath = join95(pluginRoot, ".codex-plugin", "plugin.json");
   if (!await fileExists(manifestPath)) {
     throw new Error(`codex plugin manifest not found at ${manifestPath}; run build:codex-plugin first`);
   }
-  const installedPluginDir = join94(projectRoot, CODEX_PLUGIN_DEST_REL);
+  const installedPluginDir = join95(projectRoot, CODEX_PLUGIN_DEST_REL);
   if (resolve27(pluginRoot) === resolve27(installedPluginDir)) {
     throw new Error(`codex plugin source is already the installed plugin directory: ${installedPluginDir}`);
   }
   await rm4(installedPluginDir, { recursive: true, force: true });
-  await ensureDir(join94(projectRoot, ".agents", "plugins"));
+  await ensureDir(join95(projectRoot, ".agents", "plugins"));
   await cp(pluginRoot, installedPluginDir, { recursive: true });
   await rewriteCodexInstalledReferences(installedPluginDir);
-  const marketplacePath = join94(projectRoot, ".agents", "plugins", "marketplace.json");
+  const marketplacePath = join95(projectRoot, ".agents", "plugins", "marketplace.json");
   await writeCodexMarketplace(marketplacePath);
   const agentsInstalled = await installCodexAgents(installedPluginDir, projectRoot);
   const surfaceCatalogPath = await writeCodexSurfaceCatalog(projectRoot);
@@ -59573,7 +59771,7 @@ async function installCodexSurface(opts) {
     statusPath,
     pluginLoadStatus: "needs_user_action",
     enableCommands,
-    agentsDir: join94(projectRoot, ".codex", "agents"),
+    agentsDir: join95(projectRoot, ".codex", "agents"),
     agentsInstalled
   };
 }
@@ -59586,7 +59784,7 @@ async function installResource(decision, resourcesDir, charterShas) {
   };
   const name = basename6(decision.destPath);
   if (name === "AGENTS.md") {
-    const bundledCharter = await readFile21(join94(resourcesDir, decision.filename), "utf8");
+    const bundledCharter = await readFile21(join95(resourcesDir, decision.filename), "utf8");
     const existed = await fileExists(decision.destPath);
     if (!existed) {
       await atomicWriteText(decision.destPath, bundledCharter);
@@ -59611,8 +59809,8 @@ async function installResource(decision, resourcesDir, charterShas) {
     return { ...common, status: "kept", backupPath: null };
   }
   if (name === "CLAUDE.md") {
-    const sourcePath = join94(dirname18(decision.destPath), "AGENTS.md");
-    const projectionBody = await fileExists(sourcePath) ? await readFile21(sourcePath, "utf8") : await readFile21(join94(resourcesDir, decision.filename), "utf8");
+    const sourcePath = join95(dirname18(decision.destPath), "AGENTS.md");
+    const projectionBody = await fileExists(sourcePath) ? await readFile21(sourcePath, "utf8") : await readFile21(join95(resourcesDir, decision.filename), "utf8");
     const applied2 = await applyManagedFile(decision.destPath, projectionBody, "AGENTS.md");
     return {
       ...common,
@@ -59620,7 +59818,7 @@ async function installResource(decision, resourcesDir, charterShas) {
       backupPath: applied2.kind === "ok" ? applied2.backupPath : null
     };
   }
-  const body = await readFile21(join94(resourcesDir, decision.filename), "utf8");
+  const body = await readFile21(join95(resourcesDir, decision.filename), "utf8");
   const applied = await applyManagedFile(decision.destPath, body, decision.filename);
   return {
     ...common,
@@ -59631,7 +59829,7 @@ async function installResource(decision, resourcesDir, charterShas) {
 var PUSH_GATE_HOOK_MARKER = "ditto:managed:pre-push";
 var PUSH_GATE_HOOK_BACKUP_SUFFIX = ".ditto-backup";
 function defaultHookTemplatePath(resourcesDir) {
-  return join94(dirname18(resourcesDir), "hooks", "pre-push");
+  return join95(dirname18(resourcesDir), "hooks", "pre-push");
 }
 function customHooksPath(cwd) {
   try {
@@ -59651,7 +59849,7 @@ function gitHooksDir(cwd) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"]
   }).trim();
-  return isAbsolute17(p2) ? p2 : join94(cwd, p2);
+  return isAbsolute17(p2) ? p2 : join95(cwd, p2);
 }
 async function installPushGateHook(opts) {
   const { projectRoot, hookTemplatePath } = opts;
@@ -59675,7 +59873,7 @@ async function installPushGateHook(opts) {
       message: `${projectRoot} is not a git repository \u2014 a pre-push hook cannot be installed. Run \`git init\` (or \`ditto setup\` from inside the repo), then re-run setup.`
     };
   }
-  const hookPath = join94(hooksDir, "pre-push");
+  const hookPath = join95(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   const template = bakeWorkspaceRoot(await readFile21(hookTemplatePath, "utf8"), opts.workspaceRoot);
   await ensureDir(hooksDir);
@@ -59715,7 +59913,7 @@ async function writeHookFile(hookPath, body) {
 }
 async function setup(opts) {
   const { resourcesDir, projectRoot, homeDir, now } = opts;
-  const codexHome = opts.codexHome ?? join94(homeDir, ".codex");
+  const codexHome = opts.codexHome ?? join95(homeDir, ".codex");
   const hosts = setupHosts(opts.host);
   const decisions = resourceDecisions(resourcesDir, projectRoot, homeDir, codexHome, hosts);
   const ordered = [
@@ -59728,7 +59926,7 @@ async function setup(opts) {
     resources.push(await installResource(decision, resourcesDir, charterShas));
   }
   const scaffold = await initScaffold(projectRoot, now);
-  const allowlistPath = join94(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join95(projectRoot, ".claude", "settings.json");
   const allowlistApplied = hosts.has("claude-code");
   if (allowlistApplied)
     await allowlistSettingsFile(allowlistPath);
@@ -59745,16 +59943,16 @@ async function setup(opts) {
 
 // src/cli/resources.ts
 import { existsSync as existsSync16 } from "fs";
-import { dirname as dirname19, join as join95, resolve as resolve28 } from "path";
+import { dirname as dirname19, join as join96, resolve as resolve28 } from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 function resolveResourcesDir(from) {
   if (process.env.CLAUDE_PLUGIN_ROOT) {
-    return join95(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
+    return join96(process.env.CLAUDE_PLUGIN_ROOT, "resources", "managed");
   }
   const start = from ?? dirname19(fileURLToPath3(import.meta.url));
   let dir = start;
   for (;; ) {
-    const candidate = join95(dir, "resources", "managed");
+    const candidate = join96(dir, "resources", "managed");
     if (existsSync16(candidate))
       return candidate;
     const parent = dirname19(dir);
@@ -59762,7 +59960,7 @@ function resolveResourcesDir(from) {
       break;
     dir = parent;
   }
-  return join95(resolve28(start, "..", ".."), "resources", "managed");
+  return join96(resolve28(start, "..", ".."), "resources", "managed");
 }
 
 // src/cli/wizard/agent-link-step.ts
@@ -59981,16 +60179,16 @@ function includesCodex(host) {
 }
 async function resolveCodexPluginRoot(resourcesDir, projectRoot) {
   const currentPluginRoot = resolve29(resourcesDir, "..", "..");
-  const sibling = join96(dirname20(currentPluginRoot), "codex-plugin");
-  if (await fileExists(join96(sibling, ".codex-plugin", "plugin.json")))
+  const sibling = join97(dirname20(currentPluginRoot), "codex-plugin");
+  if (await fileExists(join97(sibling, ".codex-plugin", "plugin.json")))
     return sibling;
-  const currentDist = join96(currentPluginRoot, "dist", "codex-plugin");
-  if (await fileExists(join96(currentDist, ".codex-plugin", "plugin.json")))
+  const currentDist = join97(currentPluginRoot, "dist", "codex-plugin");
+  if (await fileExists(join97(currentDist, ".codex-plugin", "plugin.json")))
     return currentDist;
-  const projectDist = join96(projectRoot, "dist", "codex-plugin");
-  if (await fileExists(join96(projectDist, ".codex-plugin", "plugin.json")))
+  const projectDist = join97(projectRoot, "dist", "codex-plugin");
+  if (await fileExists(join97(projectDist, ".codex-plugin", "plugin.json")))
     return projectDist;
-  if (await fileExists(join96(currentPluginRoot, ".codex", "agents")))
+  if (await fileExists(join97(currentPluginRoot, ".codex", "agents")))
     return currentPluginRoot;
   return currentPluginRoot;
 }
@@ -60228,12 +60426,12 @@ var setupCommand = defineCommand({
 // src/cli/commands/teardown.ts
 import { rm as rm6 } from "fs/promises";
 import { homedir as homedir16 } from "os";
-import { join as join98, resolve as resolve30 } from "path";
+import { join as join99, resolve as resolve30 } from "path";
 init_fs();
 
 // src/core/teardown.ts
 import { copyFile as copyFile2, readFile as readFile22, rm as rm5 } from "fs/promises";
-import { join as join97 } from "path";
+import { join as join98 } from "path";
 init_fs();
 init_shared();
 var BACKUP_SUFFIX2 = ".ditto_bak";
@@ -60247,7 +60445,7 @@ async function teardown(opts) {
     const action = filename === CANONICAL_CHARTER_FILENAME ? await teardownCharterSource(decision.destPath, resourcesDir) : await teardownFile(decision.destPath);
     files.push({ filename, scope: decision.scope, destPath: decision.destPath, action });
   }
-  const allowlistPath = join97(projectRoot, ".claude", "settings.json");
+  const allowlistPath = join98(projectRoot, ".claude", "settings.json");
   await unallowlistSettingsFile(allowlistPath);
   const pushGateHook = await uninstallPushGateHook({ projectRoot });
   return { files, allowlistPath, pushGateHook };
@@ -60259,7 +60457,7 @@ async function uninstallPushGateHook(opts) {
   } catch {
     return { status: "left-untouched", hookPath: "", backupPath: null };
   }
-  const hookPath = join97(hooksDir, "pre-push");
+  const hookPath = join98(hooksDir, "pre-push");
   const backupPath = `${hookPath}${PUSH_GATE_HOOK_BACKUP_SUFFIX}`;
   if (!await fileExists(hookPath)) {
     return { status: "left-untouched", hookPath, backupPath: null };
@@ -60296,7 +60494,7 @@ async function teardownCharterSource(destPath, resourcesDir) {
   if (!await Bun.file(destPath).exists())
     return "left-untouched";
   const current = await readFile22(destPath, "utf8");
-  const bundlePath = join97(resourcesDir, CANONICAL_CHARTER_FILENAME);
+  const bundlePath = join98(resourcesDir, CANONICAL_CHARTER_FILENAME);
   const bundledCharter = await fileExists(bundlePath) ? await readFile22(bundlePath, "utf8") : "";
   const knownShas = [...await loadCharterShas(resourcesDir), normalizedSha256(bundledCharter)];
   const outcome = refreshCharterRegion({ current, bundledCharter: "", knownShas });
@@ -60361,7 +60559,7 @@ var teardownCommand = defineCommand({
       }
       const purge = await shouldPurge(Boolean(args.purge));
       if (purge) {
-        const dittoDir2 = join98(projectRoot, ".ditto");
+        const dittoDir2 = join99(projectRoot, ".ditto");
         await rm6(dittoDir2, { recursive: true, force: true });
         writeHuman(`allowlist: removed Bash(ditto:*) from ${result2.allowlistPath} \xB7 .ditto/ PURGED (${dittoDir2})`);
       } else {
@@ -60520,7 +60718,7 @@ init_shared();
 import { execFileSync as execFileSync8 } from "child_process";
 import { existsSync as existsSync17, lstatSync, realpathSync as realpathSync2 } from "fs";
 import { readFile as readFile23, readdir as readdir27, rm as rm7, writeFile as writeFile8 } from "fs/promises";
-import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute18, join as join99, relative as relative24, resolve as resolve31 } from "path";
+import { basename as basename7, dirname as dirname21, isAbsolute as isAbsolute18, join as join100, relative as relative24, resolve as resolve31 } from "path";
 var LOCAL_CLONE_ENV_FLAG = "DITTO_ALLOW_LOCAL_CLONE";
 function localTransportAllowed(env2 = process.env) {
   return env2[LOCAL_CLONE_ENV_FLAG] === "1";
@@ -60556,11 +60754,11 @@ function realpathNearestExisting(p2) {
   while (!existsSync17(cur)) {
     const parent = dirname21(cur);
     if (parent === cur)
-      return join99(realpathSync2(cur), ...tail);
+      return join100(realpathSync2(cur), ...tail);
     tail.unshift(basename7(cur));
     cur = parent;
   }
-  return tail.length === 0 ? realpathSync2(cur) : join99(realpathSync2(cur), ...tail);
+  return tail.length === 0 ? realpathSync2(cur) : join100(realpathSync2(cur), ...tail);
 }
 function resolveContainedDir(workspaceRoot, dir) {
   const root = resolve31(workspaceRoot);
@@ -60621,7 +60819,7 @@ async function installRootGateHook(target, workspaceRoot, hookTemplatePath) {
   return r4.status;
 }
 async function addToParentGitignore(workspaceRoot, dir) {
-  const giPath = join99(workspaceRoot, ".gitignore");
+  const giPath = join100(workspaceRoot, ".gitignore");
   const entry = `${dir.replace(/\/+$/, "")}/`;
   const bare = dir.replace(/\/+$/, "");
   let cur = "";
@@ -60765,7 +60963,7 @@ init_worktree();
 
 // src/core/worktree-drive.ts
 init_chain_drive();
-import { join as join100 } from "path";
+import { join as join101 } from "path";
 var TERMINAL_STATUSES4 = ["done", "abandoned"];
 var DEFAULT_MAX_DEPTH2 = 20;
 async function driveWorktrees(deps, options) {
@@ -60840,7 +61038,7 @@ async function driveWorktrees(deps, options) {
       continue;
     }
     drivenCount++;
-    const res = await deps.driveMember(join100(repoRoot, ws.worktree_path), member);
+    const res = await deps.driveMember(join101(repoRoot, ws.worktree_path), member);
     if (res.outcome !== "done") {
       ledger.push({
         member_id: member,
@@ -61171,4 +61369,4 @@ var dashDashIdx = process.argv.indexOf("--", 2);
 var wrapperRawArgs = dashDashIdx === -1 ? process.argv.slice(2) : process.argv.slice(2, dashDashIdx);
 await runMain(main, { rawArgs: wrapperRawArgs });
 
-//# ditto-src-stamp=b1ec911e245b01f28ee6739ae449f114110b48b07c1eccdf3c345e5df7f0c7a3
+//# ditto-src-stamp=f721c69a2b0a8e45e0c5bc002fe48f55147f6890cd696417e50ca885294363cd

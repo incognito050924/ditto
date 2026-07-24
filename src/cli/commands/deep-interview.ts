@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { readDeepInterviewConfigDefaults } from '~/core/ditto-config';
 import { resolveRepoRootForCreate } from '~/core/fs';
 import {
+  type FireRejectionResult,
   acknowledgeIntentDissent,
   checkReadiness,
   deriveIntentFragments,
@@ -12,6 +13,7 @@ import {
   projectInterviewDimensions,
   promotePremortem,
   promotePremortemPayload,
+  recordFireRejection,
   recordIntentDissent,
   recordIntentSemanticCritique,
   recordPremortemRefutation,
@@ -33,6 +35,7 @@ import {
 } from '~/core/question-context';
 import { WorkItemStore } from '~/core/work-item-store';
 import {
+  type InterviewState,
   infoGain,
   interviewDissentVerdicts,
   interviewSemanticVerdicts,
@@ -70,6 +73,14 @@ async function readWorkItemIntent(repoRoot: string, workItemId: string): Promise
   return item.source_request.trim().length > 0 ? item.source_request : item.goal;
 }
 
+// ALL still-unresolved ambiguity dimensions (NOT critical-only) — the set surfaced when the
+// interview is in the non-terminating 'parked' state (ac-5). Matches the driver's own
+// recordFireRejection unresolved computation (dimension ids); we only READ the state here, never
+// re-derive termination.
+function unresolvedDimensionIds(state: InterviewState): string[] {
+  return state.dimensions.filter((d) => d.state !== 'resolved').map((d) => d.id);
+}
+
 function parseJsonArg(raw: string): unknown {
   try {
     return JSON.parse(raw);
@@ -94,7 +105,8 @@ const startCmd = defineCommand({
     },
     questionCap: {
       type: 'string',
-      description: 'Maximum questions before exit=cap_reached (default 8)',
+      description:
+        'Advisory question-count guide (default 8). Advisory ONLY — does NOT terminate the interview; termination is governed by readiness ∧ user confirmation, with a fire-rejection backstop.',
       required: false,
     },
     generators: {
@@ -238,6 +250,8 @@ const recordTurnCmd = defineCommand({
         workItemId: args.workItem,
         payload: parsed.data,
       });
+      const parked = state.exit.reason === 'parked';
+      const unresolved = parked ? unresolvedDimensionIds(state) : [];
       if (format === 'json') {
         writeJson({
           work_item_id: state.work_item_id,
@@ -246,11 +260,18 @@ const recordTurnCmd = defineCommand({
           readiness_gate: state.readiness.gate,
           critical_unresolved: state.readiness.critical_unresolved,
           exit_reason: state.exit.reason,
+          // ac-4: convergence visibility — the confirmed/open intent split after a user answer
+          // (null on turns without a user answer, e.g. an internal reasoning turn).
+          intent_summary: state.intent_summary ?? null,
+          // ac-5: the non-terminating parked surface exposes the unresolved set (not converged).
+          parked,
+          unresolved,
         });
       } else {
         writeHuman(`Recorded turn for ${state.work_item_id}`);
+        // Advisory count only — the question count does NOT terminate the interview (ac-5).
         writeHuman(
-          `  questions_asked:     ${state.exit.questions_asked}/${state.exit.question_cap}`,
+          `  questions_asked:     ${state.exit.questions_asked} (참고용 권고치 ${state.exit.question_cap})`,
         );
         writeHuman(
           `  readiness:           ${state.readiness.score.toFixed(2)} (${state.readiness.gate})`,
@@ -258,6 +279,30 @@ const recordTurnCmd = defineCommand({
         writeHuman(
           `  critical_unresolved: ${state.readiness.critical_unresolved.join(', ') || '(none)'}`,
         );
+        // ac-4: reflect the converging intent back to the user after each answer.
+        if (state.intent_summary) {
+          writeHuman('');
+          writeHuman('지금까지 파악한 의도:');
+          if (state.intent_summary.confirmed.length > 0) {
+            for (const c of state.intent_summary.confirmed) writeHuman(`  - ${c}`);
+          } else {
+            writeHuman('  (아직 확정된 항목 없음)');
+          }
+          writeHuman('아직 열린 것:');
+          if (state.intent_summary.open.length > 0) {
+            for (const o of state.intent_summary.open) writeHuman(`  - ${o}`);
+          } else {
+            writeHuman('  (없음)');
+          }
+        }
+        // ac-5: parked is NON-terminating — surface the unresolved set instead of a converged look.
+        if (parked) {
+          writeHuman('');
+          writeHuman(
+            '인터뷰가 멈춤(parked) 상태입니다 — 수렴하지 못했고(완료 아님), 아직 해소되지 않은 항목이 남아 있습니다:',
+          );
+          for (const d of unresolved) writeHuman(`  - ${d}`);
+        }
       }
     } catch (err) {
       writeError(`record-turn failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -287,22 +332,37 @@ const checkReadinessCmd = defineCommand({
     const repoRoot = await resolveRepoRootForCreate();
     try {
       const result = await checkReadiness(repoRoot, args.workItem);
+      // ac-5: 'parked' is a NON-terminating state, not convergence and not a hard error — surface
+      // the unresolved set so it is never presented as ready or as a cap-terminate.
+      const parked = result.state.exit.reason === 'parked';
+      const unresolved = parked ? unresolvedDimensionIds(result.state) : [];
       if (format === 'json') {
         writeJson({
           work_item_id: result.state.work_item_id,
           pass: result.gate.pass,
           reasons: result.gate.reasons,
           critical_unresolved: result.critical_unresolved,
+          // Advisory only — the count no longer terminates (ac-5); kept for visibility.
           cap_reached: result.cap_reached,
           questions_asked: result.state.exit.questions_asked,
           readiness_score: result.state.readiness.score,
+          exit_reason: result.state.exit.reason,
+          parked,
+          unresolved,
         });
       } else {
         writeHuman(
           `Readiness for ${result.state.work_item_id}: ${result.gate.pass ? 'READY' : 'BLOCKED'}`,
         );
         for (const r of result.gate.reasons) writeHuman(`  - ${r}`);
-        if (result.cap_reached) writeHuman('  (question cap reached)');
+        // De-drift: the question count is advisory, not a termination control (ac-5).
+        if (result.cap_reached) writeHuman('  (질문 권고 수 도달 — 참고용, 종료 조건 아님)');
+        if (parked) {
+          writeHuman(
+            '  상태: 멈춤(parked) — 수렴하지 못했습니다(완료 아님). 아직 해소되지 않은 항목:',
+          );
+          for (const d of unresolved) writeHuman(`    - ${d}`);
+        }
       }
     } catch (err) {
       writeError(`check-readiness failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -588,6 +648,10 @@ const checkQuestionCmd = defineCommand({
       'Gate a question candidate against the presentation contract (why·value·user-language) before asking',
   },
   args: {
+    // Required so a rejected candidate advances the per-work-item fire-rejection counter (ac-5
+    // finite-termination backstop): without the work item id the counter cannot bump and the
+    // parked backstop would be a silent no-op. Mirrors the other subcommands' `workItem` arg.
+    workItem: { type: 'string', description: 'Work item id (wi_*)', required: true },
     json: {
       type: 'string',
       description:
@@ -659,9 +723,32 @@ const checkQuestionCmd = defineCommand({
           .map((signal) => signal.loanword),
       ),
     ];
+    // ac-5 hand-off: a rejected candidate advances the persistent monotone fire-rejection counter
+    // (the finite-termination backstop). At bound K recordFireRejection writes the NON-terminating
+    // 'parked' surface and returns parked:true with the unresolved set — we surface that instead of
+    // a bare error/exit. The core owns the counter + parked transition; we only surface it.
+    let rejection: FireRejectionResult | undefined;
+    if (!verdict.ok) {
+      rejection = await recordFireRejection(repoRoot, args.workItem);
+    }
     if (format === 'json') {
       // Echo the normalized candidate so the SKILL asks the CLEANED text (the display seam).
-      writeJson({ ...verdict, normalized, loanword_advisory: loanwordAdvisory });
+      writeJson({
+        ...verdict,
+        normalized,
+        loanword_advisory: loanwordAdvisory,
+        ...(rejection
+          ? {
+              fire_rejection: {
+                attempts: rejection.attempts,
+                bound: rejection.bound,
+                parked: rejection.parked,
+                unresolved: rejection.unresolved,
+                ...(rejection.parked ? { exit_reason: 'parked' } : {}),
+              },
+            }
+          : {}),
+      });
     } else if (verdict.ok) {
       writeHuman('check-question: ok (presentation contract satisfied)');
     } else {
@@ -670,6 +757,18 @@ const checkQuestionCmd = defineCommand({
       );
       for (const v of verdict.violations) {
         writeError(`  - ${v.field}: ${v.reason}`);
+      }
+      if (rejection?.parked) {
+        // ac-5: bound K reached — the interview transitions to the non-terminating parked state.
+        writeError('');
+        writeError(
+          `인터뷰가 멈춤(parked) 상태로 전환됐습니다 — 질문 거절이 ${rejection.bound}회에 도달해 더는 되풀이하지 않습니다(수렴 아님). 아직 해소되지 않은 항목:`,
+        );
+        for (const d of rejection.unresolved) writeError(`  - ${d}`);
+      } else if (rejection) {
+        writeError(
+          `  (질문 거절 ${rejection.attempts}/${rejection.bound}회 — ${rejection.bound}회에 도달하면 인터뷰가 멈춤 상태로 전환됩니다)`,
+        );
       }
     }
     // Non-zero exit on rejection so the SKILL/driver can branch (regenerate) on it.

@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723lny",
+  "seq": 11,
+  "actor": "workspace-write",
+  "event_id": "e92b2c8c9108e69ead39673a0f96213c1e0548d7804aa854a0ee27b566f22dc0",
+  "ts": "2026-07-24T03:21:34.056Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-9",
+    "verdict": "pass",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "src/core/question-context.ts",
+        "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/interview-driver.ts",
+        "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/gates.ts",
+        "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+        "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+      },
+      {
+        "kind": "command",
+        "command": "bun -e workItem.safeParse(.ditto/work-items/wi_260723lny/record.json)",
+        "summary": "VALID: schema parse ok; follow_ups count = 3, exit 0"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/work-items/wi_260723lny/record.json",
+        "summary": "follow_ups array (lines 79-95) with 3 user-verifiable observation entries"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src",
+        "summary": "286 pass/0 fail, 17 files"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "exit 0, 367 files"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+        "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+      }
+    ]
+  }
+}

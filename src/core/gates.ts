@@ -80,7 +80,10 @@ export function deterministicFloor(s: AmbiguitySnapshot): number {
 
 function ambiguityFromInterview(state: InterviewState): AmbiguitySnapshot {
   const open = state.dimensions.filter((d) => d.critical && d.state !== 'resolved').length;
-  const asked = state.questions.length;
+  // assumption-ratio denominator = FIRED turns only (wi_260723lny, ac-5 constraint-2). An
+  // internal (agent-only reasoning) turn must not dilute the ratio; a marker-ABSENT legacy
+  // question counts as fired, so pre-existing state's denominator is unchanged.
+  const asked = state.questions.reduce((n, q) => (q.turn_kind === 'internal' ? n : n + 1), 0);
   const assumption_ratio =
     asked === 0 ? (state.assumptions.length > 0 ? 1 : 0) : state.assumptions.length / asked;
   return {
@@ -133,6 +136,9 @@ export function deriveClosureMode(
       return gatePassed ? 'mutual_agreement' : 'ledger_only';
     case 'user_deferred':
     case 'user_owned_decision':
+    // 'parked' (wi_260723lny, ac-5) is a NON-terminating fire-impossible surface exposing the
+    // unresolved set — a blocked-like closure, so it maps to safe_default alongside 'blocked'.
+    case 'parked':
     case 'blocked':
       return 'safe_default';
   }

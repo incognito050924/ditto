@@ -153,6 +153,38 @@ export const interviewBranchEdge = z
 
 export type InterviewBranchEdge = z.infer<typeof interviewBranchEdge>;
 
+// 4-element choice structure (wi_260723lny, ac-1). Each presented option carries the
+// element-4 decision subfields so the user weighs a choice by its consequences, not a bare
+// label: `expected_effect` (what this option settles), `ripple` (downstream / side effects it
+// triggers), `root_cause_approach` (whether it addresses the root cause vs a symptom).
+// ADDITIVE-OPTIONAL at every level — the `options` array is optional on the question AND each
+// subfield is optional within an option — so pre-existing interview-state.json parse unchanged.
+// This is the same optional-in-schema / required-in-gate treatment as user_explanation /
+// recommended_answer: the check-question gate HARD-REQUIRES these subfields on an
+// options-bearing question, the schema only guarantees the shape (two-tier discipline).
+export const interviewQuestionOption = z
+  .object({
+    label: z.string().min(1).optional().describe('Short choice label shown to the user'),
+    expected_effect: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('What this option settles if chosen (the decision it resolves)'),
+    ripple: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Downstream / side effects this option would trigger'),
+    root_cause_approach: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('How this option addresses the root cause rather than a symptom'),
+  })
+  .describe('One presented choice with its element-4 decision subfields (ac-1)');
+
+export type InterviewQuestionOption = z.infer<typeof interviewQuestionOption>;
+
 export const interviewQuestion = z
   .object({
     id: z.string().min(1),
@@ -193,6 +225,37 @@ export const interviewQuestion = z
       .optional()
       .describe(
         'Evidence the question stems from (file:line | doc | domain) — the source behind why-we-ask',
+      ),
+    // 4-element choice set (wi_260723lny, ac-1). ADDITIVE-OPTIONAL: legacy questions (field
+    // absent) parse unchanged. The check-question gate HARD-REQUIRES the element-4 subfields on
+    // an options-bearing question (optional-in-schema / required-in-gate); the schema only
+    // carries the shape. Each element is an interviewQuestionOption (label + expected_effect +
+    // ripple + root_cause_approach).
+    options: z
+      .array(interviewQuestionOption)
+      .optional()
+      .describe('Element-4 choice set presented with this question (gate hard-requires subfields)'),
+    // internal/fired turn marker (wi_260723lny, ac-5). ADDITIVE-OPTIONAL metadata classifying
+    // whether this turn was FIRED at the user or an INTERNAL (agent-only) reasoning turn.
+    // ABSENT ⇒ 'fired': every legacy question with no marker counts as a fired turn, so
+    // pre-existing state parse and every existing questions[].length count are unchanged. The
+    // marker is FILTERABLE metadata (consumers drop turn_kind==='internal' when counting fired
+    // turns); it never mutates the array length itself.
+    turn_kind: z
+      .enum(['fired', 'internal'])
+      .optional()
+      .describe("Turn classification; ABSENT ⇒ 'fired' (legacy turns count as fired)"),
+    // Verbatim source-request anchor (wi_260723lny, ac-3). ADDITIVE-OPTIONAL, driver-filled:
+    // holds the user's ORIGINAL utterance verbatim (peer of why_matters / answer / dimension
+    // notes). It is a LEAK-SCAN-EXEMPT tier — the user's own words are never flagged for
+    // internal-vocab leaks — but this schema only HOLDS the field; the driver fills it and the
+    // scan-exemption placement live in other nodes. Absent on legacy state, so parse unchanged.
+    source_anchor: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Driver-filled verbatim original user utterance this question traces to (scan-exempt)',
       ),
     // Session-blind context-review outcome for a critical question (wi_260628, D2).
     // Optional so pre-existing interview-state.json parse unchanged; only critical
@@ -417,6 +480,12 @@ export const interviewState = z
         'user_deferred',
         'user_owned_decision',
         'cap_reached',
+        // Non-terminating exits (wi_260723lny, ac-5). ADDITIVE enum members — cap_reached stays
+        // for legacy parse + convergence-store deriveClosureMode. 'parked' gets its own
+        // deriveClosureMode case (added by another node); 'blocked' reuses the existing
+        // safe_default arm already present for the convergence exit.reason union.
+        'parked',
+        'blocked',
       ]),
       closure_mode: closureMode,
       question_cap: z.number().int().positive(),

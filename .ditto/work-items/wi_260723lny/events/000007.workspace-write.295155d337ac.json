@@ -1,0 +1,150 @@
+{
+  "schema_version": "0.1.0",
+  "work_item_id": "wi_260723lny",
+  "seq": 7,
+  "actor": "workspace-write",
+  "event_id": "295155d337ac3e29efb30e507ca28b3aa3c44820169cf718eac78bf71df3c8aa",
+  "ts": "2026-07-24T03:21:34.053Z",
+  "kind": "verdict",
+  "payload": {
+    "criterion_id": "ac-5",
+    "verdict": "partial",
+    "evidence": [
+      {
+        "kind": "file",
+        "path": "src/core/question-context.ts",
+        "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/interview-driver.ts",
+        "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/gates.ts",
+        "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+        "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+      },
+      {
+        "kind": "file",
+        "path": "skills/deep-interview/references/question-epistemology.md",
+        "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/question-context.ts",
+        "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/gates.ts",
+        "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+      },
+      {
+        "kind": "file",
+        "path": "src/core/interview-driver.ts",
+        "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/schemas/interview-state.test.ts",
+        "summary": "exit 0, 6 pass/0 fail — legacy parse invariant + parked/blocked/cap_reached + question_cap required + 4-element options"
+      },
+      {
+        "kind": "file",
+        "path": "src/schemas/interview-state.ts",
+        "summary": "lines 165-193 interviewQuestionOption; 234 options; 244 turn_kind; 253 source_anchor; 487-488 exit.reason parked/blocked (cap_reached+question_cap kept)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run schemas:export && bunx biome check",
+        "summary": "both exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/core/interview-driver.test.ts",
+        "summary": "9 pass/0 fail — cap-non-terminate, fire-impossible→parked, recordTurn-rejection→parked, internal-turn accounting invariant, anchor no-leak-trip, finalize-no-summary"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit && bun run lint",
+        "summary": "both exit 0 — type + lint clean after reopen"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src",
+        "summary": "286 pass/0 fail full regression"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit && bun run lint",
+        "summary": "both exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src",
+        "summary": "286 pass/0 fail — CLI + core integration green"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/core/gates.legacy-denominator.test.ts src/core/prism/finalize.equivalence.test.ts src/core/question-round.whitelist.test.ts",
+        "summary": "8 oracles green (within 286 pass full suite)"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "exit 0 — the question-context.test.ts noNonNullAssertion this node flagged is now resolved"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src",
+        "summary": "286 pass/0 fail"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+        "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+      },
+      {
+        "kind": "file",
+        "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+        "summary": "projected risk ledger, no completion-gate blocker"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src",
+        "summary": "286 pass/0 fail, 17 files"
+      },
+      {
+        "kind": "command",
+        "command": "bunx tsc --noEmit",
+        "summary": "exit 0"
+      },
+      {
+        "kind": "command",
+        "command": "bun run lint",
+        "summary": "exit 0, 367 files"
+      },
+      {
+        "kind": "command",
+        "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+        "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+      }
+    ]
+  }
+}

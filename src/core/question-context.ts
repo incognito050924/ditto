@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { fragmentKeywords } from '~/core/prism/engine';
-import type { InterviewBranchEdge } from '~/schemas/interview-state';
+import { type InterviewBranchEdge, interviewQuestionOption } from '~/schemas/interview-state';
 import { selfAnswerAttempt } from '~/schemas/question-gate';
 
 /**
@@ -31,6 +31,11 @@ export const questionContextCandidate = z
     recommended_answer: z.string().optional(),
     background: z.string().optional(),
     grounding: z.string().optional(),
+    // Element-4 choice set (wi_260723lny, ac-1). Mirrors interviewQuestion.options so the
+    // gate can inspect the choice-situation structure. ADDITIVE-OPTIONAL: a non-options
+    // question omits it. `validateQuestionContext` HARD-REQUIRES each option's element-4
+    // subfields when this is present and non-empty (optional-in-schema / required-in-gate).
+    options: z.array(interviewQuestionOption).optional(),
     self_answer_attempts: z.array(selfAnswerAttempt).optional(),
   })
   .describe('A gate-selected question candidate checked against the presentation contract');
@@ -223,6 +228,76 @@ export function validateQuestionContext(
       field: 'why_matters',
       reason: '이 답이 무엇을 정하는지(왜 중요한지)를 밝혀야 해요',
     });
+  }
+  // --- 4-element choice-situation contract (wi_260723lny, ac-1) ----------------
+  //
+  // An options-bearing question IS a choice-situation among answer propositions
+  // (question-epistemology §1): it may fire ONLY once it renders the choice in full.
+  // The schema carries `options`/subfields as optional shape; this gate HARD-REQUIRES
+  // them on an options-bearing question — the same optional-in-schema / required-in-gate
+  // discipline as user_explanation / recommended_answer. A structurally incomplete
+  // choice-situation is BLOCKED at the fire gate (element named), not merely styled.
+  // The 4 elements: (1) background, (2) issue/intent = user_explanation (checked above),
+  // (3) options + recommendation = recommended_answer (checked above), (4) per-option
+  // {expected_effect, ripple, root_cause_approach}.
+  const options = candidate.options ?? [];
+  const optionsBearing = options.length > 0;
+  if (optionsBearing) {
+    // Element 1 — background: the knowledge needed to even understand the alternatives.
+    if (isBlank(candidate.background)) {
+      violations.push({
+        field: 'background',
+        reason:
+          '선택지를 이해하는 데 필요한 배경 설명을 먼저 적어야 해요 (선택지가 있는 질문의 필수 요소)',
+      });
+    }
+    // Element 4 — per-option consequences: what selecting each proposition commits to.
+    // Read ONLY for structural PRESENCE (element-4 exists), never as an admission
+    // criterion: the magnitude/difference of an effect must not decide WHETHER the
+    // question fires — that judgment stays on the decision-ownership axis, per the
+    // is–ought gap (question-epistemology §6, ac-6).
+    options.forEach((opt, i) => {
+      if (isBlank(opt.expected_effect)) {
+        violations.push({
+          field: 'option_expected_effect',
+          reason: `${i + 1}번째 선택지에 "이걸 고르면 무엇이 정해지는지(예상 효과)"가 빠졌어요`,
+        });
+      }
+      if (isBlank(opt.ripple)) {
+        violations.push({
+          field: 'option_ripple',
+          reason: `${i + 1}번째 선택지에 "이걸 고르면 생기는 파급·부수 효과"가 빠졌어요`,
+        });
+      }
+      if (isBlank(opt.root_cause_approach)) {
+        violations.push({
+          field: 'option_root_cause_approach',
+          reason: `${i + 1}번째 선택지에 "근본 원인을 다루는지(임시방편인지)"가 빠졌어요`,
+        });
+      }
+    });
+    // Self-sufficiency (ac-2, question-epistemology §4): disclosure discharges the duty
+    // only AT THE POINT OF CHOICE, per option. When the general briefing (background) is
+    // large enough to overflow the choice-window budget, that disclosure MUST also be
+    // carried per-option — each option's own corresponding prose reaching the same window
+    // budget. A general/earlier briefing alone does NOT satisfy: the choice window's own
+    // content dominates the decision (§2), so the user cannot rely on remembered context.
+    if (needsBriefing(candidate.background ?? '')) {
+      const eachOptionSelfSufficient = options.every((opt) =>
+        needsBriefing(
+          [opt.expected_effect, opt.ripple, opt.root_cause_approach]
+            .filter((s): s is string => !isBlank(s))
+            .join('\n'),
+        ),
+      );
+      if (!eachOptionSelfSufficient) {
+        violations.push({
+          field: 'option_self_sufficiency',
+          reason:
+            '선택지 설명이 길어 안내가 필요한데, 그 안내가 일반 배경에만 있고 각 선택지에는 담겨 있지 않아요 — 고르는 순간 각 선택지 옆에서 바로 읽을 수 있게 선택지별 설명을 담아야 해요',
+        });
+      }
+    }
   }
   // ac-1 (D1): the user-reaching face (text + user_explanation + recommended_answer) must not
   // leak an un-glossed internal identifier. recommended_answer is shown to the user by default,

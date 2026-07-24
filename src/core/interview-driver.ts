@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { z } from 'zod';
 import type { Autopilot } from '~/schemas/autopilot';
 import type { CoverageMap } from '~/schemas/coverage';
@@ -23,6 +24,8 @@ import { nextCoverageNode, recordCoverageRound } from './coverage-loop';
 import { DEFAULT_DRY_K, recordDryRound, serializePlanDialog } from './coverage-manager';
 import { CoverageStore } from './coverage-store';
 import { loadFarFieldTaxonomy, warnMalformedTaxonomy } from './coverage-taxonomy';
+import { localDir } from './ditto-paths';
+import { readJson, writeJson } from './fs';
 import { type GateResult, type RiskAxes, deriveClosureMode, interviewReadinessGate } from './gates';
 import { IntentStore } from './intent-store';
 import { engageIntentDissent, mergeDissent } from './interview-dissent';
@@ -65,6 +68,121 @@ const DEFAULT_GENERATORS = 1;
 // information no longer justifies another user turn — closes tail rounds earlier
 // without touching question quality (the floor gates termination, not the questions).
 const DRY_FLOOR = 0.12;
+
+// ── turn-marker filtering (wi_260723lny, ac-5 constraint-2) ──────────────────
+// `turn_kind` classifies a recorded question as FIRED (asked at the user) or INTERNAL
+// (agent-only reasoning). ABSENT ⇒ fired: every legacy question with no marker counts as a
+// fired turn, so questions[]-derived accounting (questions_asked, the assumption-ratio
+// denominator, the novelty dry-counter) is unchanged for pre-existing state. Internal turns
+// are FILTERED OUT of every fired-turn count so a reasoning turn never pollutes the accounting
+// or silently consumes a user-facing slot.
+type TurnMarked = { turn_kind?: 'fired' | 'internal' | undefined };
+function isFiredTurn(q: TurnMarked): boolean {
+  return q.turn_kind !== 'internal';
+}
+
+/** Count of FIRED turns (legacy-absent marker = fired). */
+function firedTurnCount(questions: ReadonlyArray<TurnMarked>): number {
+  return questions.reduce((n, q) => (isFiredTurn(q) ? n + 1 : n), 0);
+}
+
+// ── post-answer intent summary (wi_260723lny, ac-4) ──────────────────────────
+// Confirmed/open split of the intent as understood SO FAR, returned to the CLI after a user
+// answer so the user sees the intent converging (deep-interview path only). Purely derived
+// from the recorded dimensions — NOT persisted (no schema field) and NOT on the finalize path
+// (finalizeInterview stays callable without per-answer summaries; prism finalizeFromDesignDoc
+// is unaffected).
+export interface IntentSummary {
+  /** Resolved ambiguity dimensions — the intent points now settled. */
+  confirmed: string[];
+  /** Still-unresolved ambiguity dimensions — the intent points still open. */
+  open: string[];
+}
+
+function summarizeIntent(state: InterviewState): IntentSummary {
+  const label = (d: InterviewDimension): string => d.notes.trim() || d.id;
+  return {
+    confirmed: state.dimensions.filter((d) => d.state === 'resolved').map(label),
+    open: state.dimensions.filter((d) => d.state !== 'resolved').map(label),
+  };
+}
+
+// ── finite-termination fire-rejection counter (wi_260723lny, ac-5) ───────────
+// The question CAP is removed as a terminator (see recordTurn below); the finite-termination
+// backstop is a PERSISTENT MONOTONE counter of fire REJECTIONS. Both rejection paths advance
+// it — recordTurn's write-path reject and the CLI check-question reject (via the exported
+// recordFireRejection) — so a fire-impossible worst case cannot livelock: at bound K the
+// interview transitions to a NON-terminating 'parked' surface exposing the unresolved set
+// instead of rejecting forever (finalize is NOT reached, status stays 'active', NOT converged).
+// The interview-state schema is frozen, so the counter lives in its own sidecar next to
+// interview-state.json.
+const fireRejectionState = z.object({
+  attempts: z.number().int().nonnegative().default(0),
+});
+const FIRE_REJECTION_BOUND = DEFAULT_DRY_K;
+
+function fireRejectionPath(repoRoot: string, workItemId: string): string {
+  return join(localDir(repoRoot, 'work-items', workItemId), 'interview-fire-rejections.json');
+}
+
+async function bumpFireRejections(repoRoot: string, workItemId: string): Promise<number> {
+  const path = fireRejectionPath(repoRoot, workItemId);
+  let attempts = 0;
+  if (await Bun.file(path).exists()) {
+    try {
+      attempts = (await readJson(path, fireRejectionState)).attempts;
+    } catch {
+      attempts = 0; // corrupt sidecar → restart the count (fail-open, never crash the fire path)
+    }
+  }
+  const next = attempts + 1;
+  await writeJson(path, fireRejectionState, { attempts: next });
+  return next;
+}
+
+export interface FireRejectionResult {
+  attempts: number;
+  bound: number;
+  parked: boolean;
+  /** ALL unresolved ambiguity dimensions (NOT critical-only) — the set surfaced when parked. */
+  unresolved: string[];
+  /** The written non-terminating parked state; present only when parked. */
+  state?: InterviewState;
+}
+
+/**
+ * Record ONE fire rejection and advance the persistent monotone counter (ac-5 finite
+ * termination). Shared by recordTurn's write-path reject and the CLI check-question reject (the
+ * hand-off: the CLI node calls this on a rejected candidate). At bound K it writes the
+ * NON-terminating 'parked' surface (exit.reason='parked', status stays 'active', finalize NOT
+ * reached) exposing EVERY unresolved dimension (not critical-only), and returns parked:true — so
+ * a fire-impossible worst case surfaces the unresolved set instead of livelocking on repeated
+ * rejections. A subsequent successful fired turn clears the parked exit.reason via recordTurn's
+ * normal write; the monotone counter is unaffected.
+ */
+export async function recordFireRejection(
+  repoRoot: string,
+  workItemId: string,
+  now?: Date,
+): Promise<FireRejectionResult> {
+  const attempts = await bumpFireRejections(repoRoot, workItemId);
+  const store = new InterviewStore(repoRoot);
+  const state = await store.get(workItemId);
+  const unresolved = state.dimensions.filter((d) => d.state !== 'resolved').map((d) => d.id);
+  if (attempts >= FIRE_REJECTION_BOUND && state.status === 'active') {
+    const parked = await store.write({
+      ...state,
+      updated_at: (now ?? new Date()).toISOString(),
+      exit: {
+        ...state.exit,
+        reason: 'parked',
+        closure_mode: deriveClosureMode('parked', false),
+      },
+    });
+    return { attempts, bound: FIRE_REJECTION_BOUND, parked: true, unresolved, state: parked };
+  }
+  return { attempts, bound: FIRE_REJECTION_BOUND, parked: false, unresolved };
+}
 
 export interface StartInput {
   workItemId: string;
@@ -197,6 +315,22 @@ export const recordTurnPayload = z
         branch_judgment: z
           .object({ opened: z.boolean(), why: z.string().min(1).optional() })
           .optional(),
+        // Turn classification (wi_260723lny, ac-5). ABSENT ⇒ 'fired'. An 'internal' turn is
+        // agent-only reasoning that must NOT pollute fired-turn accounting (questions_asked,
+        // assumption-ratio denominator, novelty dry-counter); the driver filters it out of every
+        // fired-turn count and never applies the intent-fidelity fire-block to it.
+        turn_kind: z.enum(['fired', 'internal']).optional(),
+        // ac-3 layer-2 intent-fidelity judgment. WHETHER a fired question distorts / shrinks /
+        // bias-injects the original intent is the LLM layer's judgment (the axis the
+        // question-generator/gate prompts already express); the driver is the deterministic
+        // enforcement point. Additive-optional: absent ⇒ no block (legacy callers parse
+        // unchanged). `preserves_intent:false` on a fired turn blocks the fire.
+        intent_fidelity: z
+          .object({
+            preserves_intent: z.boolean(),
+            basis: z.string().min(1).optional(),
+          })
+          .optional(),
       })
       .describe('The asked question and why it matters'),
     answer: z
@@ -294,11 +428,11 @@ export function guardBranchEdges(
 /**
  * Value-exhaustion signal (ac-6): all value branches spent (isBranchSeam) AND the seam
  * re-survey has been dry for K rounds (recordDryRound over the per-turn branch_judgment
- * sequence). This is the GOVERNING close signal for branch-walking, but it is subordinate to
- * the cap (checked first in recordTurn) and emitted as the existing 'diminishing_returns'
- * reason — never a new enum value. FAIL-OPEN and TOTAL: any integrity error, under-detection,
- * or missing judgment yields `false`, so control falls through to the unconditional cap
- * backstop — under-detection must never cause an early close.
+ * sequence). This is the GOVERNING close signal for branch-walking; it only *suggests* a close
+ * (finalize still requires readiness ∧ user confirmation) and is emitted as the existing
+ * 'diminishing_returns' reason — never a new enum value. FAIL-OPEN and TOTAL: any integrity
+ * error, under-detection, or missing judgment yields `false`, so control falls through without
+ * a close — under-detection must never cause an early close.
  */
 function isValueExhausted(state: InterviewState): boolean {
   try {
@@ -330,7 +464,7 @@ function isValueExhausted(state: InterviewState): boolean {
     );
     return seamDry >= DEFAULT_DRY_K;
   } catch {
-    return false; // fail-open: any error → NOT value-exhausted → cap backstop governs.
+    return false; // fail-open: any error → NOT value-exhausted → interview stays open.
   }
 }
 
@@ -371,9 +505,11 @@ export function orderPendingBranchWork(state: InterviewState): BranchWorkOrder {
 export async function recordTurn(
   repoRoot: string,
   input: RecordTurnInput,
-): Promise<InterviewState> {
+): Promise<InterviewState & { intent_summary?: IntentSummary }> {
   const store = new InterviewStore(repoRoot);
   const current = await store.get(input.workItemId);
+  // ac-3 layer-1 anchor source: the verbatim ORIGINAL user utterance lives on the Record.
+  const workItem = await new WorkItemStore(repoRoot).get(input.workItemId);
   const nowIso = (input.now ?? new Date()).toISOString();
   const { dimension: rawDimension, question, answer, readiness_score } = input.payload;
 
@@ -422,8 +558,29 @@ export async function recordTurn(
       leakedIdentifiers.length > 0
         ? ` | leaked identifiers: ${[...new Set(leakedIdentifiers)].join(', ')}`
         : '';
+    // Layer-1 (presentation contract) reject. Route through the finite-termination counter:
+    // at bound K return the non-terminating parked surface instead of throwing (no livelock).
+    const rejection = await recordFireRejection(repoRoot, input.workItemId, input.now);
+    if (rejection.parked && rejection.state !== undefined) return rejection.state;
     throw new Error(
-      `record-turn rejected: question surface failed the presentation contract before persist — violations: ${violations}${leaked}`,
+      `record-turn rejected: question surface failed the presentation contract before persist — violations: ${violations}${leaked} | fire attempts ${rejection.attempts}/${rejection.bound}`,
+    );
+  }
+
+  // ac-3 layer-2 (independent of layer-1): a FIRED turn whose question would distort / shrink /
+  // bias-inject the ORIGINAL intent is blocked at the write path. WHETHER a question distorts the
+  // intent is the LLM layer's judgment, carried on the payload as `intent_fidelity` (the axis the
+  // question-generator/gate prompts already express); this is the deterministic enforcement
+  // point. Internal (non-fired) turns never reach the user, so the block does not apply to them.
+  // Absent judgment ⇒ no block (fail-open, legacy callers parse unchanged). Same finite-
+  // termination routing as layer-1: at bound K, park instead of throw.
+  const firedTurn = question.turn_kind !== 'internal';
+  if (firedTurn && question.intent_fidelity?.preserves_intent === false) {
+    const basis = question.intent_fidelity.basis ? ` — ${question.intent_fidelity.basis}` : '';
+    const rejection = await recordFireRejection(repoRoot, input.workItemId, input.now);
+    if (rejection.parked && rejection.state !== undefined) return rejection.state;
+    throw new Error(
+      `record-turn rejected: fired question would distort/shrink/bias-inject the original intent (2nd-layer intent-fidelity block)${basis} | fire attempts ${rejection.attempts}/${rejection.bound}`,
     );
   }
 
@@ -479,6 +636,18 @@ export async function recordTurn(
     // Persist the self-answer ledger from the payload (was hardcoded `[]`), so the
     // "we checked X first" evidence behind asking the user survives (wi_260622ph8).
     self_answer_attempts: question.self_answer_attempts ?? [],
+    // ac-3 layer-1 anchor: driver-fill the verbatim ORIGINAL user utterance from the Record into
+    // the scan-EXEMPT tier (peer of why_matters / answer / dimension notes). It is NEVER an agent
+    // free-text field and is NOT run through the leak scan, so §/ADR/wi_ text in the user's own
+    // words never false-trips the presentation gate. Control chars are still stripped (display
+    // hygiene, mirroring the user-facing normalization above); skipped when the Record's
+    // source_request is empty so the schema's non-empty constraint is never tripped.
+    ...(normalizePresentedText(workItem.source_request).trim().length > 0
+      ? { source_anchor: normalizePresentedText(workItem.source_request) }
+      : {}),
+    // Turn classification (wi_260723lny, ac-5): persist the fired/internal marker so every
+    // fired-turn count filters internal turns out (legacy-absent marker = fired).
+    ...(question.turn_kind !== undefined ? { turn_kind: question.turn_kind } : {}),
     // Presentation-contract context carried with the question (wi_260622ph8), persisted in its
     // normalized (display-clean) form (ac-2).
     ...(normalizedUserExplanation !== undefined
@@ -555,14 +724,22 @@ export async function recordTurn(
     },
     exit: {
       ...current.exit,
-      questions_asked: current.questions.length + 1,
+      // questions_asked counts FIRED turns only (ac-5 constraint-2): an internal turn never
+      // consumes a user-facing slot. Legacy-absent marker = fired, so pre-existing state counts
+      // exactly as before. This is the value intent-quality-doctor D4 reads (exit.questions_asked).
+      questions_asked: firedTurnCount([...current.questions, appendedQuestion]),
     },
   };
   // Recompute the gate state but keep status='active' here — finalize toggles
-  // status='converged'. cap_reached is sticky once hit.
+  // status='converged'.
   const gateResult = interviewReadinessGate(updated);
-  const capReached = updated.exit.questions_asked >= updated.exit.question_cap;
   updated.readiness.gate = gateResult.pass ? 'ready' : 'blocked';
+  // Reaching this point means the turn was NOT rejected — firing is no longer impossible, so a
+  // prior 'parked' fire-impossible surface (ac-5) is cleared. 'parked' is a transient marker
+  // written only by the rejection path (recordFireRejection), never a terminal state.
+  if (updated.exit.reason === 'parked') {
+    updated.exit.reason = 'readiness_met';
+  }
   // Two COMPLEMENTARY dry axes signal diminishing returns (wi_260709d00 #14), combined by
   // OR — close when EITHER is exhausted, never make closing harder (this is a user loop):
   //   • value-dry: this round's score-gated marginal_gain fell below the dry floor.
@@ -571,36 +748,42 @@ export async function recordTurn(
   // questions[].novelty sequence) via coverage's recordDryRound — no stored cumulative
   // counter (same principle as coverage). A round with novelty!==false (true OR absent)
   // resets the counter, so legacy/unmeasured rounds never force an early close (fail-open).
-  const noveltyDryCounter = updated.questions.reduce(
-    (counter, q) =>
-      recordDryRound(counter, { admissibleBranchesAdded: q.novelty === false ? 0 : 1 }),
-    0,
-  );
+  // Reconstruct the novelty dry-counter over FIRED turns only (ac-5 constraint-2): an internal
+  // turn is not a fired round, so it must not advance/pollute the angle-exhaustion counter.
+  const noveltyDryCounter = updated.questions
+    .filter(isFiredTurn)
+    .reduce(
+      (counter, q) =>
+        recordDryRound(counter, { admissibleBranchesAdded: q.novelty === false ? 0 : 1 }),
+      0,
+    );
   const valueDry = question.marginal_gain !== undefined && question.marginal_gain < DRY_FLOOR;
   const angleDry = noveltyDryCounter >= DEFAULT_DRY_K;
   // Branch-walking value-exhaustion (wi_260713cx4, #27, ac-6): a THIRD dry axis, OR'd in like
   // the others. All value branches spent (isBranchSeam) AND the seam re-survey dry for K rounds
   // → the branch tree is walked out. FAIL-OPEN by construction (isValueExhausted returns false
-  // on any under-detection / error), so it can only ADD a close, never force one against the
-  // cap backstop. Emitted as the EXISTING 'diminishing_returns' — no new enum value.
+  // on any under-detection / error), so it can only ADD a close, never force one. Emitted as the
+  // EXISTING 'diminishing_returns' — no new enum value.
   const valueExhausted = isValueExhausted(updated);
-  if (capReached && updated.status === 'active') {
-    // cap is the UNCONDITIONAL numeric ceiling — checked FIRST so it WINS over value-exhaustion
-    // and the dry axes (autonomy-liveness fail-closed terminator).
-    updated.exit.reason = 'cap_reached';
-  } else if (
-    (valueDry || angleDry || valueExhausted) &&
-    !gateResult.pass &&
-    updated.status === 'active'
-  ) {
-    // Exclusive with cap_reached (cap wins, set above). Termination is *suggested* via
-    // exit.reason; finalize still requires readiness ∧ user confirmation (gate not bypassed).
+  // ac-5: the question CAP no longer TERMINATES. Termination is governed by "all raised questions
+  // (unresolved ambiguity) resolved" — i.e. the readiness gate ∧ user confirmation enforced at
+  // finalize; a still-blocked gate keeps the interview open regardless of questions_asked. The
+  // finite-termination backstop for a fire-impossible worst case is the persistent monotone
+  // fire-rejection counter (recordFireRejection → 'parked'), NOT a mechanical cap terminate. The
+  // dry axes still *suggest* a diminishing-returns close; finalize is never bypassed by them.
+  if ((valueDry || angleDry || valueExhausted) && !gateResult.pass && updated.status === 'active') {
     updated.exit.reason = 'diminishing_returns';
   }
-  // Keep closure_mode consistent with the current (reason, gate): a cap hit
-  // while the gate is still blocked is ledger_only, not mutual_agreement.
+  // Keep closure_mode consistent with the current (reason, gate): a diminishing close while the
+  // gate is still blocked is ledger_only, not mutual_agreement.
   updated.exit.closure_mode = deriveClosureMode(updated.exit.reason, gateResult.pass);
-  return store.write(updated);
+  const written = await store.write(updated);
+  // ac-4: after a USER answer, return the confirmed/open intent summary so the CLI can reflect
+  // the converging intent back to the user (deep-interview path only). Additive-optional on the
+  // return — the finalize path never produces or requires it (prism stays unaffected).
+  return answer?.kind === 'user'
+    ? { ...written, intent_summary: summarizeIntent(written) }
+    : written;
 }
 
 export interface CheckReadinessResult {

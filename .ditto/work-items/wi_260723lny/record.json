@@ -1,0 +1,1077 @@
+{
+  "schema_version": "0.1.0",
+  "id": "wi_260723lny",
+  "title": "deep-interview 의도 파악 UX·효능 개선 — 배경 컨텍스트 부족·의도 변질·수렴 가시성 부재",
+  "source_request": "deep-interview 의도 파악 UX·효능 개선 — 배경 컨텍스트 부족·의도 변질·수렴 가시성 부재\n\n## 사용자 피드백 (2026-07-23, 기능 패리티 감사 인터뷰 실사용 중)\n\n의도 파악 UX와 효능이 너무 나빠서 추후 개선 필요. 사용자 원문:\n\n- 사용자 질문 시 선택에 필요한 배경 설명과 각 선택에 대한 예상 효과나 어떤 문제를 어떻게 접근하여 어떻게 해결하는지 등의 컨텍스트 거의 없음\n- 의도 파악 중에 최초 사용자 발화에 담긴 의도가 퇴색/변질/축소 되는 듯한 질문이 이어짐\n- 도중에 사용자 의도가 어떻게 굳어가는지/확정/구체화 되어가는지 알 수가 없음. 선택 후에 ditto 가 파악한 사용자 의도가 보이지 않기 때문에 사용자는 ditto 가 방향을 잘 잡고 찾아가는지 알 수 없음\n\n## 발생 맥락 (검증된 사실)\n\n- 발생 인터뷰: wi_260723czc(#67 패리티 감사) deep-interview — 생성기 6 fan-out·게이트 fan-in·세션-맹검 리뷰·single-fire 경로로 사용자 질문 5회 진행, finalize까지 완주한 세션에서의 관찰\n- 당시 표면: 질문마다 배경 브리핑+추천 답을 제시했고 check-question·맹검 리뷰 게이트를 통과했음에도 위 피드백이 나옴 — 게이트 통과 ≠ 사용자 체감 충분\n- 질문 상한(8)의 대부분이 내부 기록 턴으로 소진되는 현상도 같은 세션에서 관찰됨(questions_asked=10 중 사용자 발사 5회)",
+  "goal": "deep-interview에서 관찰된 세 불편(선택 컨텍스트 부족·최초 발화 의도 변질·수렴 가시성 부재)이 다음 실사용에서 재발하지 않도록, 에이전트 규율이 아닌 구조(스키마·게이트·표면 생성)로 강제한다",
+  "acceptance_criteria": [
+    {
+      "id": "ac-1",
+      "statement": "선택지 있는 사용자향 질문은 4요소(배경/의도·해결 대상/선택지·추천/선택지별 기대효과·파급효과·근본원인 해결) 구조 필드 없이 발사가 게이트에서 차단되고, 사용자 표면이 검증된 구조에서 생성된다",
+      "verdict": "partial",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/schemas/interview-state.test.ts",
+          "summary": "exit 0, 6 pass/0 fail — legacy parse invariant + parked/blocked/cap_reached + question_cap required + 4-element options"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/interview-state.ts",
+          "summary": "lines 165-193 interviewQuestionOption; 234 options; 244 turn_kind; 253 source_anchor; 487-488 exit.reason parked/blocked (cap_reached+question_cap kept)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run schemas:export && bunx biome check",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0 — 367 files checked, noNonNullAssertion cleared"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/question-context.test.ts",
+          "summary": "exit 0, 10 pass/0 fail, 21 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail — CLI + core integration green"
+        },
+        {
+          "kind": "command",
+          "command": "npm run build:plugin",
+          "summary": "exit 0, dist/plugin refreshed, fixed line grep-confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "npm run check:no-design-doc-refs",
+          "summary": "exit 0 — charter §4-11 guard"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/SKILL.md",
+          "summary": "line 92 check-question invocation now passes --work-item <wi>"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-2",
+      "statement": "결정 표면 자기충족이 계약화된다: 선택창 한도 내 자기충족 판정 + 한도 초과 시 선택 직전 선택지별 명시 대응 프로즈 폴백만 인정",
+      "verdict": "partial",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0 — 367 files checked, noNonNullAssertion cleared"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/question-context.test.ts",
+          "summary": "exit 0, 10 pass/0 fail, 21 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "npm run build:plugin",
+          "summary": "exit 0, dist/plugin refreshed, fixed line grep-confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "npm run check:no-design-doc-refs",
+          "summary": "exit 0 — charter §4-11 guard"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/SKILL.md",
+          "summary": "line 92 check-question invocation now passes --work-item <wi>"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-3",
+      "statement": "질문 생성 패킷에 원 발화(verbatim)가 필수 재앵커링되고, 원 의도를 변질·축소시키거나 편향을 주입할 우려가 있는 질문은 발사가 차단된다(2층 제어)",
+      "verdict": "partial",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts",
+          "summary": "9 pass/0 fail — cap-non-terminate, fire-impossible→parked, recordTurn-rejection→parked, internal-turn accounting invariant, anchor no-leak-trip, finalize-no-summary"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0 — type + lint clean after reopen"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail full regression"
+        },
+        {
+          "kind": "command",
+          "command": "npm run build:plugin",
+          "summary": "exit 0, dist/plugin refreshed, fixed line grep-confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "npm run check:no-design-doc-refs",
+          "summary": "exit 0 — charter §4-11 guard"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/SKILL.md",
+          "summary": "line 92 check-question invocation now passes --work-item <wi>"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-4",
+      "statement": "매 사용자 답변 기록 후 확정/열림 의도 요약이 대화 표면에 배선된다 — deep-interview 경로 한정, prism finalize 경로 비파손",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts",
+          "summary": "9 pass/0 fail — cap-non-terminate, fire-impossible→parked, recordTurn-rejection→parked, internal-turn accounting invariant, anchor no-leak-trip, finalize-no-summary"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0 — type + lint clean after reopen"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail full regression"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail — CLI + core integration green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-5",
+      "statement": "질문 개수 상한이 종료 판정에서 제거되고 '제기된 모든 질문(미해소 모호성)이 해소되었나' 기준으로 대체되며, 미해소 질문을 남긴 채 기계적으로 종료하는 경로가 존재하지 않는다. 해소 우주를 critical 차원 전용 준비도로 축소 해석하는 것은 금지된다(현행 준비도 게이트는 critical만 차단하므로 문면과 비동치). 발사 가능한 질문이 더 없을 때는 기계 종료 대신 미해소 집합을 드러낸 비종료 상태로 표면화한다(백스톱 메커니즘 설계는 에이전트 소관). 내부/발사 턴 구분 필드는 additive·legacy 호환이며, 마커-부재 legacy 혼재 상태에서 cap 판정과 준비도 모호성 하한 분모(questions 배열 의미)의 불변을 고정하는 계약 테스트로 증명한다",
+      "verdict": "partial",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/schemas/interview-state.test.ts",
+          "summary": "exit 0, 6 pass/0 fail — legacy parse invariant + parked/blocked/cap_reached + question_cap required + 4-element options"
+        },
+        {
+          "kind": "file",
+          "path": "src/schemas/interview-state.ts",
+          "summary": "lines 165-193 interviewQuestionOption; 234 options; 244 turn_kind; 253 source_anchor; 487-488 exit.reason parked/blocked (cap_reached+question_cap kept)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run schemas:export && bunx biome check",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts",
+          "summary": "9 pass/0 fail — cap-non-terminate, fire-impossible→parked, recordTurn-rejection→parked, internal-turn accounting invariant, anchor no-leak-trip, finalize-no-summary"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0 — type + lint clean after reopen"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail full regression"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit && bun run lint",
+          "summary": "both exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail — CLI + core integration green"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/gates.legacy-denominator.test.ts src/core/prism/finalize.equivalence.test.ts src/core/question-round.whitelist.test.ts",
+          "summary": "8 oracles green (within 286 pass full suite)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0 — the question-context.test.ts noNonNullAssertion this node flagged is now resolved"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-6",
+      "statement": "질문 어드미션이 결정 소유권 축을 갖는다: 사용자만 내릴 수 있는 결정만 발사되고, 절차·기록 결정은 에이전트 소유+공개로 처리된다. 답변 후보별 기대효과·차이 분석을 어드미션 판정 기준으로 기계화하지 않는다 — 그 분석은 사용자향 결정 표면 전용이다",
+      "verdict": "partial",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0 — 367 files checked, noNonNullAssertion cleared"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/question-context.test.ts",
+          "summary": "exit 0, 10 pass/0 fail, 21 assertions"
+        },
+        {
+          "kind": "command",
+          "command": "npm run build:plugin",
+          "summary": "exit 0, dist/plugin refreshed, fixed line grep-confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "npm run check:no-design-doc-refs",
+          "summary": "exit 0 — charter §4-11 guard"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/SKILL.md",
+          "summary": "line 92 check-question invocation now passes --work-item <wi>"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-7",
+      "statement": "철학 인식론 기반 조사 산출물이 저장소에 존재하고, 질문·선택지 설계 결정이 그 산출물을 인용한다",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "url",
+          "url": "https://plato.stanford.edu/entries/questions/",
+          "summary": "SEP Questions — 질문=answer propositions 간 choice-situation, answerhood=issue 해소 (ac-1 근거)"
+        },
+        {
+          "kind": "url",
+          "url": "https://stanford.edu/class/psych205/papers/Tversky-Kahneman-1981.pdf",
+          "summary": "T-K 1981 framing effect — 서술만으로 선호 역전 (ac-2/ac-3 근거)"
+        },
+        {
+          "kind": "url",
+          "url": "https://app.nova.edu/toolbox/instructionalproducts/edd8124/articles/1975-Loftus.pdf",
+          "summary": "Loftus-Palmer 1974 — 단어 하나가 기억된 내용 재구성 (verbatim 재앵커 mandatory 근거, ac-3)"
+        },
+        {
+          "kind": "url",
+          "url": "https://plato.stanford.edu/entries/informed-consent/",
+          "summary": "SEP Informed Consent — 적절한 이해 없이 meaningful choice 불가 (ac-2 자기충족 근거)"
+        },
+        {
+          "kind": "url",
+          "url": "https://plato.stanford.edu/entries/hume-moral/",
+          "summary": "SEP Hume — is-ought gap: 효과 분석(is)은 어드미션(ought) 기준 불가 (ac-6 근거)"
+        },
+        {
+          "kind": "note",
+          "summary": "findings 상세는 scratchpad/epistemology-findings.md 및 조사 반환 JSON — docs 노드가 references/question-epistemology.md로 저술"
+        },
+        {
+          "kind": "command",
+          "command": "ls -l skills/deep-interview/references/question-epistemology.md",
+          "summary": "exit 0, 9987 bytes"
+        },
+        {
+          "kind": "command",
+          "command": "grep -c https:// skills/deep-interview/references/question-epistemology.md",
+          "summary": "5 primary sources present"
+        },
+        {
+          "kind": "command",
+          "command": "grep -nE wi_/autopilot.json/intent.json/scratchpad",
+          "summary": "NONE — charter §4-11 clean"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "the artifact"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/references/question-epistemology.md",
+          "summary": "6 principles cited across surfaces a-f (ac-7 design-layer citation)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext fire gate :200-243; needsBriefing/OPTION_DESCRIPTION_BUDGET :353-366; control-char strip :252-271"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "assumption_ratio denom :81-91; readiness critical-only :95-112; deriveClosureMode blocked→safe_default :137"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap terminator :587-590; rejection throw :419-428; questions_asked :558; novelty dry :574-578; driver fills source_request :768-772"
+        },
+        {
+          "kind": "command",
+          "command": "npm run build:plugin",
+          "summary": "exit 0, dist/plugin refreshed, fixed line grep-confirmed"
+        },
+        {
+          "kind": "command",
+          "command": "npm run check:no-design-doc-refs",
+          "summary": "exit 0 — charter §4-11 guard"
+        },
+        {
+          "kind": "file",
+          "path": "skills/deep-interview/SKILL.md",
+          "summary": "line 92 check-question invocation now passes --work-item <wi>"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-8",
+      "statement": "prism finalize-from-doc·appendValueRound 경로 동등성 스모크와 기존 테스트 스위트가 green이고, 무커버 seam별 명명 회귀 oracle이 존재한다: gates.ts legacy 분모(questions.length 의미) 불변 · question-round 화이트리스트 확장 시 prism appendValueRound 신규 거절 0 · prism finalize 요약 배선 additive-optional(finalizeFromDesignDoc가 per-answer 요약 없이 finalizeInterview 호출 가능)",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/gates.legacy-denominator.test.ts src/core/prism/finalize.equivalence.test.ts src/core/question-round.whitelist.test.ts",
+          "summary": "8 oracles green (within 286 pass full suite)"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0 — the question-context.test.ts noNonNullAssertion this node flagged is now resolved"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/reviewer-output.json",
+          "summary": "reviewer-output verdict=approve, 0 high-risk without evidence"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/work-items/wi_260723lny/acg-review.json",
+          "summary": "projected risk ledger, no completion-gate blocker"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    },
+    {
+      "id": "ac-9",
+      "statement": "사용자 직접 검증용 합격 신호 3건(질문마다 배경·효과만으로 결정 가능/답변마다 파악된 의도 노출/질문 전부 사용자 도달)이 후속 관찰 항목으로 기록되어 있다 — 기록 없이는 close 불가",
+      "verdict": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "src/core/question-context.ts",
+          "summary": "validateQuestionContext가 2요소만 게이트·4요소 구조 부재 (ac-1 공백)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/interview-driver.ts",
+          "summary": "cap이 유일 무조건 종료기(:587-590), finalize 이중 게이트 (ac-5 대상·liveness)"
+        },
+        {
+          "kind": "file",
+          "path": "src/core/gates.ts",
+          "summary": "questions.length 분모(:81-91)·critical-전용 준비도(:95-112) (ac-5·ac-8 seam)"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/local/runs/wi_260723lny/coverage.json",
+          "summary": "far-field 스윕 종료: 21 resolved·7 out_of_scope·2 파생 depth-2 해소"
+        },
+        {
+          "kind": "command",
+          "command": "bun -e workItem.safeParse(.ditto/work-items/wi_260723lny/record.json)",
+          "summary": "VALID: schema parse ok; follow_ups count = 3, exit 0"
+        },
+        {
+          "kind": "file",
+          "path": ".ditto/work-items/wi_260723lny/record.json",
+          "summary": "follow_ups array (lines 79-95) with 3 user-verifiable observation entries"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src",
+          "summary": "286 pass/0 fail, 17 files"
+        },
+        {
+          "kind": "command",
+          "command": "bunx tsc --noEmit",
+          "summary": "exit 0"
+        },
+        {
+          "kind": "command",
+          "command": "bun run lint",
+          "summary": "exit 0, 367 files"
+        },
+        {
+          "kind": "command",
+          "command": "bun test src/core/interview-driver.test.ts src/core/gates.legacy-denominator.test.ts",
+          "summary": "ac-5 load-bearing oracles 15 pass — cap non-terminating, parked, counter both paths, legacy-mixed invariants"
+        }
+      ]
+    }
+  ],
+  "status": "in_progress",
+  "owner_profile": "workspace-write",
+  "child_ids": [],
+  "changed_files": [
+    "skills/deep-interview/references/question-epistemology.md",
+    ".ditto/work-items/wi_260723lny/record.json",
+    "skills/deep-interview/SKILL.md",
+    "agents/question-generator.md",
+    "agents/question-gate.md",
+    "src/schemas/interview-state.ts",
+    "src/schemas/interview-state.test.ts",
+    "src/core/question-context.ts",
+    "src/core/question-context.test.ts",
+    "src/core/interview-driver.ts",
+    "src/core/gates.ts",
+    "src/core/interview-driver.test.ts",
+    "src/cli/commands/deep-interview.ts",
+    "src/core/gates.legacy-denominator.test.ts",
+    "src/core/question-round.whitelist.test.ts",
+    "src/core/prism/finalize.equivalence.test.ts"
+  ],
+  "worktrees": [],
+  "declared_risk": {
+    "non_local": true
+  },
+  "follow_ups": [
+    {
+      "kind": "idea",
+      "note": "후속 관찰(ac-9, 사용자 직접 검증): 다음 실사용 deep-interview에서, 각 질문에 딸린 배경 설명과 선택지별 기대효과만으로 외부 컨텍스트를 더 찾지 않고도 결정을 내릴 수 있었는지 사용자가 확인한다.",
+      "resolved": false
+    },
+    {
+      "kind": "idea",
+      "note": "후속 관찰(ac-9, 사용자 직접 검증): 다음 실사용 deep-interview에서, 답변을 낼 때마다 ditto가 파악한 의도가 사용자에게 되비쳐 보였는지(수렴 가시성) 사용자가 확인한다.",
+      "resolved": false
+    },
+    {
+      "kind": "idea",
+      "note": "후속 관찰(ac-9, 사용자 직접 검증): 다음 실사용 deep-interview에서, 제기된 질문이 내부 기록 턴에 삼켜지지 않고 전부 사용자에게 도달했는지 사용자가 확인한다.",
+      "resolved": false
+    }
+  ],
+  "github_issue": {
+    "repo": "incognito050924/ditto",
+    "number": 77,
+    "project_item_id": "PVTI_lAHOAT55Bc4Bb3Q0zgz08QU"
+  },
+  "risks": [],
+  "runs": [],
+  "started_at_sha": "1fc6afe5eb7aedf1b730eba5a6c5b14ed70c3ac8",
+  "started_untracked_baseline": [
+    ".ditto/memory/events/memevt_retro_d41f5ed3e9adb43b.json",
+    ".ditto/memory/events/memevt_retro_dbe82b9da75d5241.json",
+    ".ditto/memory/events/memevt_retro_e5eae7f9bbed248f.json",
+    ".ditto/work-items/wi_2607130ld/",
+    ".ditto/work-items/wi_2607130oc/",
+    ".ditto/work-items/wi_26071389d/",
+    ".ditto/work-items/wi_2607138pr/",
+    ".ditto/work-items/wi_260713be4/",
+    ".ditto/work-items/wi_260713bo1/",
+    ".ditto/work-items/wi_260713kyb/",
+    ".ditto/work-items/wi_260713tsw/",
+    ".ditto/work-items/wi_260713w0g/",
+    ".ditto/work-items/wi_2607239ax/",
+    ".ditto/work-items/wi_260723lny/",
+    ".ditto/work-items/wi_260723tck/",
+    ".ditto/work-items/wi_260723urq/",
+    ".ditto/work-items/wi_260723xh7/"
+  ],
+  "created_at": "2026-07-23T12:48:43.071Z",
+  "updated_at": "2026-07-24T03:21:34.049Z"
+}
