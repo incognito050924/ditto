@@ -1,6 +1,9 @@
 import { defineCommand, runMain } from 'citty';
 
+import { githubCommand } from './commands/github';
+import { hookCommand } from './commands/hook';
 import { knowledgeCommand } from './commands/knowledge';
+import { memoryCommand } from './commands/memory';
 
 /**
  * Rebuild host CLI spine. Fronts the rebuilt engines (imported by RELATIVE path
@@ -17,6 +20,9 @@ const main = defineCommand({
   },
   subCommands: {
     knowledge: knowledgeCommand,
+    memory: memoryCommand,
+    github: githubCommand,
+    hook: hookCommand,
   },
 });
 
