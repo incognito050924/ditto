@@ -1,12 +1,15 @@
 import { defineCommand, runMain } from 'citty';
 
+import { acgCommand } from './commands/acg';
 import { coverageCommand } from './commands/coverage';
+import { driveCommand } from './commands/drive';
 import { gateCommand } from './commands/gate';
 import { githubCommand } from './commands/github';
 import { handoffCommand } from './commands/handoff';
 import { hookCommand } from './commands/hook';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
+import { verifyCommand } from './commands/verify';
 
 /**
  * Rebuild host CLI spine. Fronts the rebuilt engines (imported by RELATIVE path
@@ -29,6 +32,9 @@ const main = defineCommand({
     handoff: handoffCommand,
     gate: gateCommand,
     coverage: coverageCommand,
+    verify: verifyCommand,
+    acg: acgCommand,
+    drive: driveCommand,
   },
 });
 
