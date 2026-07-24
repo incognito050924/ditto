@@ -246,6 +246,8 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
+# rebuild/coverage/ is a source module (far-field pre-mortem coverage), not istanbul output
+!rebuild/coverage/
 
 # nyc test coverage
 .nyc_output
