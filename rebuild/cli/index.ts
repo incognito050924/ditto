@@ -1,6 +1,9 @@
 import { defineCommand, runMain } from 'citty';
 
+import { coverageCommand } from './commands/coverage';
+import { gateCommand } from './commands/gate';
 import { githubCommand } from './commands/github';
+import { handoffCommand } from './commands/handoff';
 import { hookCommand } from './commands/hook';
 import { knowledgeCommand } from './commands/knowledge';
 import { memoryCommand } from './commands/memory';
@@ -23,6 +26,9 @@ const main = defineCommand({
     memory: memoryCommand,
     github: githubCommand,
     hook: hookCommand,
+    handoff: handoffCommand,
+    gate: gateCommand,
+    coverage: coverageCommand,
   },
 });
 
