@@ -11,6 +11,7 @@
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "build": "node scripts/build-bin.mjs dist/ditto",
     "build:bin": "node scripts/build-bin.mjs bin/ditto",
+    "build:bin-rebuild": "node scripts/build-bin.mjs dist/ditto-rebuild rebuild/cli/index.ts rebuild",
     "build:plugin": "node scripts/build-plugin.mjs",
     "build:codex-plugin": "bun scripts/build-codex-plugin.mjs",
     "release": "node scripts/release.mjs",

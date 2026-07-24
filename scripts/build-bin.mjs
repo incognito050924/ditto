@@ -36,7 +36,10 @@ export function syncManagedResources() {
 // sha256 over repo-relative posix path + NUL + content + NUL for every `.ts`
 // under src/, path-sorted.
 const NUL = String.fromCharCode(0); // same separator as build-stamp.ts
-export function sourceStamp() {
+// Stamp over a source tree (default `src`). The rebuild host surface stamps over
+// `rebuild` instead — same algorithm, different tree — so the stamp stays a
+// faithful build-drift marker for whichever CLI the bin was bundled from.
+export function sourceStamp(stampDir = 'src') {
   const list = (rel) => {
     const out = [];
     for (const e of readdirSync(join(REPO, rel), { withFileTypes: true })) {
@@ -47,7 +50,7 @@ export function sourceStamp() {
     return out;
   };
   const h = createHash('sha256');
-  for (const rel of list('src').sort()) {
+  for (const rel of list(stampDir).sort()) {
     h.update(rel);
     h.update(NUL);
     h.update(readFileSync(join(REPO, rel)));
@@ -56,8 +59,12 @@ export function sourceStamp() {
   return h.digest('hex');
 }
 
-export function buildBinInto(outFile) {
-  const args = ['build', 'src/cli/index.ts', '--target=bun', '--outfile', outFile];
+// `entry` is the CLI entrypoint to bundle; `stampDir` the tree the drift stamp
+// hashes. Both default to the old `src` surface so the live `bin/ditto` build
+// (and build-plugin's call) is unchanged; the rebuild host surface passes
+// `rebuild/cli/index.ts` + `rebuild` (the #69 flip repoints the defaults).
+export function buildBinInto(outFile, entry = 'src/cli/index.ts', stampDir = 'src') {
+  const args = ['build', entry, '--target=bun', '--outfile', outFile];
   const r = spawnSync('bun', args, { cwd: REPO, stdio: 'inherit' });
   if (r.error && r.error.code === 'ENOENT') {
     throw new Error('bun not found on PATH — install bun ≥1.3 to bundle the CLI');
@@ -65,7 +72,7 @@ export function buildBinInto(outFile) {
   if (r.status !== 0) throw new Error(`bin bundle failed (exit ${r.status})`);
   const bundle = readFileSync(outFile, 'utf8');
   // Trailing stamp lets `ditto doctor distribution` flag a stale build (R5).
-  writeFileSync(outFile, `#!/usr/bin/env bun\n${bundle}\n//# ditto-src-stamp=${sourceStamp()}\n`);
+  writeFileSync(outFile, `#!/usr/bin/env bun\n${bundle}\n//# ditto-src-stamp=${sourceStamp(stampDir)}\n`);
   if (!IS_WIN) chmodSync(outFile, 0o755);
   // Thin-launcher separation: the bundle is portable JS, so `bun <bundle>` runs it
   // on ANY OS — Windows needs no native PE compile, only this batch shim that
@@ -76,17 +83,24 @@ export function buildBinInto(outFile) {
   writeFileSync(`${outFile}.cmd`, `@bun "%~dp0${basename(outFile)}" %*\r\n`);
 }
 
-// CLI entry: `node scripts/build-bin.mjs <outfile>`. No-op when imported.
+// CLI entry: `node scripts/build-bin.mjs <outfile> [entry] [stampDir]`. The
+// optional entry/stampDir bundle the rebuild host surface
+// (`rebuild/cli/index.ts rebuild`) without touching the default src build.
+// No-op when imported.
 if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? '')) {
   const outArg = process.argv[2];
+  const entryArg = process.argv[3];
+  const stampArg = process.argv[4];
   if (!outArg) {
     console.error('[ditto] build-bin: missing <outfile> argument');
     process.exit(1);
   }
   try {
-    buildBinInto(resolve(process.cwd(), outArg));
+    buildBinInto(resolve(process.cwd(), outArg), entryArg, stampArg);
+    // syncManagedResources regenerates resources/managed from the repo-root
+    // charter; it is independent of which CLI surface was bundled.
     syncManagedResources();
-    console.log(`[ditto] build-bin OK → ${outArg}`);
+    console.log(`[ditto] build-bin OK → ${outArg}${entryArg ? ` (entry ${entryArg})` : ''}`);
   } catch (err) {
     console.error(`[ditto] build-bin FAILED — ${err.message}`);
     process.exit(1);
