@@ -387,6 +387,34 @@ export async function finalizeWorkItem(
   return validated;
 }
 
+export interface GithubLinkInput {
+  /** `owner/name`. */
+  repo: string;
+  number: number;
+}
+
+/**
+ * Bind a GitHub issue coordinate onto the work item's Record (the work-item side
+ * of the issue↔work-item linkage — ADR-20260628 layer 2). Identity metadata
+ * only: it persists `github: { repo, number }` and never touches lifecycle
+ * status, so it is allowed at any state. Idempotent — re-linking the same
+ * coordinate rewrites the same value.
+ */
+export async function setGithubLink(
+  repoRoot: string,
+  id: string,
+  link: GithubLinkInput,
+): Promise<WorkItemRecord> {
+  const { record } = await loadWorkItem(repoRoot, id);
+  const next: WorkItemRecord = workItemRecord.parse({
+    ...record,
+    github: { repo: link.repo, number: link.number },
+    updated_at: new Date().toISOString(),
+  });
+  await writeJson(recordPath(repoRoot, id), workItemRecord, next);
+  return next;
+}
+
 /** The one authorized terminal→non-terminal path. */
 export async function reopenWorkItem(
   repoRoot: string,
